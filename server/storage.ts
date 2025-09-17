@@ -1,3 +1,224 @@
+import { supabase } from "./replitAuth";
+
+export class SupabaseStorage {
+  // Unit operations
+  async getUnitsByPropertyId(propertyId: string): Promise<Unit[]> {
+    // TODO: Implement Supabase query
+    return [];
+  }
+  async getUnitById(id: string): Promise<Unit | undefined> {
+    // TODO: Implement Supabase query
+    return undefined;
+  }
+  async createUnit(unit: InsertUnit): Promise<Unit> {
+    // TODO: Implement Supabase query
+    return unit as Unit;
+  }
+  async updateUnit(id: string, unit: Partial<InsertUnit>): Promise<Unit> {
+    // TODO: Implement Supabase query
+    return unit as Unit;
+  }
+  async deleteUnit(id: string): Promise<void> {
+    // TODO: Implement Supabase query
+  }
+
+  // Lease operations
+  async getLeasesByOwnerId(ownerId: string): Promise<Lease[]> {
+    // TODO: Implement Supabase query
+    return [];
+  }
+  async getLeasesByTenantId(tenantId: string): Promise<Lease[]> {
+    // TODO: Implement Supabase query
+    return [];
+  }
+  async getLeaseById(id: string): Promise<Lease | undefined> {
+    // TODO: Implement Supabase query
+    return undefined;
+  }
+  async createLease(lease: InsertLease): Promise<Lease> {
+    // TODO: Implement Supabase query
+    return lease as Lease;
+  }
+  async updateLease(id: string, lease: Partial<InsertLease>): Promise<Lease> {
+    // TODO: Implement Supabase query
+    return lease as Lease;
+  }
+  async deleteLease(id: string): Promise<void> {
+    // TODO: Implement Supabase query
+  }
+
+  // Maintenance request operations
+  async getMaintenanceRequestsByOwnerId(ownerId: string): Promise<MaintenanceRequest[]> {
+    // TODO: Implement Supabase query
+    return [];
+  }
+  async createMaintenanceRequest(request: InsertMaintenanceRequest): Promise<MaintenanceRequest> {
+    // TODO: Implement Supabase query
+    return request as MaintenanceRequest;
+  }
+
+  // Document operations
+  async getDocumentsByOwnerId(ownerId: string): Promise<Document[]> {
+    // TODO: Implement Supabase query
+    return [];
+  }
+  async createDocument(document: InsertDocument): Promise<Document> {
+    // TODO: Implement Supabase query
+    return document as Document;
+  }
+  // Tenants CRUD
+  async getTenantsByOwnerId(ownerId: string): Promise<Tenant[]> {
+    const { data, error } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return data as Tenant[];
+  }
+
+  async getTenantById(id: string): Promise<Tenant | undefined> {
+    const { data, error } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) throw error;
+    return data as Tenant | undefined;
+  }
+
+  async createTenant(tenant: InsertTenant): Promise<Tenant> {
+    const { data, error } = await supabase
+      .from("tenants")
+      .insert([tenant])
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Tenant;
+  }
+
+  async updateTenant(id: string, tenant: Partial<InsertTenant>): Promise<Tenant> {
+    const { data, error } = await supabase
+      .from("tenants")
+      .update({ ...tenant, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Tenant;
+  }
+
+  async deleteTenant(id: string): Promise<void> {
+    const { error } = await supabase
+      .from("tenants")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+  }
+
+  // Payments CRUD
+  async getPaymentsByOwnerId(ownerId: string): Promise<Payment[]> {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .order("due_date", { ascending: true });
+    if (error) throw error;
+    return data as Payment[];
+  }
+
+  async getPaymentById(id: string): Promise<Payment | undefined> {
+    const { data, error } = await supabase
+      .from("payments")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) throw error;
+    return data as Payment | undefined;
+  }
+
+  async createPayment(payment: InsertPayment): Promise<Payment> {
+    const { data, error } = await supabase
+      .from("payments")
+      .insert([payment])
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Payment;
+  }
+
+  async updatePayment(id: string, payment: Partial<InsertPayment>): Promise<Payment> {
+    const { data, error } = await supabase
+      .from("payments")
+      .update({ ...payment, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Payment;
+  }
+
+  async deletePayment(id: string): Promise<void> {
+    const { error } = await supabase
+      .from("payments")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+  }
+  // Get properties by owner
+  async getPropertiesByOwnerId(ownerId: string): Promise<Property[]> {
+    const { data, error } = await supabase
+      .from("properties")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .order("name", { ascending: true });
+    if (error) throw error;
+    return data as Property[];
+  }
+
+  // Get property by ID
+  async getPropertyById(id: string): Promise<Property | undefined> {
+    const { data, error } = await supabase
+      .from("properties")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) throw error;
+    return data as Property | undefined;
+  }
+
+  // Create property
+  async createProperty(property: InsertProperty): Promise<Property> {
+    const { data, error } = await supabase
+      .from("properties")
+      .insert([property])
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Property;
+  }
+
+  // Update property
+  async updateProperty(id: string, property: Partial<InsertProperty>): Promise<Property> {
+    const { data, error } = await supabase
+      .from("properties")
+      .update({ ...property, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Property;
+  }
+
+  // Delete property
+  async deleteProperty(id: string): Promise<void> {
+    const { error } = await supabase
+      .from("properties")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+  }
+}
 import {
   users,
   properties,
@@ -23,7 +244,7 @@ import {
   type InsertMaintenanceRequest,
   type Document,
   type InsertDocument,
-} from "@shared/schema";
+} from "../shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, sql, between } from "drizzle-orm";
 
