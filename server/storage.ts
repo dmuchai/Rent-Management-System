@@ -1,4 +1,4 @@
-import { supabase } from "./replitAuth";
+import { supabase } from "./supabaseAuth";
 
 export class SupabaseStorage {
   // Unit operations

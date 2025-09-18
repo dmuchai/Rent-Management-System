@@ -145,7 +145,7 @@ npm run db:push         # Push schema changes to database
 - `shared/schema.ts` - TypeScript types and Zod validation
 - `server/routes.ts` - API endpoint definitions
 - `server/storage.ts` - Supabase database operations
-- `server/replitAuth.ts` - JWT authentication middleware
+- `server/supabaseAuth.ts` - JWT authentication middleware
 
 ## 📚 Key Technologies
 

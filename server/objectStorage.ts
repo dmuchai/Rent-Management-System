@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { supabase } from "./replitAuth";
+import { supabase } from "./supabaseAuth";
 
 export class ObjectNotFoundError extends Error {
   constructor() {

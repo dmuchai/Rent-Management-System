@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { SupabaseStorage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated } from "./supabaseAuth";
 import {
   insertPropertySchema,
   insertUnitSchema,

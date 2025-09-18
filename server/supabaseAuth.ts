@@ -1,4 +1,11 @@
 
+/**
+ * Supabase Authentication Module
+ * 
+ * This module handles JWT-based authentication using Supabase Auth.
+ * It provides middleware for protecting routes and managing user sessions.
+ */
+
 import dotenv from "dotenv";
 dotenv.config();
 
