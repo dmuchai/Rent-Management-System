@@ -30,7 +30,7 @@ export default function AuthModal({ open, onOpenChange, mode, onModeChange }: Au
   };
 
   const handleLogin = (userType: "landlord" | "tenant") => {
-    // Redirect to Replit Auth
+    // Redirect to Supabase Auth
     window.location.href = "/api/login";
   };
 

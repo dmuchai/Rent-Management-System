@@ -11,3 +11,8 @@ vite.config.ts.*
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Platform-specific files (Replit, etc.)
+.replit
+replit.md
+.upm

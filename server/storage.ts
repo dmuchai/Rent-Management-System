@@ -249,7 +249,7 @@ import { db } from "./db";
 import { eq, and, desc, asc, sql, between } from "drizzle-orm";
 
 export interface IStorage {
-  // User operations (required for Replit Auth)
+  // User operations (for authentication)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
 
