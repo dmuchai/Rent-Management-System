@@ -36,22 +36,34 @@ export async function setupAuth(app: Express) {
 }
 
 // Middleware to check Supabase JWT
-import * as jwt from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 export const isAuthenticated: RequestHandler = (req, res, next) => {
+  // Check for token in Authorization header or cookie
+  let token = null;
+  
   const authHeader = req.headers['authorization'];
-  if (!authHeader) {
-    return res.status(401).json({ message: 'Unauthorized' });
+  if (authHeader) {
+    token = authHeader.split(' ')[1];
+    console.log('Token found in Authorization header');
+  } else if (req.cookies && req.cookies['supabase-auth-token']) {
+    token = req.cookies['supabase-auth-token'];
+    console.log('Token found in cookie');
   }
-  const token = authHeader.split(' ')[1];
+  
   if (!token) {
+    console.log('No token found in request');
     return res.status(401).json({ message: 'Unauthorized' });
   }
+  
   try {
     // Supabase JWTs are signed with the project's JWT secret
+    console.log('Verifying token...');
     const payload = jwt.verify(token, process.env.SUPABASE_JWT_SECRET!);
+    console.log('Token verified successfully for user:', (payload as any).sub);
     req.user = payload;
     next();
   } catch (err) {
+    console.log('Token verification failed:', err instanceof Error ? err.message : 'Unknown error');
     return res.status(401).json({ message: 'Unauthorized' });
   }
 };
