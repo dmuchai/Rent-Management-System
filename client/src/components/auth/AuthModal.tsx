@@ -7,10 +7,44 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://emdahodfztpfdjkrbnqz.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtZGFob2RmenRwZmRqa3JibnF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMzY1ODEsImV4cCI6MjA3MzcxMjU4MX0.ci6zhIbRt5DnSbtxIuvO9D0NjihAkmcbO_NexhEjIZA';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Validate environment variables at startup
+function validateSupabaseConfig() {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  
+  const errors: string[] = [];
+  
+  if (!supabaseUrl) {
+    errors.push('VITE_SUPABASE_URL environment variable is required');
+  } else if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('supabase.co')) {
+    errors.push('VITE_SUPABASE_URL must be a valid Supabase URL');
+  }
+  
+  if (!supabaseAnonKey) {
+    errors.push('VITE_SUPABASE_ANON_KEY environment variable is required');
+  } else if (!supabaseAnonKey.startsWith('eyJ') || supabaseAnonKey.split('.').length !== 3) {
+    errors.push('VITE_SUPABASE_ANON_KEY must be a valid JWT token');
+  }
+  
+  if (errors.length > 0) {
+    console.error('Supabase configuration error:', errors);
+    throw new Error(`Invalid Supabase configuration: ${errors.join(', ')}`);
+  }
+  
+  return { supabaseUrl, supabaseAnonKey };
+}
+
+// Initialize Supabase client with validated configuration
+let supabase: ReturnType<typeof createClient> | null = null;
+let configError: string | null = null;
+
+try {
+  const { supabaseUrl, supabaseAnonKey } = validateSupabaseConfig();
+  supabase = createClient(supabaseUrl, supabaseAnonKey);
+} catch (error) {
+  configError = error instanceof Error ? error.message : 'Unknown configuration error';
+  console.error('Failed to initialize Supabase client:', configError);
+}
 
 interface AuthModalProps {
   open: boolean;
@@ -31,6 +65,35 @@ export default function AuthModal({ open, onOpenChange, mode, onModeChange }: Au
     role: "landlord",
     confirmPassword: "",
   });
+
+  // Return configuration error UI if Supabase client failed to initialize
+  if (configError || !supabase) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Configuration Error</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-center">
+            <div className="p-4 bg-red-50 rounded-lg">
+              <p className="text-red-800 mb-2">Unable to initialize authentication service</p>
+              <p className="text-red-600 text-sm">
+                The application is missing required environment configuration. 
+                Please contact the administrator.
+              </p>
+            </div>
+            <Button 
+              onClick={() => onOpenChange(false)} 
+              variant="outline"
+              className="w-full"
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -58,6 +121,15 @@ export default function AuthModal({ open, onOpenChange, mode, onModeChange }: Au
   };
 
   const handleLogin = async () => {
+    if (!supabase) {
+      toast({
+        title: "Configuration Error",
+        description: "Authentication service is not available.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!formData.email || !formData.password) {
       toast({
         title: "Error",
@@ -108,6 +180,15 @@ export default function AuthModal({ open, onOpenChange, mode, onModeChange }: Au
   };
 
   const handleRegister = async () => {
+    if (!supabase) {
+      toast({
+        title: "Configuration Error",
+        description: "Authentication service is not available.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!formData.email || !formData.password || !formData.firstName || !formData.lastName) {
       toast({
         title: "Error",
