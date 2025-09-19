@@ -8,15 +8,95 @@ import {
 } from "../shared/schema";
 import { z } from "zod";
 
+// Security helper functions for environment variable validation and sanitization
+function validateSupabaseUrl(url: string | undefined): string | null {
+  if (!url || typeof url !== 'string') {
+    console.warn('SUPABASE_URL is missing or not a string');
+    return null;
+  }
+  
+  // Validate URL format and ensure it's a Supabase URL
+  try {
+    const parsedUrl = new URL(url);
+    if (!parsedUrl.hostname.includes('supabase.co') && !parsedUrl.hostname.includes('localhost')) {
+      console.warn('SUPABASE_URL does not appear to be a valid Supabase URL');
+      return null;
+    }
+    return url;
+  } catch (error) {
+    console.warn('SUPABASE_URL is not a valid URL format');
+    return null;
+  }
+}
+
+function validateSupabaseAnonKey(key: string | undefined): string | null {
+  if (!key || typeof key !== 'string') {
+    console.warn('SUPABASE_ANON_KEY is missing or not a string');
+    return null;
+  }
+  
+  // Supabase anon keys are JWT tokens that start with 'eyJ' and have specific length
+  if (!key.startsWith('eyJ') || key.length < 100 || key.length > 500) {
+    console.warn('SUPABASE_ANON_KEY does not match expected JWT format');
+    return null;
+  }
+  
+  // Additional validation: should have 3 parts separated by dots (JWT structure)
+  const parts = key.split('.');
+  if (parts.length !== 3) {
+    console.warn('SUPABASE_ANON_KEY does not have valid JWT structure');
+    return null;
+  }
+  
+  return key;
+}
+
+function htmlEscape(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F;');
+}
+
+function getValidatedSupabaseConfig(): { url: string; key: string } | null {
+  const validatedUrl = validateSupabaseUrl(process.env.SUPABASE_URL);
+  const validatedKey = validateSupabaseAnonKey(process.env.SUPABASE_ANON_KEY);
+  
+  if (!validatedUrl || !validatedKey) {
+    console.error('Failed to validate Supabase configuration. Check environment variables.');
+    return null;
+  }
+  
+  return {
+    url: htmlEscape(validatedUrl),
+    key: htmlEscape(validatedKey)
+  };
+}
+
 export async function registerRoutes(app: Express) {
   await setupAuth(app);
   const supabaseStorage = new SupabaseStorage();
 
   // Authentication routes
   app.get("/api/login", (req: any, res: any) => {
-    // For now, return a simple login page with Supabase Auth integration
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+    // Validate and sanitize Supabase configuration
+    const supabaseConfig = getValidatedSupabaseConfig();
+    
+    if (!supabaseConfig) {
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Configuration Error</title></head>
+        <body>
+          <h1>Configuration Error</h1>
+          <p>Server configuration is invalid. Please contact the administrator.</p>
+        </body>
+        </html>
+      `);
+    }
     
     const loginHtml = `
     <!DOCTYPE html>
@@ -48,7 +128,7 @@ export async function registerRoutes(app: Express) {
 
         <script>
             const { createClient } = supabase;
-            const supabaseClient = createClient('${supabaseUrl}', '${supabaseAnonKey}');
+            const supabaseClient = createClient('${supabaseConfig.url}', '${supabaseConfig.key}');
 
             async function signIn() {
                 const email = document.getElementById('email').value;
@@ -189,8 +269,21 @@ export async function registerRoutes(app: Express) {
 
   // Dashboard route - now handles authentication setup client-side
   app.get("/dashboard", (req: any, res: any) => {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+    // Validate and sanitize Supabase configuration
+    const supabaseConfig = getValidatedSupabaseConfig();
+    
+    if (!supabaseConfig) {
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Configuration Error</title></head>
+        <body>
+          <h1>Configuration Error</h1>
+          <p>Server configuration is invalid. Please contact the administrator.</p>
+        </body>
+        </html>
+      `);
+    }
     
     const dashboardHtml = `<!DOCTYPE html>
 <html>
@@ -254,8 +347,8 @@ export async function registerRoutes(app: Express) {
 
     <script>
         const { createClient } = supabase;
-        const supabaseUrl = '${supabaseUrl}';
-        const supabaseAnonKey = '${supabaseAnonKey}';
+        const supabaseUrl = '${supabaseConfig.url}';
+        const supabaseAnonKey = '${supabaseConfig.key}';
         const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
         // Check authentication and setup session
