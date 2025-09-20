@@ -1,16 +1,34 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import { useEffect } from "react";
 import Landing from "@/pages/landing";
-import LandlordDashboard from "@/pages/dashboard/landlord";
-import TenantDashboard from "@/pages/dashboard/tenant";
+import SimpleDashboard from "@/components/SimpleDashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  // Redirect logic for proper URL handling
+  useEffect(() => {
+    if (!isLoading) {
+      if (isAuthenticated) {
+        // If authenticated and on landing page, redirect to dashboard
+        if (location === "/") {
+          setLocation("/dashboard");
+        }
+      } else {
+        // If not authenticated and trying to access dashboard, redirect to landing
+        if (location === "/dashboard") {
+          setLocation("/");
+        }
+      }
+    }
+  }, [isAuthenticated, isLoading, location, setLocation]);
 
   if (isLoading) {
     return (
@@ -22,14 +40,13 @@ function Router() {
 
   return (
     <Switch>
-      {!isAuthenticated ? (
-        <Route path="/" component={Landing} />
-      ) : (
-        <>
-          <Route path="/" component={() => user?.role === "tenant" ? <TenantDashboard /> : <LandlordDashboard />} />
-          <Route path="/dashboard" component={() => user?.role === "tenant" ? <TenantDashboard /> : <LandlordDashboard />} />
-        </>
-      )}
+      <Route path="/" component={Landing} />
+      <Route path="/dashboard" component={() => {
+        if (!isAuthenticated) {
+          return <Landing />;
+        }
+        return <SimpleDashboard />;
+      }} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { logout } from "@/lib/auth";
 
 interface HeaderProps {
   title: string;
@@ -10,7 +11,7 @@ export default function Header({ title, showSidebar = true }: HeaderProps) {
   const { user } = useAuth();
 
   const handleLogout = () => {
-    window.location.href = "/api/logout";
+    logout();
   };
 
   return (
