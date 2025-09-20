@@ -31,12 +31,25 @@ export function useAuth() {
 
   const { data: user, isLoading, error } = useQuery<User>({
     queryKey: ["/api/auth/user"],
+    queryFn: async (): Promise<User> => {
+      const response = await fetch("/api/auth/user", {
+        credentials: 'include', // Include cookies for authentication
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Authentication failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const userData = await response.json();
+      return userData;
+    },
     retry: false,
   });
 
   return {
     user,
     isLoading,
+    error,
     isAuthenticated: !!user,
   };
 }
