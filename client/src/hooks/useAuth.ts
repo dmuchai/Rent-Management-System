@@ -2,6 +2,34 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { User } from "@shared/schema";
 
+// Import auth utility to access the same clearing functions
+import "../lib/auth";
+
+// Re-declare the functions locally to avoid circular imports
+function clearAuthStorageLocal() {
+  const authKeys = [
+    'supabase-auth-token', 'supabase-refresh-token', 'supabase.auth.token', 'sb-auth-token',
+    'auth-token', 'access-token', 'refresh-token', 'auth-user', 'user-session', 'auth-session', 'jwt-token', 'bearer-token',
+  ];
+  
+  authKeys.forEach(key => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
+  
+  const authPatterns = /^sb-.*-auth|auth|token|supabase|session/i;
+  
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (key && authPatterns.test(key)) localStorage.removeItem(key);
+  }
+  
+  for (let i = sessionStorage.length - 1; i >= 0; i--) {
+    const key = sessionStorage.key(i);
+    if (key && authPatterns.test(key)) sessionStorage.removeItem(key);
+  }
+}
+
 export function useAuth() {
   const queryClient = useQueryClient();
   
@@ -14,9 +42,8 @@ export function useAuth() {
       // Clear all React Query cache
       queryClient.clear();
       
-      // Clear browser storage
-      localStorage.clear();
-      sessionStorage.clear();
+      // Clear only authentication-related browser storage
+      clearAuthStorageLocal();
       
       // Remove logout parameter from URL
       const url = new URL(window.location.href);

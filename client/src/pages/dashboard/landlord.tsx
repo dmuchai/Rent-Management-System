@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { useLocation } from "wouter";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import StatsCard from "@/components/dashboard/StatsCard";
@@ -17,8 +18,22 @@ type DashboardSection = "overview" | "properties" | "tenants" | "payments" | "do
 
 export default function LandlordDashboard() {
   const { toast } = useToast();
-  const { isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
+
+  // Authentication guard - redirect unauthenticated users
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      toast({
+        title: "Unauthorized",
+        description: "You must be logged in to access the dashboard. Redirecting to login...",
+        variant: "destructive",
+      });
+      // Redirect to login page
+      setLocation("/");
+    }
+  }, [isLoading, isAuthenticated, toast, setLocation]);
 
   const { data: dashboardStats, isLoading: statsLoading } = useQuery({
     queryKey: ["/api/dashboard/stats"],
@@ -49,6 +64,18 @@ export default function LandlordDashboard() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Don't render dashboard content if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h2>
+          <p className="text-gray-600">Redirecting to login...</p>
+        </div>
       </div>
     );
   }
