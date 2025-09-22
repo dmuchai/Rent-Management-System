@@ -1,11 +1,15 @@
 import type { Express } from "express";
 import { SupabaseStorage } from "./storage";
-import { setupAuth, isAuthenticated } from "./supabaseAuth";
+import { setupAuth, isAuthenticated, supabase } from "./supabaseAuth";
 import {
   insertPropertySchema,
   insertUnitSchema,
   insertTenantSchema,
+  insertUserSchema,
+  users,
 } from "../shared/schema";
+import { db } from "./db";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 // Security helper functions for environment variable validation and sanitization
@@ -71,8 +75,8 @@ function getValidatedSupabaseConfig(): { url: string; key: string } | null {
   }
   
   return {
-    url: htmlEscape(validatedUrl),
-    key: htmlEscape(validatedKey)
+    url: validatedUrl, // Don't escape URLs - they need to be valid URLs
+    key: htmlEscape(validatedKey) // Only escape the key for HTML safety
   };
 }
 
@@ -85,7 +89,10 @@ export async function registerRoutes(app: Express) {
     // Validate and sanitize Supabase configuration
     const supabaseConfig = getValidatedSupabaseConfig();
     
+    console.log('Login page requested, config validation result:', supabaseConfig ? 'SUCCESS' : 'FAILED');
+    
     if (!supabaseConfig) {
+      console.error('Supabase configuration failed validation');
       return res.status(500).send(`
         <!DOCTYPE html>
         <html>
@@ -122,80 +129,219 @@ export async function registerRoutes(app: Express) {
             <br>
             <button onclick="signIn()">Sign In</button>
             <button onclick="signUp()">Sign Up</button>
+            <button onclick="basicTest()" style="background: #ffc107;">Basic Test</button>
+            <button onclick="testClick()" style="background: #17a2b8;">Test Click</button>
             <hr>
             <button onclick="signInWithGoogle()">Sign in with Google</button>
+            <hr>
+            <button onclick="syncUser()" style="background: #28a745;">Sync User to Database</button>
         </div>
 
         <script>
-            const { createClient } = supabase;
-            const supabaseClient = createClient('${supabaseConfig.url}', '${supabaseConfig.key}');
-
-            async function signIn() {
-                const email = document.getElementById('email').value;
-                const password = document.getElementById('password').value;
+            console.log('Script loaded');
+            
+            // Basic test function (should always work)
+            function basicTest() {
+                console.log('basicTest called');
+                alert('Basic JavaScript works!');
+            }
+            
+            // Test click function
+            function testClick() {
+                console.log('testClick called');
+                alert('Test Click works!');
+            }
+            
+            // Initialize when DOM is ready
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('DOM ready');
                 
-                const { data, error } = await supabaseClient.auth.signInWithPassword({
-                    email: email,
-                    password: password
-                });
-
-                if (error) {
-                    document.getElementById('error').textContent = error.message;
-                } else {
-                    // Successfully signed in, get the session
-                    const { data: { session } } = await supabaseClient.auth.getSession();
-                    if (session) {
-                        // Send the token to our backend and set as cookie
-                        const response = await fetch('/api/auth/set-session', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                access_token: session.access_token,
-                                refresh_token: session.refresh_token
-                            })
+                // Check Supabase
+                if (typeof supabase === 'undefined') {
+                    console.error('Supabase not loaded');
+                    document.getElementById('error').textContent = 'Supabase library failed to load';
+                    return;
+                }
+                
+                console.log('Supabase available');
+                
+                // Create Supabase client
+                try {
+                    const { createClient } = supabase;
+                    window.supabaseClient = createClient('${supabaseConfig.url}', '${supabaseConfig.key}');
+                    console.log('Supabase client created');
+                } catch (e) {
+                    console.error('Failed to create Supabase client:', e);
+                    return;
+                }
+                
+                // Define auth functions
+                window.signIn = async function() {
+                    console.log('signIn called');
+                    const email = document.getElementById('email').value;
+                    const password = document.getElementById('password').value;
+                    
+                    if (!email || !password) {
+                        document.getElementById('error').textContent = 'Please enter email and password';
+                        return;
+                    }
+                    
+                    try {
+                        const { data, error } = await window.supabaseClient.auth.signInWithPassword({
+                            email: email,
+                            password: password
                         });
                         
-                        if (response.ok) {
-                            // Redirect to dashboard
-                            window.location.href = '/dashboard';
-                        } else {
-                            document.getElementById('error').textContent = 'Failed to set session';
+                        console.log('Sign in result:', { data, error });
+                        
+                        if (error) {
+                            console.error('Sign in error:', error);
+                            document.getElementById('error').textContent = error.message;
+                        } else if (data.session) {
+                            console.log('Sign in success, setting session');
+                            
+                            // Send the token to our backend and set as cookie
+                            const response = await fetch('/api/auth/set-session', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    access_token: data.session.access_token,
+                                    refresh_token: data.session.refresh_token
+                                })
+                            });
+                            
+                            if (response.ok) {
+                                console.log('Session set successfully, redirecting to dashboard');
+                                window.location.href = '/dashboard';
+                            } else {
+                                console.error('Failed to set session');
+                                document.getElementById('error').textContent = 'Failed to set session';
+                            }
                         }
+                    } catch (e) {
+                        console.error('Sign in exception:', e);
+                        document.getElementById('error').textContent = 'Sign in failed';
                     }
-                }
-            }
-
-            async function signUp() {
-                const email = document.getElementById('email').value;
-                const password = document.getElementById('password').value;
+                };
                 
-                const { data, error } = await supabaseClient.auth.signUp({
-                    email: email,
-                    password: password
-                });
-
-                if (error) {
-                    document.getElementById('error').textContent = error.message;
-                } else {
-                    document.getElementById('error').style.color = 'green';
-                    document.getElementById('error').textContent = 'Check your email for verification link!';
-                }
-            }
-
-            async function signInWithGoogle() {
-                const { data, error } = await supabaseClient.auth.signInWithOAuth({
-                    provider: 'google',
-                    options: {
-                        redirectTo: window.location.origin + '/api/auth/callback'
+                window.signUp = async function() {
+                    console.log('signUp called');
+                    const email = document.getElementById('email').value;
+                    const password = document.getElementById('password').value;
+                    
+                    if (!email || !password) {
+                        document.getElementById('error').textContent = 'Please enter email and password';
+                        return;
                     }
-                });
-
-                if (error) {
-                    document.getElementById('error').textContent = error.message;
-                }
-            }
+                    
+                    try {
+                        const { data, error } = await window.supabaseClient.auth.signUp({
+                            email: email,
+                            password: password
+                        });
+                        
+                        console.log('Sign up result:', { data, error });
+                        
+                        if (error) {
+                            console.error('Sign up error:', error);
+                            document.getElementById('error').textContent = error.message;
+                        } else if (data.user) {
+                            console.log('Sign up success');
+                            
+                            // Check if user is immediately confirmed (email confirmation disabled)
+                            if (data.session) {
+                                console.log('User confirmed immediately, setting session');
+                                
+                                // Send the token to our backend and set as cookie
+                                const response = await fetch('/api/auth/set-session', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        access_token: data.session.access_token,
+                                        refresh_token: data.session.refresh_token
+                                    })
+                                });
+                                
+                                if (response.ok) {
+                                    console.log('Session set successfully, creating user record');
+                                    
+                                    // Automatically create user record in custom table
+                                    try {
+                                        const userResponse = await fetch('/api/auth/sync-user', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json'
+                                            },
+                                            body: JSON.stringify({
+                                                firstName: '', // Can be updated later
+                                                lastName: '',
+                                                role: 'landlord' // Default role
+                                            })
+                                        });
+                                        
+                                        if (userResponse.ok) {
+                                            console.log('User record created successfully');
+                                        } else {
+                                            console.warn('Failed to create user record, but auth is working');
+                                        }
+                                    } catch (userError) {
+                                        console.warn('Error creating user record:', userError);
+                                    }
+                                    
+                                    // Show success message first
+                                    document.getElementById('error').style.color = 'green';
+                                    document.getElementById('error').textContent = 'Account created successfully! Redirecting...';
+                                    
+                                    // Redirect after a short delay
+                                    setTimeout(() => {
+                                        window.location.href = '/dashboard';
+                                    }, 1500);
+                                } else {
+                                    console.error('Failed to set session');
+                                    document.getElementById('error').textContent = 'Account created but failed to set session. Please try signing in.';
+                                }
+                            } else {
+                                // Email confirmation required
+                                console.log('Email confirmation required');
+                                document.getElementById('error').style.color = 'orange';
+                                document.getElementById('error').innerHTML = 
+                                    '<strong>Account created!</strong><br>' +
+                                    'Please check your email for a verification link.<br>' +
+                                    '<small>After verifying, you can <a href="#" onclick="showSignInForm()">sign in here</a></small>';
+                                
+                                // Show a button to switch to sign in mode
+                                setTimeout(() => {
+                                    document.getElementById('email').value = email;
+                                    document.getElementById('password').value = '';
+                                }, 2000);
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Sign up exception:', e);
+                        document.getElementById('error').textContent = 'Sign up failed: ' + e.message;
+                    }
+                };
+                
+                // Helper function to clear form and focus on sign in
+                window.showSignInForm = function() {
+                    document.getElementById('error').textContent = '';
+                    document.getElementById('password').focus();
+                };
+                
+                window.signInWithGoogle = async function() {
+                    console.log('Google sign in called');
+                    // Implement Google sign in
+                };
+                
+                window.syncUser = async function() {
+                    console.log('Sync user called');
+                    // Implement sync user
+                };
+            });
         </script>
     </body>
     </html>`;
@@ -256,9 +402,46 @@ export async function registerRoutes(app: Express) {
     }
   });
 
-  app.get("/api/auth/user", isAuthenticated, (req: any, res: any) => {
-    // Return current user info
-    res.json({ user: req.user });
+  app.get("/api/auth/user", isAuthenticated, async (req: any, res: any) => {
+    try {
+      // Get user ID from JWT payload
+      const userId = req.user.sub;
+      
+      // Fetch user data from our database
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.log('Error fetching user from database:', error.message);
+        // Fallback to JWT payload if database lookup fails
+        return res.json(req.user);
+      }
+      
+      if (userData) {
+        // Return database user data with proper field mapping
+        const userResponse = {
+          id: userData.id,
+          email: userData.email,
+          firstName: userData.first_name,
+          lastName: userData.last_name,
+          role: userData.role,
+          profileImageUrl: userData.profile_image_url,
+          createdAt: userData.created_at,
+          updatedAt: userData.updated_at
+        };
+        return res.json(userResponse);
+      }
+      
+      // Fallback to JWT payload if no user found in database
+      res.json(req.user);
+    } catch (error) {
+      console.log('Error in /api/auth/user:', error);
+      // Fallback to JWT payload on any error
+      res.json(req.user);
+    }
   });
 
   app.post("/api/auth/logout", (req: any, res: any) => {
@@ -267,26 +450,174 @@ export async function registerRoutes(app: Express) {
     res.json({ message: "Logged out successfully" });
   });
 
+  // Create/sync user in custom users table
+  app.post("/api/auth/sync-user", isAuthenticated, async (req: any, res: any) => {
+    try {
+      // The user object is the JWT payload directly
+      const userPayload = req.user;
+      const userId = userPayload.sub;
+      const email = userPayload.email;
+      
+      console.log('Syncing user:', { userId, email, userPayload });
+      
+      // Use Supabase client instead of Drizzle ORM since it works better
+      try {
+        // Check if user already exists in custom table
+        const { data: existingUsers, error: selectError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .limit(1);
+          
+        if (selectError) {
+          console.log('Error checking existing user:', selectError.message);
+        } else if (existingUsers && existingUsers.length > 0) {
+          console.log('User already exists in custom table');
+          return res.json({ user: existingUsers[0], message: "User already exists" });
+        }
+
+        // Extract additional info from JWT payload if available
+        const firstName = req.body.firstName || userPayload.user_metadata?.first_name || null;
+        const lastName = req.body.lastName || userPayload.user_metadata?.last_name || null;
+
+        // Create new user record using Supabase client
+        const newUser = {
+          id: userId,
+          email: email,
+          first_name: firstName,
+          last_name: lastName,
+          role: req.body.role || "landlord",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        console.log('Creating new user in database via Supabase client:', newUser);
+        
+        const { data: createdUser, error: insertError } = await supabase
+          .from('users')
+          .insert([newUser])
+          .select()
+          .single();
+          
+        if (insertError) {
+          console.log('Supabase insert error:', insertError);
+          throw new Error(insertError.message);
+        }
+        
+        console.log('User created successfully in database via Supabase:', createdUser);
+        
+        res.status(201).json({ user: createdUser, message: "User created successfully in database" });
+        
+      } catch (dbError) {
+        const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error';
+        console.log('Database operation failed:', errorMessage);
+        
+        // Fallback: return auth-only success
+        const userData = {
+          id: userId,
+          email: email,
+          firstName: req.body.firstName || userPayload.user_metadata?.first_name || null,
+          lastName: req.body.lastName || userPayload.user_metadata?.last_name || null,
+          role: req.body.role || "landlord",
+          createdAt: new Date().toISOString()
+        };
+        
+        console.log('User sync fallback (auth only):', userData);
+        
+        res.status(201).json({ 
+          user: userData, 
+          message: "User authenticated successfully. Database insert failed: " + errorMessage 
+        });
+      }
+        
+    } catch (error) {
+      console.error('Sync user error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ message: "Failed to sync user", error: errorMessage });
+    }
+  });
+
+  // Development endpoint to create tables
+  app.post("/api/create-tables", async (req: any, res: any) => {
+    try {
+      console.log('Creating database tables...');
+      
+      // Create users table
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS users (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          email VARCHAR UNIQUE,
+          first_name VARCHAR,
+          last_name VARCHAR,
+          profile_image_url VARCHAR,
+          role VARCHAR NOT NULL DEFAULT 'landlord',
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+
+      // Create sessions table
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS sessions (
+          sid VARCHAR PRIMARY KEY,
+          sess JSONB NOT NULL,
+          expire TIMESTAMP NOT NULL
+        )
+      `);
+
+      // Create index on sessions
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS IDX_session_expire ON sessions(expire)
+      `);
+
+      console.log('Tables created successfully');
+      res.json({ message: "Tables created successfully" });
+    } catch (error) {
+      console.error('Error creating tables:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ message: "Failed to create tables", error: errorMessage });
+    }
+  });
+
+  // Manual table creation endpoint for testing
+  app.post("/api/create-tables-manual", async (req: any, res: any) => {
+    try {
+      console.log('Manual table creation requested');
+      
+      // Check if we can at least test the database connection
+      const testResult = await db.execute(sql`SELECT 1 as test`);
+      console.log('Database connection test:', testResult);
+      
+      res.json({ message: "Database connection successful", test: testResult });
+    } catch (error) {
+      console.error('Manual table creation error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ message: "Failed to test database", error: errorMessage });
+    }
+  });
+
   // Dashboard handled by React app routing - no server route needed
 
   // Property routes
   app.get("/api/properties", isAuthenticated, async (req: any, res: any) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.sub;
       const properties = await supabaseStorage.getPropertiesByOwnerId(userId) || [];
       res.json(properties);
     } catch (error) {
+      console.log('Error fetching properties:', error);
       res.status(500).json({ message: "Failed to fetch properties" });
     }
   });
 
   app.post("/api/properties", isAuthenticated, async (req: any, res: any) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.sub;
       const propertyData = insertPropertySchema.parse({ ...req.body, ownerId: userId });
       const property = await supabaseStorage.createProperty(propertyData);
       res.status(201).json(property);
     } catch (error) {
+      console.log('Error creating property:', error);
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Invalid input", errors: error.errors });
       } else {
@@ -359,20 +690,23 @@ export async function registerRoutes(app: Express) {
   // Tenant routes
   app.get("/api/tenants", isAuthenticated, async (req: any, res: any) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.sub;
       const tenants = await supabaseStorage.getTenantsByOwnerId(userId) || [];
       res.json(tenants);
     } catch (error) {
+      console.log('Error fetching tenants:', error);
       res.status(500).json({ message: "Failed to fetch tenants" });
     }
   });
 
   app.post("/api/tenants", isAuthenticated, async (req: any, res: any) => {
     try {
+      const landlordId = req.user.sub; // Get the current landlord's ID
       const tenantData = insertTenantSchema.parse(req.body);
-      const tenant = await supabaseStorage.createTenant(tenantData);
+      const tenant = await supabaseStorage.createTenant(tenantData, landlordId);
       res.status(201).json(tenant);
     } catch (error) {
+      console.log('Error creating tenant:', error);
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Invalid input", errors: error.errors });
       } else {

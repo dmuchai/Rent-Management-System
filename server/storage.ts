@@ -68,12 +68,21 @@ export class SupabaseStorage {
   }
   // Tenants CRUD
   async getTenantsByOwnerId(ownerId: string): Promise<Tenant[]> {
+    console.log('getTenantsByOwnerId called for owner:', ownerId);
+    
+    // Use user_id field to find tenants associated with this landlord
     const { data, error } = await supabase
       .from("tenants")
       .select("*")
-      .eq("owner_id", ownerId)
+      .eq("user_id", ownerId)
       .order("created_at", { ascending: true });
-    if (error) throw error;
+    
+    if (error) {
+      console.log('Error fetching tenants:', error);
+      throw error;
+    }
+    
+    console.log('Found tenants:', data?.length || 0);
     return data as Tenant[];
   }
 
@@ -87,10 +96,21 @@ export class SupabaseStorage {
     return data as Tenant | undefined;
   }
 
-  async createTenant(tenant: InsertTenant): Promise<Tenant> {
+  async createTenant(tenant: InsertTenant, landlordId?: string): Promise<Tenant> {
+    // Map camelCase to snake_case for database insertion
+    // Use user_id to temporarily store the landlord ID for association
+    const dbTenant = {
+      user_id: landlordId || tenant.userId, // Use landlord ID for association
+      first_name: tenant.firstName,
+      last_name: tenant.lastName,
+      email: tenant.email,
+      phone: tenant.phone,
+      emergency_contact: tenant.emergencyContact,
+    };
+    
     const { data, error } = await supabase
       .from("tenants")
-      .insert([tenant])
+      .insert([dbTenant])
       .select()
       .single();
     if (error) throw error;

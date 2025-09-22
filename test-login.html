@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Login</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h2>Test Login</h2>
+    <button onclick="testButton()">Test Button</button>
+    <div id="output"></div>
+    
+    <script>
+        console.log('Page loaded');
+        
+        function testButton() {
+            console.log('Button clicked!');
+            document.getElementById('output').innerHTML = 'Button works!';
+            
+            // Test if supabase is available
+            if (typeof supabase !== 'undefined') {
+                console.log('Supabase library loaded');
+                const { createClient } = supabase;
+                console.log('createClient function:', createClient);
+            } else {
+                console.error('Supabase library not loaded');
+            }
+        }
+        
+        // Test if supabase loads
+        window.addEventListener('load', function() {
+            console.log('Window loaded');
+            console.log('Supabase available:', typeof supabase !== 'undefined');
+        });
+    </script>
+</body>
+</html>

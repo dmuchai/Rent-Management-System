@@ -1,14 +1,9 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import AuthModal from "@/components/auth/AuthModal";
 
 export default function Landing() {
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
-
-  const showAuth = (mode: "login" | "register") => {
-    setAuthMode(mode);
-    setAuthModalOpen(true);
+  const redirectToLogin = () => {
+    // Redirect to server-side login page
+    window.location.href = '/api/login';
   };
 
   return (
@@ -29,13 +24,13 @@ export default function Landing() {
             <div className="flex items-center space-x-4">
               <Button 
                 variant="ghost" 
-                onClick={() => showAuth("login")}
+                onClick={redirectToLogin}
                 data-testid="button-signin"
               >
                 Sign In
               </Button>
               <Button 
-                onClick={() => showAuth("register")}
+                onClick={redirectToLogin}
                 data-testid="button-getstarted"
               >
                 Get Started
@@ -57,7 +52,7 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               size="lg" 
-              onClick={() => showAuth("register")}
+              onClick={redirectToLogin}
               data-testid="button-freetrial"
             >
               Start Free Trial
@@ -133,13 +128,6 @@ export default function Landing() {
           </div>
         </div>
       </section>
-
-      <AuthModal 
-        open={authModalOpen}
-        onOpenChange={setAuthModalOpen}
-        mode={authMode}
-        onModeChange={setAuthMode}
-      />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect } from "react";
 import Landing from "@/pages/landing";
-import SimpleDashboard from "@/components/SimpleDashboard";
+import LandlordDashboard from "@/pages/dashboard/landlord";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -45,7 +45,7 @@ function Router() {
         if (!isAuthenticated) {
           return <Landing />;
         }
-        return <SimpleDashboard />;
+        return <LandlordDashboard />;
       }} />
       <Route component={NotFound} />
     </Switch>

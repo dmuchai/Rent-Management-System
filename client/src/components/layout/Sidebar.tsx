@@ -13,6 +13,7 @@ const landlordNavItems = [
   { id: "payments", label: "Payments", icon: "fas fa-credit-card" },
   { id: "documents", label: "Documents", icon: "fas fa-file-alt" },
   { id: "reports", label: "Reports", icon: "fas fa-chart-line" },
+  { id: "profile", label: "Profile", icon: "fas fa-user-circle" },
 ];
 
 const tenantNavItems = [
