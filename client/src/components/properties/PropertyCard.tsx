@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Property } from "@shared/schema";
+import PropertyDetailsModal from "@/components/units/PropertyDetailsModal";
 
 interface PropertyCardProps {
   property: Property;
 }
 
 export default function PropertyCard({ property }: PropertyCardProps) {
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const defaultImage = "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300";
 
   return (
@@ -41,6 +44,7 @@ export default function PropertyCard({ property }: PropertyCardProps) {
           <Button 
             className="flex-1" 
             size="sm"
+            onClick={() => setShowDetailsModal(true)}
             data-testid={`button-view-property-${property.id}`}
           >
             View Details
@@ -54,6 +58,13 @@ export default function PropertyCard({ property }: PropertyCardProps) {
           </Button>
         </div>
       </div>
+      
+      {/* Property Details Modal */}
+      <PropertyDetailsModal
+        open={showDetailsModal}
+        onOpenChange={setShowDetailsModal}
+        propertyId={property.id}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { SupabaseStorage } from "./storage";
+import { SupabaseStorage, DatabaseStorage } from "./storage";
 import { setupAuth, isAuthenticated, supabase } from "./supabaseAuth";
 import {
   insertPropertySchema,
@@ -326,7 +326,6 @@ export async function registerRoutes(app: Express) {
                 
                 window.signInWithGoogle = async function() {
                     showMessage('Google Sign-In coming soon!', 'success');
-                };
                 };
             });
         </script>
@@ -899,10 +898,56 @@ export async function registerRoutes(app: Express) {
     try {
       const userId = req.user.sub;
       const properties = await supabaseStorage.getPropertiesByOwnerId(userId) || [];
+      console.log('Properties debug:', {
+        userId,
+        propertiesCount: properties.length,
+        firstProperty: properties[0] ? { id: properties[0].id, ownerId: properties[0].ownerId, owner_id: (properties[0] as any).owner_id } : 'none'
+      });
       res.json(properties);
     } catch (error) {
       console.log('Error fetching properties:', error);
       res.status(500).json({ message: "Failed to fetch properties" });
+    }
+  });
+
+  app.get("/api/properties/:id", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const property = await supabaseStorage.getPropertyById(req.params.id);
+      
+      console.log('Property fetch debug:', {
+        userId,
+        propertyId: req.params.id,
+        property: property ? { 
+          id: property.id, 
+          ownerId: property.ownerId, 
+          owner_id: (property as any).owner_id
+        } : 'not found'
+      });
+      
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+      
+      // Verify ownership - check both camelCase and snake_case versions
+      const propertyOwnerId = property.ownerId || (property as any).owner_id;
+      
+      // If no ownerId is found, this might be an old property - for now, allow access
+      // TODO: Run a migration to fix missing owner_id fields
+      if (propertyOwnerId && propertyOwnerId !== userId) {
+        console.log('Ownership mismatch:', { propertyOwnerId, requestUserId: userId });
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      // If no owner_id is set, log this for future migration
+      if (!propertyOwnerId) {
+        console.log('Warning: Property has no owner_id set:', property.id);
+      }
+      
+      res.json(property);
+    } catch (error) {
+      console.log('Error fetching property:', error);
+      res.status(500).json({ message: "Failed to fetch property" });
     }
   });
 
@@ -949,8 +994,14 @@ export async function registerRoutes(app: Express) {
   app.get("/api/properties/:propertyId/units", isAuthenticated, async (req: any, res: any) => {
     try {
       const units = await supabaseStorage.getUnitsByPropertyId(req.params.propertyId) || [];
+      console.log('Units fetch debug:', {
+        propertyId: req.params.propertyId,
+        unitsCount: units.length,
+        units: units
+      });
       res.json(units);
     } catch (error) {
+      console.log('Error fetching units:', error);
       res.status(500).json({ message: "Failed to fetch units" });
     }
   });
@@ -958,13 +1009,19 @@ export async function registerRoutes(app: Express) {
   app.post("/api/units", isAuthenticated, async (req: any, res: any) => {
     try {
       const unitData = insertUnitSchema.parse(req.body);
+      console.log('Creating unit with data:', unitData);
       const unit = await supabaseStorage.createUnit(unitData);
+      console.log('Created unit:', unit);
       res.status(201).json(unit);
     } catch (error) {
+      console.error('Unit creation error:', error);
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Invalid input", errors: error.errors });
       } else {
-        res.status(500).json({ message: "Failed to create unit" });
+        res.status(500).json({ 
+          message: "Failed to create unit", 
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
     }
   });
@@ -980,6 +1037,15 @@ export async function registerRoutes(app: Express) {
       } else {
         res.status(500).json({ message: "Failed to update unit" });
       }
+    }
+  });
+
+  app.delete("/api/units/:id", isAuthenticated, async (req: any, res: any) => {
+    try {
+      await supabaseStorage.deleteUnit(req.params.id);
+      res.json({ message: "Unit deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete unit" });
     }
   });
 
@@ -1022,6 +1088,320 @@ export async function registerRoutes(app: Express) {
       } else {
         res.status(500).json({ message: "Failed to update tenant" });
       }
+    }
+  });
+
+  // Profile Management routes
+  app.put("/api/auth/profile", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      
+      // Define profile update schema
+      const profileUpdateSchema = z.object({
+        firstName: z.string().min(1, "First name is required").optional(),
+        lastName: z.string().min(1, "Last name is required").optional(),
+        email: z.string().email("Invalid email address").optional(),
+      });
+      
+      const profileData = profileUpdateSchema.parse(req.body);
+      
+      // Update user profile in Supabase
+      const { data, error } = await supabase.auth.admin.updateUserById(
+        userId,
+        {
+          email: profileData.email,
+          user_metadata: {
+            first_name: profileData.firstName,
+            last_name: profileData.lastName,
+          }
+        }
+      );
+      
+      if (error) {
+        console.error("Profile update error:", error);
+        return res.status(400).json({ message: error.message });
+      }
+      
+      // Also update in our database
+      await supabaseStorage.updateUser(userId, {
+        firstName: profileData.firstName,
+        lastName: profileData.lastName,
+        email: profileData.email,
+      });
+      
+      res.json({ 
+        message: "Profile updated successfully",
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+          firstName: data.user.user_metadata?.first_name,
+          lastName: data.user.user_metadata?.last_name,
+        }
+      });
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid input", errors: error.errors });
+      } else {
+        res.status(500).json({ message: "Failed to update profile" });
+      }
+    }
+  });
+
+  // Password Change routes
+  app.post("/api/auth/change-password", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      
+      // Define password change schema
+      const passwordChangeSchema = z.object({
+        currentPassword: z.string().min(1, "Current password is required"),
+        newPassword: z.string().min(6, "New password must be at least 6 characters"),
+        confirmPassword: z.string().min(1, "Please confirm your new password"),
+      }).refine((data) => data.newPassword === data.confirmPassword, {
+        message: "Passwords don't match",
+        path: ["confirmPassword"],
+      });
+      
+      const passwordData = passwordChangeSchema.parse(req.body);
+      
+      // Update password using Supabase Auth Admin API
+      const { data, error } = await supabase.auth.admin.updateUserById(
+        userId,
+        { password: passwordData.newPassword }
+      );
+      
+      if (error) {
+        console.error("Password change error:", error);
+        return res.status(400).json({ message: error.message });
+      }
+      
+      res.json({ message: "Password changed successfully" });
+    } catch (error) {
+      console.error('Error changing password:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid input", errors: error.errors });
+      } else {
+        res.status(500).json({ message: "Failed to change password" });
+      }
+    }
+  });
+
+  // Payment routes
+  app.get("/api/payments", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const payments = await supabaseStorage.getPaymentsByOwnerId(userId) || [];
+      res.json(payments);
+    } catch (error) {
+      console.log('Error fetching payments:', error);
+      res.status(500).json({ message: "Failed to fetch payments" });
+    }
+  });
+
+  app.post("/api/payments", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      
+      // Define payment creation schema
+      const paymentCreateSchema = z.object({
+        tenantId: z.string().min(1, "Tenant is required"),
+        amount: z.number().positive("Amount must be positive"),
+        description: z.string().optional(),
+        paymentMethod: z.enum(["cash", "bank_transfer", "mobile_money", "check"]).default("cash"),
+        status: z.enum(["pending", "completed", "failed", "cancelled"]).default("completed"),
+        paidDate: z.string().optional(),
+      });
+      
+      const paymentData = paymentCreateSchema.parse(req.body);
+      
+      // Get tenant's active lease
+      const tenant = await supabaseStorage.getTenantById(paymentData.tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      // Get the tenant's active lease
+      const leases = await supabaseStorage.getLeasesByTenantId(paymentData.tenantId);
+      const activeLease = leases.find(lease => lease.isActive);
+      
+      if (!activeLease) {
+        return res.status(400).json({ message: "No active lease found for this tenant" });
+      }
+      
+      // Create payment record
+      const paidDate = paymentData.paidDate ? new Date(paymentData.paidDate) : new Date();
+      const payment = await supabaseStorage.createPayment({
+        leaseId: activeLease.id,
+        amount: paymentData.amount.toString(),
+        dueDate: paidDate, // For recorded payments, due date equals paid date
+        paymentMethod: paymentData.paymentMethod,
+        status: paymentData.status,
+        description: paymentData.description || `Rent payment for ${tenant.firstName} ${tenant.lastName}`,
+        paidDate: paidDate,
+      });
+      
+      res.status(201).json(payment);
+    } catch (error) {
+      console.error('Error creating payment:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid input", errors: error.errors });
+      } else {
+        res.status(500).json({ message: "Failed to create payment" });
+      }
+    }
+  });
+
+  // Dashboard Statistics route
+  app.get("/api/dashboard/stats", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      
+      // Get all data in parallel for better performance
+      const [properties, tenants, payments] = await Promise.all([
+        supabaseStorage.getPropertiesByOwnerId(userId),
+        supabaseStorage.getTenantsByOwnerId(userId),
+        supabaseStorage.getPaymentsByOwnerId(userId),
+      ]);
+      
+      // Calculate statistics
+      const totalProperties = properties?.length || 0;
+      const totalTenants = tenants?.length || 0;
+      
+      // Calculate total revenue (completed payments)
+      const completedPayments = payments?.filter(p => p.status === "completed") || [];
+      const totalRevenue = completedPayments.reduce((sum, payment) => {
+        return sum + parseFloat(payment.amount || "0");
+      }, 0);
+      
+      // Calculate monthly revenue (current month)
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const monthlyRevenue = completedPayments
+        .filter(payment => {
+          const paymentDate = new Date(payment.paidDate || payment.createdAt);
+          return paymentDate.getMonth() === currentMonth && paymentDate.getFullYear() === currentYear;
+        })
+        .reduce((sum, payment) => sum + parseFloat(payment.amount || "0"), 0);
+      
+      // Get pending payments count
+      const pendingPayments = payments?.filter(p => p.status === "pending").length || 0;
+      
+      res.json({
+        totalProperties,
+        totalTenants,
+        totalRevenue,
+        monthlyRevenue,
+        pendingPayments,
+        recentPayments: completedPayments.slice(0, 5), // Last 5 payments
+      });
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      res.status(500).json({ message: "Failed to fetch dashboard statistics" });
+    }
+  });
+
+  // Leases routes
+  app.get("/api/leases", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const leases = await supabaseStorage.getLeasesByOwnerId(userId);
+      res.json(leases);
+    } catch (error) {
+      console.error('Error fetching leases:', error);
+      res.status(500).json({ message: "Failed to fetch leases" });
+    }
+  });
+
+  app.post("/api/leases", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      
+      // Define lease creation schema
+      const leaseCreateSchema = z.object({
+        tenantId: z.string().min(1, "Tenant is required"),
+        unitId: z.string().min(1, "Unit is required"),
+        startDate: z.string().min(1, "Start date is required"),
+        endDate: z.string().min(1, "End date is required"),
+        monthlyRent: z.string().min(1, "Monthly rent is required"),
+        securityDeposit: z.string().optional(),
+        isActive: z.boolean().default(true),
+      });
+      
+      const leaseData = leaseCreateSchema.parse(req.body);
+      
+      // Validate that the unit exists and belongs to this landlord
+      const unit = await supabaseStorage.getUnitById(leaseData.unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Unit not found" });
+      }
+      
+      // Get property to verify ownership
+      const property = await supabaseStorage.getPropertyById(unit.propertyId);
+      if (!property || property.ownerId !== userId) {
+        return res.status(403).json({ message: "Unauthorized: Unit does not belong to you" });
+      }
+      
+      // Check if unit is already occupied by an active lease
+      const existingLeases = await supabaseStorage.getLeasesByOwnerId(userId);
+      const activeLeaseForUnit = existingLeases.find(lease => 
+        lease.unitId === leaseData.unitId && lease.isActive
+      );
+      
+      if (activeLeaseForUnit) {
+        return res.status(400).json({ message: "Unit is already occupied by an active lease" });
+      }
+      
+      // Validate that the tenant exists and belongs to this landlord
+      const tenant = await supabaseStorage.getTenantById(leaseData.tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      // Check if tenant belongs to this landlord
+      const landlordTenants = await supabaseStorage.getTenantsByOwnerId(userId);
+      const tenantBelongsToLandlord = landlordTenants.some(t => t.id === leaseData.tenantId);
+      
+      if (!tenantBelongsToLandlord) {
+        return res.status(403).json({ message: "Unauthorized: Tenant does not belong to you" });
+      }
+      
+      // Create the lease
+      const lease = await supabaseStorage.createLease({
+        tenantId: leaseData.tenantId,
+        unitId: leaseData.unitId,
+        startDate: new Date(leaseData.startDate),
+        endDate: new Date(leaseData.endDate),
+        monthlyRent: leaseData.monthlyRent,
+        securityDeposit: leaseData.securityDeposit || "0",
+        isActive: leaseData.isActive,
+      });
+      
+      // Mark unit as occupied
+      await supabaseStorage.updateUnit(leaseData.unitId, { isOccupied: true });
+      
+      res.status(201).json(lease);
+    } catch (error) {
+      console.error('Error creating lease:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid input", errors: error.errors });
+      } else {
+        res.status(500).json({ message: "Failed to create lease" });
+      }
+    }
+  });
+
+  // Maintenance Requests route
+  app.get("/api/maintenance-requests", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      
+      // For now, return empty array since we haven't implemented maintenance requests fully
+      // In the future, we'll get maintenance requests for the owner's properties
+      res.json([]);
+    } catch (error) {
+      console.log('Error fetching maintenance requests:', error);
+      res.status(500).json({ message: "Failed to fetch maintenance requests" });
     }
   });
 }

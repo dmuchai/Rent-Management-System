@@ -9,6 +9,7 @@ const navItems = [
   { id: "overview", label: "Overview", icon: "fas fa-chart-pie" },
   { id: "properties", label: "Properties", icon: "fas fa-building" },
   { id: "tenants", label: "Tenants", icon: "fas fa-users" },
+  { id: "leases", label: "Leases", icon: "fas fa-file-contract" },
   { id: "payments", label: "Payments", icon: "fas fa-credit-card" },
   { id: "documents", label: "Documents", icon: "fas fa-file-alt" },
   { id: "reports", label: "Reports", icon: "fas fa-chart-line" },

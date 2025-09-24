@@ -3,20 +3,145 @@ import { supabase } from "./supabaseAuth";
 export class SupabaseStorage {
   // Unit operations
   async getUnitsByPropertyId(propertyId: string): Promise<Unit[]> {
-    // TODO: Implement Supabase query
-    return [];
+    const { data, error } = await supabase
+      .from("units")
+      .select("*")
+      .eq("property_id", propertyId)
+      .order("unit_number", { ascending: true });
+    if (error) throw error;
+    
+    // Convert snake_case to camelCase for frontend
+    const units = data?.map((unit: any) => ({
+      id: unit.id,
+      propertyId: unit.property_id,
+      unitNumber: unit.unit_number,
+      bedrooms: unit.bedrooms,
+      bathrooms: unit.bathrooms,
+      size: unit.size,
+      rentAmount: unit.rent_amount,
+      isOccupied: unit.is_occupied,
+      createdAt: unit.created_at,
+      updatedAt: unit.updated_at,
+    })) || [];
+    
+    return units as Unit[];
   }
   async getUnitById(id: string): Promise<Unit | undefined> {
-    // TODO: Implement Supabase query
-    return undefined;
+    const { data, error } = await supabase
+      .from("units")
+      .select("*")
+      .eq("id", id)
+      .single();
+    
+    if (error) {
+      console.log('getUnitById error:', error);
+      return undefined;
+    }
+    
+    if (!data) return undefined;
+    
+    // Convert snake_case to camelCase for frontend
+    const unit = {
+      id: data.id,
+      propertyId: data.property_id,
+      unitNumber: data.unit_number,
+      bedrooms: data.bedrooms,
+      bathrooms: data.bathrooms,
+      size: data.size,
+      rentAmount: data.rent_amount,
+      isOccupied: data.is_occupied,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+    
+    return unit as Unit;
   }
   async createUnit(unit: InsertUnit): Promise<Unit> {
-    // TODO: Implement Supabase query
-    return unit as Unit;
+    // Map camelCase to snake_case for Supabase
+    const unitData = {
+      property_id: unit.propertyId,
+      unit_number: unit.unitNumber,
+      bedrooms: unit.bedrooms,
+      bathrooms: unit.bathrooms,
+      size: unit.size,
+      rent_amount: unit.rentAmount,
+      is_occupied: unit.isOccupied || false,
+    };
+    
+    console.log('Inserting unit data to Supabase:', unitData);
+    const { data, error } = await supabase
+      .from("units")
+      .insert(unitData)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Supabase unit creation error:', error);
+      throw error;
+    }
+    
+    console.log('Supabase unit created:', data);
+    
+    // Convert snake_case to camelCase for frontend
+    const mappedUnit = {
+      id: data.id,
+      propertyId: data.property_id,
+      unitNumber: data.unit_number,
+      bedrooms: data.bedrooms,
+      bathrooms: data.bathrooms,
+      size: data.size,
+      rentAmount: data.rent_amount,
+      isOccupied: data.is_occupied,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+    
+    return mappedUnit as Unit;
   }
   async updateUnit(id: string, unit: Partial<InsertUnit>): Promise<Unit> {
-    // TODO: Implement Supabase query
-    return unit as Unit;
+    // Map camelCase to snake_case for Supabase
+    const updateData: any = {};
+    
+    if (unit.propertyId !== undefined) updateData.property_id = unit.propertyId;
+    if (unit.unitNumber !== undefined) updateData.unit_number = unit.unitNumber;
+    if (unit.bedrooms !== undefined) updateData.bedrooms = unit.bedrooms;
+    if (unit.bathrooms !== undefined) updateData.bathrooms = unit.bathrooms;
+    if (unit.size !== undefined) updateData.size = unit.size;
+    if (unit.rentAmount !== undefined) updateData.rent_amount = unit.rentAmount;
+    if (unit.isOccupied !== undefined) updateData.is_occupied = unit.isOccupied;
+    
+    updateData.updated_at = new Date().toISOString();
+    
+    console.log('Updating unit data to Supabase:', updateData);
+    const { data, error } = await supabase
+      .from("units")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Supabase unit update error:', error);
+      throw error;
+    }
+    
+    console.log('Supabase unit updated:', data);
+    
+    // Convert snake_case to camelCase for frontend
+    const updatedUnit = {
+      id: data.id,
+      propertyId: data.property_id,
+      unitNumber: data.unit_number,
+      bedrooms: data.bedrooms,
+      bathrooms: data.bathrooms,
+      size: data.size,
+      rentAmount: data.rent_amount,
+      isOccupied: data.is_occupied,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+    
+    return updatedUnit as Unit;
   }
   async deleteUnit(id: string): Promise<void> {
     // TODO: Implement Supabase query
@@ -24,20 +149,223 @@ export class SupabaseStorage {
 
   // Lease operations
   async getLeasesByOwnerId(ownerId: string): Promise<Lease[]> {
-    // TODO: Implement Supabase query
-    return [];
+    try {
+      console.log('Fetching leases for owner:', ownerId);
+      
+      // First, get all properties owned by this user
+      const { data: properties, error: propertiesError } = await supabase
+        .from("properties")
+        .select("id")
+        .eq("owner_id", ownerId);
+
+      if (propertiesError) {
+        console.error('Error fetching properties:', propertiesError);
+        throw propertiesError;
+      }
+
+      if (!properties || properties.length === 0) {
+        console.log('No properties found for owner:', ownerId);
+        return [];
+      }
+
+      const propertyIds = properties.map(p => p.id);
+      console.log('Found property IDs:', propertyIds);
+
+      // Then get all units in those properties
+      const { data: units, error: unitsError } = await supabase
+        .from("units")
+        .select("id")
+        .in("property_id", propertyIds);
+
+      if (unitsError) {
+        console.error('Error fetching units:', unitsError);
+        throw unitsError;
+      }
+
+      if (!units || units.length === 0) {
+        console.log('No units found in properties');
+        return [];
+      }
+
+      const unitIds = units.map(u => u.id);
+      console.log('Found unit IDs:', unitIds);
+
+      // Finally get all leases for those units
+      const { data: leases, error: leasesError } = await supabase
+        .from("leases")
+        .select("*")
+        .in("unit_id", unitIds)
+        .order("created_at", { ascending: false });
+
+      if (leasesError) {
+        console.error('Error fetching leases:', leasesError);
+        throw leasesError;
+      }
+
+      if (!leases || leases.length === 0) {
+        console.log('No leases found for units');
+        return [];
+      }
+
+      console.log('Fetched leases from Supabase:', leases.length);
+
+      // Now fetch related data separately for each lease
+      const leasesWithRelatedData = await Promise.all(
+        leases.map(async (lease: any) => {
+          // Get unit details
+          const unit = await this.getUnitById(lease.unit_id);
+          // Get tenant details
+          const tenant = await this.getTenantById(lease.tenant_id);
+          // Get property details for the unit
+          const property = unit ? await this.getPropertyById(unit.propertyId) : null;
+
+          return {
+            id: lease.id,
+            tenantId: lease.tenant_id,
+            unitId: lease.unit_id,
+            startDate: lease.start_date,
+            endDate: lease.end_date,
+            monthlyRent: lease.monthly_rent,
+            securityDeposit: lease.security_deposit,
+            leaseDocumentUrl: lease.lease_document_url,
+            isActive: lease.is_active,
+            createdAt: lease.created_at,
+            updatedAt: lease.updated_at,
+            // Include related data for display
+            unit: unit ? {
+              id: unit.id,
+              unitNumber: unit.unitNumber,
+              propertyName: property?.name || 'Unknown Property'
+            } : null,
+            tenant: tenant ? {
+              id: tenant.id,
+              firstName: tenant.firstName,
+              lastName: tenant.lastName,
+              email: tenant.email
+            } : null
+          };
+        })
+      );
+
+      return leasesWithRelatedData as Lease[];
+    } catch (error) {
+      console.error('Error in getLeasesByOwnerId:', error);
+      return [];
+    }
   }
   async getLeasesByTenantId(tenantId: string): Promise<Lease[]> {
-    // TODO: Implement Supabase query
-    return [];
+    try {
+      console.log('Fetching leases for tenant:', tenantId);
+      
+      const { data: leases, error } = await supabase
+        .from("leases")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error('Error fetching leases by tenant:', error);
+        throw error;
+      }
+
+      if (!leases || leases.length === 0) {
+        console.log('No leases found for tenant:', tenantId);
+        return [];
+      }
+
+      console.log('Fetched leases for tenant:', leases.length);
+
+      // Fetch related data separately for each lease
+      const leasesWithRelatedData = await Promise.all(
+        leases.map(async (lease: any) => {
+          // Get unit details
+          const unit = await this.getUnitById(lease.unit_id);
+          // Get tenant details
+          const tenant = await this.getTenantById(lease.tenant_id);
+          // Get property details for the unit
+          const property = unit ? await this.getPropertyById(unit.propertyId) : null;
+
+          return {
+            id: lease.id,
+            tenantId: lease.tenant_id,
+            unitId: lease.unit_id,
+            startDate: lease.start_date,
+            endDate: lease.end_date,
+            monthlyRent: lease.monthly_rent,
+            securityDeposit: lease.security_deposit,
+            leaseDocumentUrl: lease.lease_document_url,
+            isActive: lease.is_active,
+            createdAt: lease.created_at,
+            updatedAt: lease.updated_at,
+            // Include related data for display
+            unit: unit ? {
+              id: unit.id,
+              unitNumber: unit.unitNumber,
+              propertyName: property?.name || 'Unknown Property'
+            } : null,
+            tenant: tenant ? {
+              id: tenant.id,
+              firstName: tenant.firstName,
+              lastName: tenant.lastName,
+              email: tenant.email
+            } : null
+          };
+        })
+      );
+
+      return leasesWithRelatedData as Lease[];
+    } catch (error) {
+      console.error('Error in getLeasesByTenantId:', error);
+      return [];
+    }
   }
   async getLeaseById(id: string): Promise<Lease | undefined> {
     // TODO: Implement Supabase query
     return undefined;
   }
   async createLease(lease: InsertLease): Promise<Lease> {
-    // TODO: Implement Supabase query
-    return lease as Lease;
+    // Map camelCase to snake_case for Supabase
+    const leaseData = {
+      tenant_id: lease.tenantId,
+      unit_id: lease.unitId,
+      start_date: lease.startDate,
+      end_date: lease.endDate,
+      monthly_rent: lease.monthlyRent,
+      security_deposit: lease.securityDeposit,
+      lease_document_url: lease.leaseDocumentUrl,
+      is_active: lease.isActive,
+    };
+    
+    console.log('Inserting lease data to Supabase:', leaseData);
+    const { data, error } = await supabase
+      .from("leases")
+      .insert(leaseData)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Supabase lease creation error:', error);
+      throw error;
+    }
+    
+    console.log('Supabase lease created:', data);
+    
+    // Convert snake_case to camelCase for frontend
+    const createdLease = {
+      id: data.id,
+      tenantId: data.tenant_id,
+      unitId: data.unit_id,
+      startDate: data.start_date,
+      endDate: data.end_date,
+      monthlyRent: data.monthly_rent,
+      securityDeposit: data.security_deposit,
+      leaseDocumentUrl: data.lease_document_url,
+      isActive: data.is_active,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+    
+    return createdLease as Lease;
   }
   async updateLease(id: string, lease: Partial<InsertLease>): Promise<Lease> {
     // TODO: Implement Supabase query
@@ -106,8 +434,28 @@ export class SupabaseStorage {
       .select("*")
       .eq("id", id)
       .single();
-    if (error) throw error;
-    return data as Tenant | undefined;
+    
+    if (error) {
+      console.log('getTenantById error:', error);
+      return undefined;
+    }
+    
+    if (!data) return undefined;
+    
+    // Convert snake_case to camelCase for consistency
+    const tenant = {
+      id: data.id,
+      userId: data.user_id,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      email: data.email,
+      phone: data.phone,
+      emergencyContact: data.emergency_contact,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+    
+    return tenant as Tenant;
   }
 
   async createTenant(tenant: InsertTenant, landlordId?: string): Promise<Tenant> {
@@ -152,13 +500,42 @@ export class SupabaseStorage {
 
   // Payments CRUD
   async getPaymentsByOwnerId(ownerId: string): Promise<Payment[]> {
-    const { data, error } = await supabase
-      .from("payments")
-      .select("*")
-      .eq("owner_id", ownerId)
-      .order("due_date", { ascending: true });
-    if (error) throw error;
-    return data as Payment[];
+    try {
+      // First get all tenants for this owner using user_id field
+      const { data: tenants, error: tenantsError } = await supabase
+        .from("tenants")
+        .select("id")
+        .eq("user_id", ownerId);
+      
+      if (tenantsError) throw tenantsError;
+      if (!tenants || tenants.length === 0) return [];
+      
+      const tenantIds = tenants.map(t => t.id);
+      
+      // Get all leases for these tenants
+      const { data: leases, error: leasesError } = await supabase
+        .from("leases")
+        .select("id")
+        .in("tenant_id", tenantIds);
+      
+      if (leasesError) throw leasesError;
+      if (!leases || leases.length === 0) return [];
+      
+      const leaseIds = leases.map(l => l.id);
+      
+      // Now get all payments for these leases
+      const { data: payments, error: paymentsError } = await supabase
+        .from("payments")
+        .select("*")
+        .in("lease_id", leaseIds)
+        .order("due_date", { ascending: false });
+      
+      if (paymentsError) throw paymentsError;
+      return payments as Payment[] || [];
+    } catch (error) {
+      console.error("Error in getPaymentsByOwnerId:", error);
+      return [];
+    }
   }
 
   async getPaymentById(id: string): Promise<Payment | undefined> {
@@ -172,13 +549,52 @@ export class SupabaseStorage {
   }
 
   async createPayment(payment: InsertPayment): Promise<Payment> {
+    // Map camelCase to snake_case for Supabase
+    const paymentData = {
+      lease_id: payment.leaseId,
+      amount: payment.amount,
+      due_date: payment.dueDate,
+      paid_date: payment.paidDate,
+      payment_method: payment.paymentMethod,
+      pesapal_transaction_id: payment.pesapalTransactionId,
+      pesapal_order_tracking_id: payment.pesapalOrderTrackingId,
+      status: payment.status,
+      description: payment.description,
+      receipt_url: payment.receiptUrl,
+    };
+
+    console.log('Creating payment with data:', paymentData);
     const { data, error } = await supabase
       .from("payments")
-      .insert([payment])
+      .insert([paymentData])
       .select()
       .single();
-    if (error) throw error;
-    return data as Payment;
+    
+    if (error) {
+      console.error('Payment creation error:', error);
+      throw error;
+    }
+    
+    console.log('Payment created:', data);
+    
+    // Convert snake_case to camelCase for frontend
+    const createdPayment = {
+      id: data.id,
+      leaseId: data.lease_id,
+      amount: data.amount,
+      dueDate: data.due_date,
+      paidDate: data.paid_date,
+      paymentMethod: data.payment_method,
+      pesapalTransactionId: data.pesapal_transaction_id,
+      pesapalOrderTrackingId: data.pesapal_order_tracking_id,
+      status: data.status,
+      description: data.description,
+      receiptUrl: data.receipt_url,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+    
+    return createdPayment as Payment;
   }
 
   async updatePayment(id: string, payment: Partial<InsertPayment>): Promise<Payment> {
@@ -201,13 +617,48 @@ export class SupabaseStorage {
   }
   // Get properties by owner
   async getPropertiesByOwnerId(ownerId: string): Promise<Property[]> {
-    const { data, error } = await supabase
+    // First get properties
+    const { data: propertiesData, error: propertiesError } = await supabase
       .from("properties")
       .select("*")
       .eq("owner_id", ownerId)
       .order("name", { ascending: true });
-    if (error) throw error;
-    return data as Property[];
+    
+    if (propertiesError) throw propertiesError;
+    
+    console.log('Raw property data from DB:', {
+      ownerId,
+      dataCount: propertiesData?.length || 0,
+      firstPropertyRaw: propertiesData?.[0] ? Object.keys(propertiesData[0]) : 'none',
+      firstPropertyData: propertiesData?.[0]
+    });
+
+    if (!propertiesData || propertiesData.length === 0) {
+      return [];
+    }
+
+    // Get units for each property
+    const propertiesWithUnits = await Promise.all(
+      propertiesData.map(async (property) => {
+        const units = await this.getUnitsByPropertyId(property.id);
+        return {
+          // Convert snake_case to camelCase for consistency
+          id: property.id,
+          ownerId: property.owner_id,
+          name: property.name,
+          address: property.address,
+          propertyType: property.property_type,
+          totalUnits: property.total_units,
+          description: property.description,
+          imageUrl: property.image_url,
+          createdAt: property.created_at,
+          updatedAt: property.updated_at,
+          units: units, // Include units
+        };
+      })
+    );
+
+    return propertiesWithUnits as Property[];
   }
 
   // Get property by ID
@@ -217,8 +668,29 @@ export class SupabaseStorage {
       .select("*")
       .eq("id", id)
       .single();
-    if (error) throw error;
-    return data as Property | undefined;
+    
+    if (error) {
+      console.log('getPropertyById error:', error);
+      return undefined;
+    }
+    
+    if (!data) return undefined;
+    
+    // Convert snake_case to camelCase for consistency
+    const property = {
+      id: data.id,
+      ownerId: data.owner_id,
+      name: data.name,
+      address: data.address,
+      propertyType: data.property_type,
+      totalUnits: data.total_units,
+      description: data.description,
+      imageUrl: data.image_url,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+    
+    return property as Property;
   }
 
   // Create property
@@ -282,6 +754,85 @@ export class SupabaseStorage {
       .eq("id", id);
     if (error) throw error;
   }
+
+  // User operations
+  async getUser(id: string): Promise<User | undefined> {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return undefined; // No rows returned
+      }
+      throw error;
+    }
+    return data as User;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    // Map camelCase to snake_case for database
+    const dbUserData: any = {
+      updated_at: new Date().toISOString(),
+    };
+    
+    if (userData.firstName !== undefined) {
+      dbUserData.first_name = userData.firstName;
+    }
+    if (userData.lastName !== undefined) {
+      dbUserData.last_name = userData.lastName;
+    }
+    if (userData.email !== undefined) {
+      dbUserData.email = userData.email;
+    }
+    if (userData.profileImageUrl !== undefined) {
+      dbUserData.profile_image_url = userData.profileImageUrl;
+    }
+    if (userData.role !== undefined) {
+      dbUserData.role = userData.role;
+    }
+
+    const { data, error } = await supabase
+      .from("users")
+      .upsert(dbUserData)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as User;
+  }
+
+  async updateUser(id: string, userData: Partial<UpsertUser>): Promise<User> {
+    // Map camelCase to snake_case for database
+    const dbUserData: any = {
+      updated_at: new Date().toISOString(),
+    };
+    
+    if (userData.firstName !== undefined) {
+      dbUserData.first_name = userData.firstName;
+    }
+    if (userData.lastName !== undefined) {
+      dbUserData.last_name = userData.lastName;
+    }
+    if (userData.email !== undefined) {
+      dbUserData.email = userData.email;
+    }
+    if (userData.profileImageUrl !== undefined) {
+      dbUserData.profile_image_url = userData.profileImageUrl;
+    }
+    if (userData.role !== undefined) {
+      dbUserData.role = userData.role;
+    }
+
+    const { data, error } = await supabase
+      .from("users")
+      .update(dbUserData)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as User;
+  }
 }
 import {
   users,
@@ -316,6 +867,7 @@ export interface IStorage {
   // User operations (for authentication)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  updateUser(id: string, user: Partial<UpsertUser>): Promise<User>;
 
   // Property operations
   getPropertiesByOwnerId(ownerId: string): Promise<Property[]>;
@@ -398,6 +950,23 @@ export class DatabaseStorage implements IStorage {
         },
       })
       .returning();
+    return user;
+  }
+
+  async updateUser(id: string, userData: Partial<UpsertUser>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({
+        ...userData,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning();
+    
+    if (!user) {
+      throw new Error("User not found");
+    }
+    
     return user;
   }
 
