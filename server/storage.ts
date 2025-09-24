@@ -83,7 +83,21 @@ export class SupabaseStorage {
     }
     
     console.log('Found tenants:', data?.length || 0);
-    return data as Tenant[];
+    
+    // Map snake_case database fields to camelCase for frontend
+    const mappedTenants = data?.map(tenant => ({
+      id: tenant.id,
+      userId: tenant.user_id,
+      firstName: tenant.first_name,
+      lastName: tenant.last_name,
+      email: tenant.email,
+      phone: tenant.phone,
+      emergencyContact: tenant.emergency_contact,
+      createdAt: tenant.created_at,
+      updatedAt: tenant.updated_at
+    })) || [];
+    
+    return mappedTenants as Tenant[];
   }
 
   async getTenantById(id: string): Promise<Tenant | undefined> {
@@ -209,24 +223,54 @@ export class SupabaseStorage {
 
   // Create property
   async createProperty(property: InsertProperty): Promise<Property> {
+    // Map camelCase fields to snake_case for Supabase
+    const propertyData = {
+      name: property.name,
+      address: property.address,
+      property_type: property.propertyType,
+      total_units: property.totalUnits,
+      description: property.description,
+      owner_id: property.ownerId,
+      // Note: imageUrl excluded as the column doesn't exist in the current database schema
+    };
+
     const { data, error } = await supabase
       .from("properties")
-      .insert([property])
+      .insert([propertyData])
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error("Error creating property:", error);
+      throw error;
+    }
     return data as Property;
   }
 
   // Update property
   async updateProperty(id: string, property: Partial<InsertProperty>): Promise<Property> {
+    // Map camelCase fields to snake_case for Supabase
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (property.name) updateData.name = property.name;
+    if (property.address) updateData.address = property.address;
+    if (property.propertyType) updateData.property_type = property.propertyType;
+    if (property.totalUnits) updateData.total_units = property.totalUnits;
+    if (property.description) updateData.description = property.description;
+    if (property.ownerId) updateData.owner_id = property.ownerId;
+    // Note: imageUrl excluded as the column doesn't exist in the current database schema
+
     const { data, error } = await supabase
       .from("properties")
-      .update({ ...property, updated_at: new Date().toISOString() })
+      .update(updateData)
       .eq("id", id)
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error("Error updating property:", error);
+      throw error;
+    }
     return data as Property;
   }
 

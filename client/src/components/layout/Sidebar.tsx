@@ -3,10 +3,9 @@ import { cn } from "@/lib/utils";
 interface SidebarProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
-  userRole: "landlord" | "tenant";
 }
 
-const landlordNavItems = [
+const navItems = [
   { id: "overview", label: "Overview", icon: "fas fa-chart-pie" },
   { id: "properties", label: "Properties", icon: "fas fa-building" },
   { id: "tenants", label: "Tenants", icon: "fas fa-users" },
@@ -16,22 +15,14 @@ const landlordNavItems = [
   { id: "profile", label: "Profile", icon: "fas fa-user-circle" },
 ];
 
-const tenantNavItems = [
-  { id: "overview", label: "Overview", icon: "fas fa-home" },
-  { id: "payments", label: "Payments", icon: "fas fa-credit-card" },
-  { id: "documents", label: "Documents", icon: "fas fa-file-alt" },
-  { id: "maintenance", label: "Maintenance", icon: "fas fa-tools" },
-];
-
-export default function Sidebar({ activeSection, onSectionChange, userRole }: SidebarProps) {
-  const navItems = userRole === "landlord" ? landlordNavItems : tenantNavItems;
+export default function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
 
   return (
     <div className="w-64 bg-card border-r border-border">
       <div className="p-6">
         <div className="flex items-center">
           <i className="fas fa-building text-primary text-xl mr-3"></i>
-          <h1 className="text-xl font-bold">RentFlow</h1>
+          <h1 className="text-xl font-bold">PropertyFlow</h1>
         </div>
       </div>
       

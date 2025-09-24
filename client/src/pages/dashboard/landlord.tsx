@@ -624,7 +624,6 @@ export default function LandlordDashboard() {
         <Sidebar 
           activeSection={activeSection} 
           onSectionChange={setActiveSection}
-          userRole="landlord"
         />
         
         <div className="flex-1 overflow-auto">

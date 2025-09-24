@@ -109,47 +109,147 @@ export async function registerRoutes(app: Express) {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Login - Rent Management System</title>
+        <title>Sign In - Property Management System</title>
         <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
         <style>
-            body { font-family: Arial, sans-serif; max-width: 400px; margin: 100px auto; padding: 20px; }
-            .login-container { text-align: center; border: 1px solid #ddd; padding: 30px; border-radius: 8px; }
-            button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; margin: 10px; }
-            button:hover { background: #0056b3; }
-            .error { color: red; margin: 10px 0; }
+            body { font-family: Arial, sans-serif; max-width: 400px; margin: 100px auto; padding: 20px; background-color: #f5f5f5; }
+            .login-container { 
+                text-align: center; 
+                background: white; 
+                padding: 40px; 
+                border-radius: 12px; 
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .logo { font-size: 2rem; margin-bottom: 10px; }
+            .title { color: #333; margin-bottom: 30px; }
+            input { 
+                width: 100%; 
+                padding: 12px 16px; 
+                margin: 8px 0; 
+                border: 2px solid #e1e5e9; 
+                border-radius: 8px; 
+                font-size: 14px;
+                box-sizing: border-box;
+            }
+            input:focus { 
+                outline: none; 
+                border-color: #007bff; 
+            }
+            .btn { 
+                width: 100%;
+                padding: 12px; 
+                border: none; 
+                border-radius: 8px; 
+                font-size: 16px; 
+                font-weight: 500;
+                cursor: pointer; 
+                margin: 8px 0;
+                transition: background-color 0.2s;
+            }
+            .btn-primary { 
+                background: #007bff; 
+                color: white; 
+            }
+            .btn-primary:hover { 
+                background: #0056b3; 
+            }
+            .btn-outline { 
+                background: transparent; 
+                color: #007bff; 
+                border: 2px solid #007bff;
+            }
+            .btn-outline:hover { 
+                background: #007bff; 
+                color: white; 
+            }
+            .btn-google {
+                background: #db4437;
+                color: white;
+                margin-top: 20px;
+            }
+            .btn-google:hover {
+                background: #c23321;
+            }
+            .error { 
+                color: #dc3545; 
+                background: #f8d7da; 
+                border: 1px solid #f5c6cb; 
+                padding: 10px; 
+                border-radius: 4px; 
+                margin: 15px 0; 
+            }
+            .success { 
+                color: #155724; 
+                background: #d4edda; 
+                border: 1px solid #c3e6cb; 
+                padding: 10px; 
+                border-radius: 4px; 
+                margin: 15px 0; 
+            }
+            .divider { 
+                margin: 20px 0; 
+                text-align: center; 
+                color: #666; 
+                position: relative;
+            }
+            .divider::before {
+                content: '';
+                position: absolute;
+                top: 50%;
+                left: 0;
+                right: 0;
+                height: 1px;
+                background: #ddd;
+            }
+            .divider span {
+                background: white;
+                padding: 0 15px;
+            }
+            .link { 
+                color: #007bff; 
+                text-decoration: none; 
+                font-size: 14px;
+            }
+            .link:hover { 
+                text-decoration: underline; 
+            }
         </style>
     </head>
     <body>
         <div class="login-container">
-            <h2>🏠 Rent Management System</h2>
-            <p>Sign in with your email to continue</p>
-            <div id="error" class="error"></div>
-            <input type="email" id="email" placeholder="Enter your email" style="width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px;">
-            <input type="password" id="password" placeholder="Enter your password" style="width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px;">
-            <br>
-            <button onclick="signIn()">Sign In</button>
-            <button onclick="signUp()">Sign Up</button>
-            <button onclick="basicTest()" style="background: #ffc107;">Basic Test</button>
-            <button onclick="testClick()" style="background: #17a2b8;">Test Click</button>
-            <hr>
-            <button onclick="signInWithGoogle()">Sign in with Google</button>
-            <hr>
-            <button onclick="syncUser()" style="background: #28a745;">Sync User to Database</button>
+            <div class="logo">🏠</div>
+            <h2 class="title">Property Management System</h2>
+            <p>Sign in to manage your properties</p>
+            
+            <div id="message"></div>
+            
+            <input type="email" id="email" placeholder="Email address" required>
+            <input type="password" id="password" placeholder="Password" required>
+            
+            <button class="btn btn-primary" onclick="signIn()">Sign In</button>
+            
+            <div class="divider">
+                <span>or</span>
+            </div>
+            
+            <button class="btn btn-google" onclick="signInWithGoogle()">Sign in with Google</button>
+            
+            <div style="margin-top: 20px;">
+                <span>Don't have an account? </span>
+                <a href="/api/register" class="link">Create one here</a>
+            </div>
         </div>
 
         <script>
-            console.log('Script loaded');
-            
-            // Basic test function (should always work)
-            function basicTest() {
-                console.log('basicTest called');
-                alert('Basic JavaScript works!');
+            function showMessage(text, type = 'error') {
+                const messageDiv = document.getElementById('message');
+                messageDiv.className = type;
+                messageDiv.textContent = text;
+                messageDiv.style.display = 'block';
             }
             
-            // Test click function
-            function testClick() {
-                console.log('testClick called');
-                alert('Test Click works!');
+            function clearMessage() {
+                document.getElementById('message').style.display = 'none';
             }
             
             // Initialize when DOM is ready
@@ -177,28 +277,27 @@ export async function registerRoutes(app: Express) {
                 
                 // Define auth functions
                 window.signIn = async function() {
-                    console.log('signIn called');
+                    clearMessage();
                     const email = document.getElementById('email').value;
                     const password = document.getElementById('password').value;
                     
                     if (!email || !password) {
-                        document.getElementById('error').textContent = 'Please enter email and password';
+                        showMessage('Please enter email and password');
                         return;
                     }
                     
                     try {
+                        showMessage('Signing in...', 'success');
+                        
                         const { data, error } = await window.supabaseClient.auth.signInWithPassword({
                             email: email,
                             password: password
                         });
                         
-                        console.log('Sign in result:', { data, error });
-                        
                         if (error) {
-                            console.error('Sign in error:', error);
-                            document.getElementById('error').textContent = error.message;
+                            showMessage(error.message);
                         } else if (data.session) {
-                            console.log('Sign in success, setting session');
+                            showMessage('Sign in successful! Redirecting...', 'success');
                             
                             // Send the token to our backend and set as cookie
                             const response = await fetch('/api/auth/set-session', {
@@ -213,133 +312,21 @@ export async function registerRoutes(app: Express) {
                             });
                             
                             if (response.ok) {
-                                console.log('Session set successfully, redirecting to dashboard');
-                                window.location.href = '/dashboard';
-                            } else {
-                                console.error('Failed to set session');
-                                document.getElementById('error').textContent = 'Failed to set session';
-                            }
-                        }
-                    } catch (e) {
-                        console.error('Sign in exception:', e);
-                        document.getElementById('error').textContent = 'Sign in failed';
-                    }
-                };
-                
-                window.signUp = async function() {
-                    console.log('signUp called');
-                    const email = document.getElementById('email').value;
-                    const password = document.getElementById('password').value;
-                    
-                    if (!email || !password) {
-                        document.getElementById('error').textContent = 'Please enter email and password';
-                        return;
-                    }
-                    
-                    try {
-                        const { data, error } = await window.supabaseClient.auth.signUp({
-                            email: email,
-                            password: password
-                        });
-                        
-                        console.log('Sign up result:', { data, error });
-                        
-                        if (error) {
-                            console.error('Sign up error:', error);
-                            document.getElementById('error').textContent = error.message;
-                        } else if (data.user) {
-                            console.log('Sign up success');
-                            
-                            // Check if user is immediately confirmed (email confirmation disabled)
-                            if (data.session) {
-                                console.log('User confirmed immediately, setting session');
-                                
-                                // Send the token to our backend and set as cookie
-                                const response = await fetch('/api/auth/set-session', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json'
-                                    },
-                                    body: JSON.stringify({
-                                        access_token: data.session.access_token,
-                                        refresh_token: data.session.refresh_token
-                                    })
-                                });
-                                
-                                if (response.ok) {
-                                    console.log('Session set successfully, creating user record');
-                                    
-                                    // Automatically create user record in custom table
-                                    try {
-                                        const userResponse = await fetch('/api/auth/sync-user', {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json'
-                                            },
-                                            body: JSON.stringify({
-                                                firstName: '', // Can be updated later
-                                                lastName: '',
-                                                role: 'landlord' // Default role
-                                            })
-                                        });
-                                        
-                                        if (userResponse.ok) {
-                                            console.log('User record created successfully');
-                                        } else {
-                                            console.warn('Failed to create user record, but auth is working');
-                                        }
-                                    } catch (userError) {
-                                        console.warn('Error creating user record:', userError);
-                                    }
-                                    
-                                    // Show success message first
-                                    document.getElementById('error').style.color = 'green';
-                                    document.getElementById('error').textContent = 'Account created successfully! Redirecting...';
-                                    
-                                    // Redirect after a short delay
-                                    setTimeout(() => {
-                                        window.location.href = '/dashboard';
-                                    }, 1500);
-                                } else {
-                                    console.error('Failed to set session');
-                                    document.getElementById('error').textContent = 'Account created but failed to set session. Please try signing in.';
-                                }
-                            } else {
-                                // Email confirmation required
-                                console.log('Email confirmation required');
-                                document.getElementById('error').style.color = 'orange';
-                                document.getElementById('error').innerHTML = 
-                                    '<strong>Account created!</strong><br>' +
-                                    'Please check your email for a verification link.<br>' +
-                                    '<small>After verifying, you can <a href="#" onclick="showSignInForm()">sign in here</a></small>';
-                                
-                                // Show a button to switch to sign in mode
                                 setTimeout(() => {
-                                    document.getElementById('email').value = email;
-                                    document.getElementById('password').value = '';
-                                }, 2000);
+                                    window.location.href = '/dashboard';
+                                }, 1000);
+                            } else {
+                                showMessage('Failed to set session');
                             }
                         }
                     } catch (e) {
-                        console.error('Sign up exception:', e);
-                        document.getElementById('error').textContent = 'Sign up failed: ' + e.message;
+                        showMessage('Sign in failed. Please try again.');
                     }
-                };
-                
-                // Helper function to clear form and focus on sign in
-                window.showSignInForm = function() {
-                    document.getElementById('error').textContent = '';
-                    document.getElementById('password').focus();
                 };
                 
                 window.signInWithGoogle = async function() {
-                    console.log('Google sign in called');
-                    // Implement Google sign in
+                    showMessage('Google Sign-In coming soon!', 'success');
                 };
-                
-                window.syncUser = async function() {
-                    console.log('Sync user called');
-                    // Implement sync user
                 };
             });
         </script>
@@ -535,6 +522,315 @@ export async function registerRoutes(app: Express) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       res.status(500).json({ message: "Failed to sync user", error: errorMessage });
     }
+  });
+
+  // Register/Sign Up route with proper form fields
+  app.get("/api/register", (req: any, res: any) => {
+    const supabaseConfig = getValidatedSupabaseConfig();
+    
+    if (!supabaseConfig) {
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Configuration Error</title></head>
+        <body>
+          <h1>Configuration Error</h1>
+          <p>Server configuration is invalid. Please contact the administrator.</p>
+        </body>
+        </html>
+      `);
+    }
+    
+    const registerHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Create Account - Property Management System</title>
+        <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 450px; margin: 50px auto; padding: 20px; background-color: #f5f5f5; }
+            .register-container { 
+                text-align: center; 
+                background: white; 
+                padding: 40px; 
+                border-radius: 12px; 
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .logo { font-size: 2rem; margin-bottom: 10px; }
+            .title { color: #333; margin-bottom: 30px; }
+            .form-group { margin-bottom: 20px; text-align: left; }
+            .form-row { display: flex; gap: 10px; }
+            .form-row .form-group { flex: 1; }
+            label { 
+                display: block; 
+                margin-bottom: 5px; 
+                font-weight: 500; 
+                color: #555;
+            }
+            input, select { 
+                width: 100%; 
+                padding: 12px 16px; 
+                border: 2px solid #e1e5e9; 
+                border-radius: 8px; 
+                font-size: 14px;
+                box-sizing: border-box;
+            }
+            input:focus, select:focus { 
+                outline: none; 
+                border-color: #007bff; 
+            }
+            .btn { 
+                width: 100%;
+                padding: 12px; 
+                border: none; 
+                border-radius: 8px; 
+                font-size: 16px; 
+                font-weight: 500;
+                cursor: pointer; 
+                margin: 8px 0;
+                transition: background-color 0.2s;
+            }
+            .btn-primary { 
+                background: #28a745; 
+                color: white; 
+            }
+            .btn-primary:hover { 
+                background: #218838; 
+            }
+            .btn-outline { 
+                background: transparent; 
+                color: #007bff; 
+                border: 2px solid #007bff;
+            }
+            .btn-outline:hover { 
+                background: #007bff; 
+                color: white; 
+            }
+            .error { 
+                color: #dc3545; 
+                background: #f8d7da; 
+                border: 1px solid #f5c6cb; 
+                padding: 10px; 
+                border-radius: 4px; 
+                margin: 15px 0; 
+            }
+            .success { 
+                color: #155724; 
+                background: #d4edda; 
+                border: 1px solid #c3e6cb; 
+                padding: 10px; 
+                border-radius: 4px; 
+                margin: 15px 0; 
+            }
+            .link { 
+                color: #007bff; 
+                text-decoration: none; 
+                font-size: 14px;
+            }
+            .link:hover { 
+                text-decoration: underline; 
+            }
+            .password-requirements {
+                font-size: 12px;
+                color: #666;
+                text-align: left;
+                margin-top: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="register-container">
+            <div class="logo">🏠</div>
+            <h2 class="title">Create Your Account</h2>
+            <p>Join our property management platform for landlords and property managers</p>
+            
+            <div id="message"></div>
+            
+            <form id="registerForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="firstName">First Name *</label>
+                        <input type="text" id="firstName" name="firstName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="lastName">Last Name *</label>
+                        <input type="text" id="lastName" name="lastName" required>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email Address *</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="role">Account Type *</label>
+                    <select id="role" name="role" required>
+                        <option value="landlord">Landlord/Property Owner</option>
+                        <option value="property_manager">Property Manager</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password *</label>
+                    <input type="password" id="password" name="password" required>
+                    <div class="password-requirements">
+                        Minimum 8 characters, include uppercase, lowercase, number, and special character
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password *</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Create Account</button>
+            </form>
+            
+            <div style="margin-top: 20px;">
+                <span>Already have an account? </span>
+                <a href="/api/login" class="link">Sign in here</a>
+            </div>
+        </div>
+
+        <script>
+            function showMessage(text, type = 'error') {
+                const messageDiv = document.getElementById('message');
+                messageDiv.className = type;
+                messageDiv.textContent = text;
+                messageDiv.style.display = 'block';
+            }
+            
+            function clearMessage() {
+                document.getElementById('message').style.display = 'none';
+            }
+            
+            function validatePassword(password) {
+                const minLength = password.length >= 8;
+                const hasUpper = /[A-Z]/.test(password);
+                const hasLower = /[a-z]/.test(password);
+                const hasNumber = /\\d/.test(password);
+                const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+                
+                return minLength && hasUpper && hasLower && hasNumber && hasSpecial;
+            }
+
+            // Initialize when DOM is ready
+            document.addEventListener('DOMContentLoaded', function() {
+                if (typeof supabase === 'undefined') {
+                    showMessage('Supabase library failed to load');
+                    return;
+                }
+                
+                try {
+                    const { createClient } = supabase;
+                    window.supabaseClient = createClient('${supabaseConfig.url}', '${supabaseConfig.key}');
+                } catch (e) {
+                    showMessage('Failed to initialize authentication system');
+                    return;
+                }
+                
+                document.getElementById('registerForm').addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    clearMessage();
+                    
+                    const formData = new FormData(e.target);
+                    const firstName = formData.get('firstName');
+                    const lastName = formData.get('lastName');
+                    const email = formData.get('email');
+                    const role = formData.get('role');
+                    const password = formData.get('password');
+                    const confirmPassword = formData.get('confirmPassword');
+                    
+                    // Validation
+                    if (!firstName || !lastName || !email || !password || !confirmPassword) {
+                        showMessage('Please fill in all required fields');
+                        return;
+                    }
+                    
+                    if (password !== confirmPassword) {
+                        showMessage('Passwords do not match');
+                        return;
+                    }
+                    
+                    if (!validatePassword(password)) {
+                        showMessage('Password must be at least 8 characters with uppercase, lowercase, number, and special character');
+                        return;
+                    }
+                    
+                    try {
+                        showMessage('Creating your account...', 'success');
+                        
+                        const { data, error } = await window.supabaseClient.auth.signUp({
+                            email: email,
+                            password: password,
+                            options: {
+                                data: {
+                                    first_name: firstName,
+                                    last_name: lastName,
+                                    role: role
+                                }
+                            }
+                        });
+                        
+                        if (error) {
+                            showMessage(error.message);
+                            return;
+                        }
+                        
+                        if (data.user) {
+                            if (data.session) {
+                                // User is immediately confirmed
+                                showMessage('Account created successfully! Setting up your profile...', 'success');
+                                
+                                // Set session
+                                const response = await fetch('/api/auth/set-session', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        access_token: data.session.access_token,
+                                        refresh_token: data.session.refresh_token
+                                    })
+                                });
+                                
+                                if (response.ok) {
+                                    // Create user record
+                                    await fetch('/api/auth/sync-user', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            firstName: firstName,
+                                            lastName: lastName,
+                                            role: role
+                                        })
+                                    });
+                                    
+                                    showMessage('Account setup complete! Redirecting to dashboard...', 'success');
+                                    setTimeout(() => {
+                                        window.location.href = '/dashboard';
+                                    }, 2000);
+                                } else {
+                                    showMessage('Account created but session setup failed. Please sign in.');
+                                }
+                            } else {
+                                // Email confirmation required
+                                showMessage('Account created! Please check your email for a verification link before signing in.', 'success');
+                                setTimeout(() => {
+                                    window.location.href = '/api/login';
+                                }, 3000);
+                            }
+                        }
+                    } catch (e) {
+                        showMessage('Account creation failed. Please try again.');
+                    }
+                });
+            });
+        </script>
+    </body>
+    </html>
+    `;
+    
+    res.send(registerHtml);
   });
 
   // Development endpoint to create tables

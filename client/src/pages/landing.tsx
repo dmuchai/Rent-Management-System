@@ -14,7 +14,7 @@ export default function Landing() {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
               <i className="fas fa-building text-primary text-2xl mr-3"></i>
-              <h1 className="text-2xl font-bold text-foreground">RentFlow</h1>
+              <h1 className="text-2xl font-bold text-foreground">PropertyFlow</h1>
             </div>
             <nav className="hidden md:flex space-x-8">
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Features</a>
