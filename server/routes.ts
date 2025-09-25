@@ -1220,15 +1220,27 @@ export async function registerRoutes(app: Express) {
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found" });
       }
-      
+      const landlordTenants = await supabaseStorage.getTenantsByOwnerId(userId);
+      if (!landlordTenants.some((t) => t.id === tenant.id)) {
+        return res.status(403).json({ message: "Unauthorized: Tenant does not belong to you" });
+      }
+
       // Get the tenant's active lease
       const leases = await supabaseStorage.getLeasesByTenantId(paymentData.tenantId);
       const activeLease = leases.find(lease => lease.isActive);
-      
+
       if (!activeLease) {
         return res.status(400).json({ message: "No active lease found for this tenant" });
       }
-      
+      const leaseUnit = await supabaseStorage.getUnitById(activeLease.unitId);
+      const leaseProperty = leaseUnit
+        ? await supabaseStorage.getPropertyById(leaseUnit.propertyId)
+        : null;
+      const leaseOwnerId = leaseProperty?.ownerId ?? (leaseProperty as any)?.owner_id;
+      if (leaseOwnerId && leaseOwnerId !== userId) {
+        return res.status(403).json({ message: "Unauthorized: Lease does not belong to you" });
+      }
+
       // Create payment record
       const paidDate = paymentData.paidDate ? new Date(paymentData.paidDate) : new Date();
       const payment = await supabaseStorage.createPayment({
@@ -1237,10 +1249,12 @@ export async function registerRoutes(app: Express) {
         dueDate: paidDate, // For recorded payments, due date equals paid date
         paymentMethod: paymentData.paymentMethod,
         status: paymentData.status,
-        description: paymentData.description || `Rent payment for ${tenant.firstName} ${tenant.lastName}`,
+        description:
+          paymentData.description ||
+          `Rent payment for ${tenant.firstName} ${tenant.lastName}`,
         paidDate: paidDate,
       });
-      
+
       res.status(201).json(payment);
     } catch (error) {
       console.error('Error creating payment:', error);
@@ -1338,7 +1352,13 @@ export async function registerRoutes(app: Express) {
       
       // Get property to verify ownership
       const property = await supabaseStorage.getPropertyById(unit.propertyId);
-      if (!property || property.ownerId !== userId) {
+      if (!property) {
+        return res.status(404).json({ message: "Property not found" });
+      }
+      
+      // Handle both camelCase (ownerId) and legacy snake_case (owner_id) fields
+      const owner = property.ownerId || (property as any).owner_id;
+      if (owner !== userId) {
         return res.status(403).json({ message: "Unauthorized: Unit does not belong to you" });
       }
       

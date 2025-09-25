@@ -2,16 +2,34 @@ import { useState } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import type { Property, Tenant, Lease, InsertLease, Unit } from "@/../../shared/schema";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+// Form state interface to handle string inputs for numeric fields
+interface LeaseFormState {
+  tenantId: string;
+  unitId: string;
+  startDate: string;
+  endDate: string;
+  monthlyRent: string;
+  securityDeposit: string;
+  isActive: boolean;
+}
+
+// Enhanced unit type with property information
+interface UnitWithProperty extends Unit {
+  propertyName: string;
+  propertyAddress: string;
+}
+
 interface LeaseFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  lease?: any;
+  lease?: Partial<Lease>;
 }
 
 export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps) {
@@ -20,40 +38,66 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
   const isEdit = !!lease;
 
   // Form state
-  const [leaseForm, setLeaseForm] = useState({
+  const [leaseForm, setLeaseForm] = useState<LeaseFormState>({
     tenantId: lease?.tenantId || "",
     unitId: lease?.unitId || "",
     startDate: lease?.startDate ? new Date(lease.startDate).toISOString().split('T')[0] : "",
     endDate: lease?.endDate ? new Date(lease.endDate).toISOString().split('T')[0] : "",
-    monthlyRent: lease?.monthlyRent || "",
-    securityDeposit: lease?.securityDeposit || "",
+    monthlyRent: lease?.monthlyRent?.toString() || "",
+    securityDeposit: lease?.securityDeposit?.toString() || "",
     isActive: lease?.isActive ?? true,
   });
 
   // Fetch tenants and properties for dropdowns
-  const { data: tenants = [], isLoading: tenantsLoading } = useQuery({
+  const { data: tenants = [], isLoading: tenantsLoading } = useQuery<Tenant[]>({
     queryKey: ["/api/tenants"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/tenants");
-      return await response.json();
+    queryFn: async (): Promise<Tenant[]> => {
+      try {
+        const response = await apiRequest("GET", "/api/tenants");
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch tenants: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return data as Tenant[];
+      } catch (error) {
+        if (error instanceof Error) {
+          throw error;
+        }
+        throw new Error("Failed to fetch tenants");
+      }
     },
     enabled: open,
   });
 
-  const { data: properties = [], isLoading: propertiesLoading } = useQuery({
+  const { data: properties = [], isLoading: propertiesLoading } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/properties");
-      return await response.json();
+    queryFn: async (): Promise<Property[]> => {
+      try {
+        const response = await apiRequest("GET", "/api/properties");
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch properties: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return data as Property[];
+      } catch (error) {
+        if (error instanceof Error) {
+          throw error;
+        }
+        throw new Error("Failed to fetch properties");
+      }
     },
     enabled: open,
   });
 
   // Get available units (not occupied by active leases)
-  const availableUnits = properties.flatMap((property: any) =>
+  const availableUnits: UnitWithProperty[] = properties.flatMap((property) =>
     (property.units || [])
-      .filter((unit: any) => !unit.isOccupied || (isEdit && lease?.unitId === unit.id))
-      .map((unit: any) => ({
+      .filter((unit: Unit & { isOccupied?: boolean }) => !unit.isOccupied || (isEdit && lease?.unitId === unit.id))
+      .map((unit): UnitWithProperty => ({
         ...unit,
         propertyName: property.name,
         propertyAddress: property.address,
@@ -61,10 +105,16 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
   );
 
   const mutation = useMutation({
-    mutationFn: async (data: any) => {
-      const url = isEdit ? `/api/leases/${lease.id}` : "/api/leases";
+    mutationFn: async (data: Omit<InsertLease, 'id' | 'createdAt' | 'updatedAt'>) => {
+      const url = isEdit ? `/api/leases/${lease?.id}` : "/api/leases";
       const method = isEdit ? "PUT" : "POST";
       const response = await apiRequest(method, url, data);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to ${isEdit ? "update" : "create"} lease: ${response.status} ${errorText}`);
+      }
+      
       return await response.json();
     },
     onSuccess: () => {
@@ -87,7 +137,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
         isActive: true,
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
         description: error.message || `Failed to ${isEdit ? "update" : "create"} lease`,
@@ -149,7 +199,18 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
       return;
     }
 
-    mutation.mutate(leaseForm);
+    // Convert form data to API format
+    const leaseData = {
+      tenantId: leaseForm.tenantId,
+      unitId: leaseForm.unitId,
+      startDate: new Date(leaseForm.startDate),
+      endDate: new Date(leaseForm.endDate),
+      monthlyRent: leaseForm.monthlyRent,
+      securityDeposit: leaseForm.securityDeposit || "0",
+      isActive: leaseForm.isActive,
+    };
+
+    mutation.mutate(leaseData);
   };
 
   return (
@@ -176,7 +237,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
                 ) : tenants.length === 0 ? (
                   <SelectItem value="no-tenants" disabled>No tenants available - Add tenants first</SelectItem>
                 ) : (
-                  tenants.map((tenant: any) => (
+                  tenants.map((tenant) => (
                     <SelectItem key={tenant.id} value={tenant.id}>
                       {tenant.firstName} {tenant.lastName} - {tenant.email}
                     </SelectItem>
@@ -202,7 +263,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
                 ) : availableUnits.length === 0 ? (
                   <SelectItem value="no-units" disabled>No available units - Add properties and units first</SelectItem>
                 ) : (
-                  availableUnits.map((unit: any) => (
+                  availableUnits.map((unit) => (
                     <SelectItem key={unit.id} value={unit.id}>
                       {unit.propertyName} - Unit {unit.unitNumber} (KES {unit.rentAmount}/month)
                     </SelectItem>

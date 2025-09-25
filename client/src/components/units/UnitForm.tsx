@@ -6,12 +6,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import type { Unit, InsertUnit } from "@/../../shared/schema";
+
+// Request and Response interfaces for API operations
+interface UnitCreateRequest extends Omit<InsertUnit, 'id' | 'createdAt' | 'updatedAt'> {}
+interface UnitUpdateRequest extends Partial<UnitCreateRequest> {}
+type UnitResponse = Unit;
 
 interface UnitFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   propertyId: string;
-  unit?: any;
+  unit?: Partial<Unit>;
 }
 
 export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitFormProps) {
@@ -30,12 +36,17 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
     isOccupied: unit?.isOccupied || false,
   });
 
-  const mutation = useMutation({
-    mutationFn: async (data: any) => {
-      const url = isEdit ? `/api/units/${unit.id}` : "/api/units";
+  const mutation = useMutation<UnitResponse, Error, UnitCreateRequest | UnitUpdateRequest>({
+    mutationFn: async (data: UnitCreateRequest | UnitUpdateRequest): Promise<UnitResponse> => {
+      const url = isEdit ? `/api/units/${unit?.id}` : "/api/units";
       const method = isEdit ? "PUT" : "POST";
       const response = await apiRequest(method, url, data);
-      return await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`Failed to ${isEdit ? 'update' : 'create'} unit: ${response.status}`);
+      }
+      
+      return await response.json() as UnitResponse;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/properties/${propertyId}/units`] });
@@ -56,7 +67,7 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
         isOccupied: false,
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
         description: error.message || `Failed to ${isEdit ? "update" : "create"} unit`,
@@ -89,7 +100,7 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
       ...unitForm,
       bedrooms: unitForm.bedrooms ? parseInt(unitForm.bedrooms) : null,
       bathrooms: unitForm.bathrooms ? parseInt(unitForm.bathrooms) : null,
-      size: unitForm.size || null,
+      size: unitForm.size || null, // Keep as string for decimal field
     };
 
     mutation.mutate(submitData);

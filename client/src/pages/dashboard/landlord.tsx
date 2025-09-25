@@ -25,8 +25,30 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { Lease } from "@/../../shared/schema";
 
 type DashboardSection = "overview" | "properties" | "tenants" | "leases" | "payments" | "documents" | "reports" | "profile";
+
+// Password validation helper function
+function validatePassword(password: string): { isValid: boolean; failedRequirements: string[] } {
+  const minLength = password.length >= 8;
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumber = /\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+  
+  const failedRequirements = [];
+  if (!minLength) failedRequirements.push("at least 8 characters");
+  if (!hasUpperCase) failedRequirements.push("at least one uppercase letter");
+  if (!hasLowerCase) failedRequirements.push("at least one lowercase letter");
+  if (!hasNumber) failedRequirements.push("at least one number");
+  if (!hasSpecialChar) failedRequirements.push("at least one special character");
+  
+  return {
+    isValid: failedRequirements.length === 0,
+    failedRequirements
+  };
+}
 
 export default function LandlordDashboard() {
   const { toast } = useToast();
@@ -42,7 +64,7 @@ export default function LandlordDashboard() {
   const [isPaymentFormOpen, setIsPaymentFormOpen] = useState(false);
   
   // State for editing leases
-  const [editingLease, setEditingLease] = useState<any>(null);
+  const [editingLease, setEditingLease] = useState<Lease | null>(null);
 
   // Form state for profile editing
   const [profileForm, setProfileForm] = useState({
@@ -191,7 +213,7 @@ export default function LandlordDashboard() {
 
   // Password change mutation
   const passwordChangeMutation = useMutation({
-    mutationFn: async (data: { currentPassword: string; newPassword: string; confirmPassword: string }) => {
+    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
       const response = await apiRequest("POST", "/api/auth/change-password", data);
       return await response.json();
     },
@@ -214,7 +236,7 @@ export default function LandlordDashboard() {
 
   // Payment recording mutation
   const recordPaymentMutation = useMutation({
-    mutationFn: async (data: { tenantId: string; amount: number; description?: string; paymentMethod: string; paidDate?: string }) => {
+    mutationFn: async (data: { tenantId: string; amount: number; description?: string; paymentMethod: string; paidDate?: string; paymentType?: string }) => {
       const response = await apiRequest("POST", "/api/payments", data);
       return await response.json();
     },
@@ -851,7 +873,7 @@ export default function LandlordDashboard() {
             setEditingLease(null);
           }
         }}
-        lease={editingLease}
+        lease={editingLease || undefined}
       />
 
       {/* Edit Profile Modal */}
@@ -936,8 +958,58 @@ export default function LandlordDashboard() {
                 type="password" 
                 value={passwordForm.newPassword}
                 onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
-                placeholder="Enter new password (min 6 characters)" 
+                placeholder="Enter new password (min 8 characters)" 
               />
+              
+              {/* Password Strength Meter */}
+              {passwordForm.newPassword && (
+                <div className="mt-2">
+                  <div className="text-xs text-gray-600 mb-1">Password Strength:</div>
+                  <div className="flex space-x-1 mb-2">
+                    {(() => {
+                      const password = passwordForm.newPassword;
+                      const checks = [
+                        password.length >= 8,
+                        /[A-Z]/.test(password),
+                        /[a-z]/.test(password),
+                        /\d/.test(password),
+                        /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+                      ];
+                      const strength = checks.filter(Boolean).length;
+                      const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-blue-500', 'bg-green-500'];
+                      
+                      return Array(5).fill(0).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-2 flex-1 rounded ${i < strength ? colors[strength - 1] : 'bg-gray-200'}`}
+                        />
+                      ));
+                    })()}
+                  </div>
+                  <div className="text-xs space-y-1">
+                    <div className={`flex items-center ${passwordForm.newPassword.length >= 8 ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className="mr-1">{passwordForm.newPassword.length >= 8 ? '✓' : '✗'}</span>
+                      At least 8 characters
+                    </div>
+                    <div className={`flex items-center ${/[A-Z]/.test(passwordForm.newPassword) ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className="mr-1">{/[A-Z]/.test(passwordForm.newPassword) ? '✓' : '✗'}</span>
+                      One uppercase letter
+                    </div>
+                    <div className={`flex items-center ${/[a-z]/.test(passwordForm.newPassword) ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className="mr-1">{/[a-z]/.test(passwordForm.newPassword) ? '✓' : '✗'}</span>
+                      One lowercase letter
+                    </div>
+                    <div className={`flex items-center ${/\d/.test(passwordForm.newPassword) ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className="mr-1">{/\d/.test(passwordForm.newPassword) ? '✓' : '✗'}</span>
+                      One number
+                    </div>
+                    <div className={`flex items-center ${/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passwordForm.newPassword) ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className="mr-1">{/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passwordForm.newPassword) ? '✓' : '✗'}</span>
+                      One special character
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <Label htmlFor="confirmPassword">Confirm New Password</Label>
@@ -963,18 +1035,20 @@ export default function LandlordDashboard() {
                     });
                     return;
                   }
-                  if (passwordForm.newPassword.length < 6) {
+                  // Enhanced password validation
+                  const passwordValidation = validatePassword(passwordForm.newPassword);
+                  if (!passwordValidation.isValid) {
+                    const errorMessage = `Password must contain ${passwordValidation.failedRequirements.join(", ")}.`;
                     toast({
-                      title: "Error", 
-                      description: "Password must be at least 6 characters long",
+                      title: "Password Too Weak", 
+                      description: errorMessage,
                       variant: "destructive",
                     });
                     return;
                   }
                   passwordChangeMutation.mutate({
                     currentPassword: passwordForm.currentPassword,
-                    newPassword: passwordForm.newPassword,
-                    confirmPassword: passwordForm.confirmPassword
+                    newPassword: passwordForm.newPassword
                   });
                 }}
                 disabled={passwordChangeMutation.isPending}
@@ -1182,7 +1256,8 @@ export default function LandlordDashboard() {
                     amount: parseFloat(paymentForm.amount),
                     description: description,
                     paymentMethod: paymentForm.paymentMethod,
-                    paidDate: paymentForm.paymentDate
+                    paidDate: paymentForm.paymentDate,
+                    paymentType: paymentForm.paymentType || 'rent'
                   });
                 }}
                 disabled={recordPaymentMutation.isPending}

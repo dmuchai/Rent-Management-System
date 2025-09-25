@@ -531,7 +531,25 @@ export class SupabaseStorage {
         .order("due_date", { ascending: false });
       
       if (paymentsError) throw paymentsError;
-      return payments as Payment[] || [];
+      
+      // Map snake_case to camelCase for each payment
+      const mappedPayments: Payment[] = (payments || []).map((payment: any) => ({
+        id: payment.id,
+        leaseId: payment.lease_id,
+        amount: payment.amount,
+        dueDate: payment.due_date,
+        paidDate: payment.paid_date,
+        paymentMethod: payment.payment_method,
+        pesapalTransactionId: payment.pesapal_transaction_id,
+        pesapalOrderTrackingId: payment.pesapal_order_tracking_id,
+        status: payment.status,
+        description: payment.description,
+        receiptUrl: payment.receipt_url,
+        createdAt: payment.created_at,
+        updatedAt: payment.updated_at,
+      }));
+      
+      return mappedPayments;
     } catch (error) {
       console.error("Error in getPaymentsByOwnerId:", error);
       return [];
@@ -545,7 +563,27 @@ export class SupabaseStorage {
       .eq("id", id)
       .single();
     if (error) throw error;
-    return data as Payment | undefined;
+    
+    if (!data) return undefined;
+    
+    // Map snake_case to camelCase
+    const payment: Payment = {
+      id: data.id,
+      leaseId: data.lease_id,
+      amount: data.amount,
+      dueDate: data.due_date,
+      paidDate: data.paid_date,
+      paymentMethod: data.payment_method,
+      pesapalTransactionId: data.pesapal_transaction_id,
+      pesapalOrderTrackingId: data.pesapal_order_tracking_id,
+      status: data.status,
+      description: data.description,
+      receiptUrl: data.receipt_url,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+    
+    return payment;
   }
 
   async createPayment(payment: InsertPayment): Promise<Payment> {
@@ -768,7 +806,18 @@ export class SupabaseStorage {
       }
       throw error;
     }
-    return data as User;
+    const user = {
+      id: data.id,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      email: data.email,
+      profileImageUrl: data.profile_image_url,
+      role: data.role,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+
+    return user as User;
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
@@ -776,7 +825,6 @@ export class SupabaseStorage {
     const dbUserData: any = {
       updated_at: new Date().toISOString(),
     };
-    
     if (userData.firstName !== undefined) {
       dbUserData.first_name = userData.firstName;
     }
@@ -795,11 +843,25 @@ export class SupabaseStorage {
 
     const { data, error } = await supabase
       .from("users")
-      .upsert(dbUserData)
+      .upsert(dbUserData, { onConflict: 'email' })
       .select()
       .single();
+    
     if (error) throw error;
-    return data as User;
+    
+    // Map snake_case response back to camelCase
+    const user = {
+      id: data.id,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      email: data.email,
+      profileImageUrl: data.profile_image_url,
+      role: data.role,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+
+    return user as User;
   }
 
   async updateUser(id: string, userData: Partial<UpsertUser>): Promise<User> {
@@ -831,7 +893,20 @@ export class SupabaseStorage {
       .select()
       .single();
     if (error) throw error;
-    return data as User;
+    
+    // Map snake_case response back to camelCase
+    const user = {
+      id: data.id,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      email: data.email,
+      profileImageUrl: data.profile_image_url,
+      role: data.role,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+
+    return user as User;
   }
 }
 import {

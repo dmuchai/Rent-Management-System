@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Edit, Trash2, Home } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Unit } from "@/../../shared/schema";
 
 interface UnitTableProps {
   propertyId: string;
-  onEditUnit: (unit: any) => void;
+  onEditUnit: (unit: Unit) => void;
 }
 
 export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
@@ -17,11 +18,16 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
   const queryClient = useQueryClient();
 
   // Fetch units for this property
-  const { data: units = [], isLoading } = useQuery({
+  const { data: units = [], isLoading } = useQuery<Unit[]>({
     queryKey: [`/api/properties/${propertyId}/units`],
-    queryFn: async () => {
+    queryFn: async (): Promise<Unit[]> => {
       const response = await apiRequest("GET", `/api/properties/${propertyId}/units`);
-      return await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch units: ${response.status} ${response.statusText}`);
+      }
+      
+      return await response.json() as Unit[];
     },
   });
 
@@ -29,6 +35,12 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
   const deleteMutation = useMutation({
     mutationFn: async (unitId: string) => {
       const response = await apiRequest("DELETE", `/api/units/${unitId}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to delete unit: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
+      }
+      
       return await response.json();
     },
     onSuccess: () => {
@@ -39,7 +51,7 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
         description: "Unit deleted successfully",
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
         description: error.message || "Failed to delete unit",
@@ -83,7 +95,7 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {units.map((unit: any) => (
+          {units.map((unit: Unit) => (
             <TableRow key={unit.id}>
               <TableCell className="font-medium">{unit.unitNumber}</TableCell>
               <TableCell>{unit.bedrooms || "-"}</TableCell>

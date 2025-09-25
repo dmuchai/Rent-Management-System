@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin, Home, Plus, Users, FileText } from "lucide-react";
 import UnitForm from "./UnitForm";
 import UnitTable from "./UnitTable";
+import { Unit } from "@/../../shared/schema";
 
 interface PropertyDetailsModalProps {
   open: boolean;
@@ -17,7 +18,7 @@ interface PropertyDetailsModalProps {
 
 export default function PropertyDetailsModal({ open, onOpenChange, propertyId }: PropertyDetailsModalProps) {
   const [showUnitForm, setShowUnitForm] = useState(false);
-  const [editingUnit, setEditingUnit] = useState<any>(null);
+  const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
 
   // Fetch property details
   const { data: property, isLoading } = useQuery({
@@ -30,16 +31,21 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
   });
 
   // Fetch units for this property
-  const { data: units = [] } = useQuery({
+  const { data: units = [] } = useQuery<Unit[]>({
     queryKey: [`/api/properties/${propertyId}/units`],
-    queryFn: async () => {
+    queryFn: async (): Promise<Unit[]> => {
       const response = await apiRequest("GET", `/api/properties/${propertyId}/units`);
-      return await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch units: ${response.status} ${response.statusText}`);
+      }
+      
+      return await response.json() as Unit[];
     },
     enabled: !!propertyId && open,
   });
 
-  const handleEditUnit = (unit: any) => {
+  const handleEditUnit = (unit: Unit) => {
     setEditingUnit(unit);
     setShowUnitForm(true);
   };
@@ -78,8 +84,8 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
     );
   }
 
-  const availableUnits = units.filter((unit: any) => !unit.isOccupied).length;
-  const occupiedUnits = units.filter((unit: any) => unit.isOccupied).length;
+  const availableUnits = units.filter((unit: Unit) => !unit.isOccupied).length;
+  const occupiedUnits = units.filter((unit: Unit) => unit.isOccupied).length;
 
   return (
     <>

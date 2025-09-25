@@ -3,11 +3,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { Lease, Tenant, Unit, Property } from "@/../../shared/schema";
+
+// Extended lease type with relations for component usage
+type LeaseWithRelations = Lease & {
+  tenant?: Tenant | null;
+  unit?: Unit & { property?: Property | null } | null;
+};
 
 interface LeaseTableProps {
-  leases: any[];
+  leases: LeaseWithRelations[];
   loading: boolean;
-  onEditLease?: (lease: any) => void;
+  onEditLease?: (lease: LeaseWithRelations) => void;
 }
 
 export default function LeaseTable({ leases, loading, onEditLease }: LeaseTableProps) {
@@ -45,11 +52,12 @@ export default function LeaseTable({ leases, loading, onEditLease }: LeaseTableP
     );
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+  const formatDate = (date: Date | string | null) => {
+    if (!date) return '—';
+    return new Date(date).toLocaleDateString();
   };
 
-  const getLeaseStatus = (lease: any) => {
+  const getLeaseStatus = (lease: LeaseWithRelations) => {
     const now = new Date();
     const startDate = new Date(lease.startDate);
     const endDate = new Date(lease.endDate);
@@ -85,27 +93,32 @@ export default function LeaseTable({ leases, loading, onEditLease }: LeaseTableP
             </TableRow>
           </TableHeader>
           <TableBody>
-            {leases.map((lease: any) => {
+            {leases.map((lease: LeaseWithRelations) => {
               const status = getLeaseStatus(lease);
               return (
                 <TableRow key={lease.id}>
                   <TableCell>
                     <div>
                       <div className="font-medium">
-                        {lease.tenant?.firstName} {lease.tenant?.lastName}
+                        {lease.tenant ? 
+                          [lease.tenant.firstName, lease.tenant.lastName]
+                            .filter(Boolean)
+                            .join(' ') || 'Unknown tenant'
+                          : 'Unknown tenant'
+                        }
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        {lease.tenant?.email}
+                        {lease.tenant?.email || '—'}
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div>
                       <div className="font-medium">
-                        Unit {lease.unit?.unitNumber}
+                        {lease.unit?.unitNumber ? `Unit ${lease.unit.unitNumber}` : 'Unknown unit'}
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        {lease.unit?.property?.name}
+                        {lease.unit?.property?.name || '—'}
                       </div>
                     </div>
                   </TableCell>
