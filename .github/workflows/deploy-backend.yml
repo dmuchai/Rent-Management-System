@@ -1,0 +1,56 @@
+name: Deploy Backend to Railway
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'server/**'
+      - 'shared/**'
+      - 'package.json'
+      - 'railway.toml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'server/**'
+      - 'shared/**'
+
+jobs:
+  deploy:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build application
+        run: npm run build
+
+      - name: Deploy to Railway
+        uses: railway-app/railway-action@v1
+        with:
+          service: ${{ secrets.RAILWAY_SERVICE_ID }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  notify:
+    name: Notify Deployment Status
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment Success
+        if: needs.deploy.result == 'success'
+        run: echo "✅ Backend successfully deployed to Railway!"
+        
+      - name: Deployment Failed
+        if: needs.deploy.result == 'failure'
+        run: echo "❌ Backend deployment to Railway failed!"

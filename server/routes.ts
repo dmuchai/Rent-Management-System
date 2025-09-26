@@ -81,6 +81,30 @@ function getValidatedSupabaseConfig(): { url: string; key: string } | null {
 }
 
 export async function registerRoutes(app: Express) {
+  // CORS configuration for production deployment
+  app.use((req, res, next) => {
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:5173', 
+      'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app'
+    ];
+    
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin as string)) {
+      res.header('Access-Control-Allow-Origin', origin);
+    }
+    
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, Cookie');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(200);
+    } else {
+      next();
+    }
+  });
+
   await setupAuth(app);
   const supabaseStorage = new SupabaseStorage();
 
