@@ -241,6 +241,7 @@ export default function LandlordDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
       toast({
         title: "Payment Recorded",
         description: "Payment has been successfully recorded!",
@@ -692,7 +693,7 @@ export default function LandlordDashboard() {
             <div className="grid md:grid-cols-3 gap-6">
               <StatsCard
                 title="This Month"
-                value={`KES ${dashboardStats?.paymentStats?.totalCollected?.toLocaleString() || 0}`}
+                value={`KES ${dashboardStats?.monthlyRevenue?.toLocaleString() || 0}`}
                 subtitle="Collected"
                 icon="fas fa-check-circle"
                 color="chart-2"
@@ -701,21 +702,21 @@ export default function LandlordDashboard() {
               />
               <StatsCard
                 title="Pending"
-                value={`KES ${(dashboardStats?.paymentStats?.totalExpected - dashboardStats?.paymentStats?.totalCollected)?.toLocaleString() || 0}`}
-                subtitle="Outstanding"
+                value={dashboardStats?.pendingPayments?.toString() || "0"}
+                subtitle="Outstanding Payments"
                 icon="fas fa-clock"
                 color="chart-4"
                 loading={statsLoading}
                 data-testid="stat-pending"
               />
               <StatsCard
-                title="Overdue"
-                value={`KES ${dashboardStats?.paymentStats?.totalOverdue?.toLocaleString() || 0}`}
-                subtitle="Late payments"
-                icon="fas fa-exclamation-triangle"
-                color="destructive"
+                title="Total Revenue"
+                value={`KES ${dashboardStats?.totalRevenue?.toLocaleString() || 0}`}
+                subtitle="All time collected"
+                icon="fas fa-chart-line"
+                color="chart-1"
                 loading={statsLoading}
-                data-testid="stat-overdueamount"
+                data-testid="stat-totalrevenue"
               />
             </div>
 
