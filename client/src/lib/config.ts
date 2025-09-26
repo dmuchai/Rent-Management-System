@@ -21,7 +21,7 @@ const API_ENDPOINTS = {
 
 // Choose your backend deployment platform
 // Update this after deploying your backend
-const BACKEND_PLATFORM = 'railway'; // Change to 'render' or 'digitalocean' as needed
+const BACKEND_PLATFORM = 'render'; // Using Render free tier
 
 export const API_BASE_URL = isDevelopment || isLocal 
   ? API_ENDPOINTS.development

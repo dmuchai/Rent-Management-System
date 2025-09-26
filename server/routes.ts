@@ -86,7 +86,9 @@ export async function registerRoutes(app: Express) {
     const allowedOrigins = [
       'http://localhost:3000',
       'http://localhost:5173', 
-      'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app'
+      'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app',
+      // Add your Render backend URL here when deploying (for testing API directly)
+      // 'https://your-render-backend-url.onrender.com'
     ];
     
     const origin = req.headers.origin;

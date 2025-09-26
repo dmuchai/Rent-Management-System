@@ -1,0 +1,64 @@
+name: Deploy Backend to Render
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'server/**'
+      - 'shared/**'
+      - 'package.json'
+      - 'render.yaml'
+  workflow_dispatch: # Allow manual deployment
+
+jobs:
+  deploy:
+    name: Deploy to Render
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests (if available)
+        run: npm test --if-present
+
+      - name: Build application
+        run: npm run build
+
+      - name: Deploy to Render
+        uses: render-deploy/github-action@v1.8.1
+        with:
+          service-id: ${{ secrets.RENDER_SERVICE_ID }}
+          api-key: ${{ secrets.RENDER_API_KEY }}
+
+      - name: Wait for deployment
+        run: |
+          echo "⏳ Waiting for Render deployment to complete..."
+          sleep 60
+          echo "✅ Deployment should be complete!"
+
+  notify:
+    name: Notify Deployment Status  
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment Success
+        if: needs.deploy.result == 'success'
+        run: |
+          echo "🎉 Backend successfully deployed to Render!"
+          echo "📝 Don't forget to update frontend config with your Render URL"
+        
+      - name: Deployment Failed
+        if: needs.deploy.result == 'failure'
+        run: |
+          echo "❌ Backend deployment to Render failed!"
+          echo "🔍 Check the logs above for error details"
