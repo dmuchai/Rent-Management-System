@@ -34,8 +34,10 @@ export async function setupVite(app: Express, server: Server) {
     const url = req.originalUrl;
 
     try {
+      // Use import.meta.url for Node.js 18 compatibility
+      const __dirname = path.dirname(new URL(import.meta.url).pathname);
       const clientTemplate = path.resolve(
-        import.meta.dirname,
+        __dirname,
         "..",
         "client",
         "index.html",

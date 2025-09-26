@@ -14,7 +14,9 @@ export function log(message: string, source = "express") {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  // Use import.meta.url for Node.js 18 compatibility
+  const __dirname = path.dirname(new URL(import.meta.url).pathname);
+  const distPath = path.resolve(__dirname, "public");
 
   if (!fs.existsSync(distPath)) {
     throw new Error(
