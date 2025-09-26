@@ -4,7 +4,7 @@ dotenv.config();
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import { registerRoutes } from "./routes";
-import { log, serveStatic } from "./production";
+import { log } from "./production";
 import cookieParser from "cookie-parser";
 
 const app = express();
@@ -54,8 +54,15 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // Production mode - only serve static files
-  serveStatic(app);
+  // Production mode - API-only backend (frontend is on Vercel)
+  app.get("*", (req, res) => {
+    res.json({ 
+      message: "Rent Management API Server", 
+      version: "1.0.0",
+      status: "running",
+      frontend: "https://rent-management-system-chi.vercel.app"
+    });
+  });
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
