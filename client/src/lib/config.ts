@@ -11,8 +11,8 @@ const API_ENDPOINTS = {
     // Railway deployment URL (update with your actual backend URL after deployment)
     railway: 'https://rent-management-system-production.up.railway.app',
     
-    // Render deployment URL (update with your actual backend URL after deployment)
-    render: 'https://rent-management-system.onrender.com',
+    // Render deployment URL - LIVE BACKEND
+    render: 'https://rent-management-backend.onrender.com',
     
     // DigitalOcean deployment URL (update with your actual backend URL after deployment)
     digitalocean: 'https://rent-management-system-xyz.ondigitalocean.app'
