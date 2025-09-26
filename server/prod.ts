@@ -4,6 +4,7 @@ dotenv.config();
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import { registerRoutes } from "./routes";
+import { log, serveStatic } from "./production";
 import cookieParser from "cookie-parser";
 
 const app = express();
@@ -34,7 +35,7 @@ app.use((req, res, next) => {
         logLine = logLine.slice(0, 79) + "…";
       }
 
-      console.log(logLine);
+      log(logLine);
     }
   });
 
@@ -53,16 +54,8 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (process.env.NODE_ENV === "development") {
-    const { setupVite } = await import("./development.js");
-    await setupVite(app, server);
-  } else {
-    const { serveStatic } = await import("./production.js");
-    serveStatic(app);
-  }
+  // Production mode - only serve static files
+  serveStatic(app);
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
@@ -74,6 +67,6 @@ app.use((req, res, next) => {
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
-    console.log(`serving on port ${port}`);
+    log(`serving on port ${port}`);
   });
 })();
