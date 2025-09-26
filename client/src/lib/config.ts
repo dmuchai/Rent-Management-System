@@ -1,5 +1,6 @@
-// API Configuration for Production Deployment
+// API Configuration for Production Deployment - Updated Sep 26, 2025
 // This file handles switching between local development and production API endpoints
+// IMPORTANT: Frontend should route to Render backend for all API calls
 
 const isDevelopment = import.meta.env.MODE === 'development';
 const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
@@ -36,7 +37,12 @@ export const API_CONFIG = {
   currentURL: API_BASE_URL
 };
 
-// Log configuration in development
-if (isDevelopment) {
-  console.log('API Configuration:', API_CONFIG);
-}
+// Log configuration in both development and production for debugging
+console.log('=== API Configuration Debug ===');
+console.log('Mode:', import.meta.env.MODE);
+console.log('isDevelopment:', isDevelopment);
+console.log('isLocal:', isLocal);
+console.log('Selected Platform:', BACKEND_PLATFORM);
+console.log('Current API URL:', API_BASE_URL);
+console.log('Full Config:', API_CONFIG);
+console.log('================================');

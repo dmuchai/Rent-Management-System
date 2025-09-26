@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect } from "react";
+import "./debug"; // Import debug config to check API configuration
 import Landing from "@/pages/landing";
 import LandlordDashboard from "@/pages/dashboard/landlord";
 import NotFound from "@/pages/not-found";
