@@ -6,9 +6,10 @@ import TenantForm from "./TenantForm";
 interface TenantTableProps {
   tenants: Tenant[];
   loading?: boolean;
+  onAddTenant?: () => void;
 }
 
-export default function TenantTable({ tenants, loading }: TenantTableProps) {
+export default function TenantTable({ tenants, loading, onAddTenant }: TenantTableProps) {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [formOpen, setFormOpen] = useState(false);
 
@@ -18,8 +19,12 @@ export default function TenantTable({ tenants, loading }: TenantTableProps) {
   };
 
   const handleAdd = () => {
-    setSelectedTenant(null);
-    setFormOpen(true);
+    if (onAddTenant) {
+      onAddTenant();
+    } else {
+      setSelectedTenant(null);
+      setFormOpen(true);
+    }
   };
 
   if (loading) {

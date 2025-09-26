@@ -12,7 +12,6 @@ import TenantForm from "@/components/tenants/TenantForm";
 import TenantTable from "@/components/tenants/TenantTable";
 import LeaseForm from "@/components/leases/LeaseForm";
 import LeaseTable from "@/components/leases/LeaseTable";
-import PaymentForm from "@/components/payments/PaymentForm";
 import PaymentHistory from "@/components/payments/PaymentHistory";
 import DocumentManager from "@/components/documents/DocumentManager";
 import ReportGenerator from "@/components/reports/ReportGenerator";
@@ -639,7 +638,11 @@ export default function LandlordDashboard() {
               </button>
             </div>
 
-            <TenantTable tenants={tenants} loading={tenantsLoading} />
+            <TenantTable 
+              tenants={tenants} 
+              loading={tenantsLoading} 
+              onAddTenant={() => setIsTenantFormOpen(true)}
+            />
           </div>
         );
 
@@ -716,7 +719,6 @@ export default function LandlordDashboard() {
               />
             </div>
 
-            <PaymentForm />
             <PaymentHistory payments={payments} loading={paymentsLoading} />
           </div>
         );
