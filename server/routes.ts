@@ -86,8 +86,9 @@ export async function registerRoutes(app: Express) {
     const allowedOrigins = [
       'http://localhost:3000',
       'http://localhost:5173', 
-      'https://rent-management-system-chi.vercel.app', // Current Vercel deployment
-      'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app', // Previous Vercel deployment
+      'https://property-manager-ke.vercel.app', // CORRECT Vercel frontend URL
+      'https://rent-management-system-chi.vercel.app', // Backup URL
+      'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app', // Previous deployment
       'https://rent-management-backend.onrender.com' // Render backend for self-testing
     ];
     
