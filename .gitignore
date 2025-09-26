@@ -16,3 +16,4 @@ vite.config.ts.*
 .replit
 replit.md
 .upm
+.vercel

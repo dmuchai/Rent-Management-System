@@ -1,52 +1,37 @@
-// Vercel serverless function entry point
-import dotenv from 'dotenv';
-dotenv.config();
+// Vercel serverless function - simplified approach
+export default async function handler(req, res) {
+  // Set CORS headers
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, Cookie');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-import express from "express";
-import cookieParser from "cookie-parser";
-
-const app = express();
-
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-
-// CORS configuration for Vercel deployment
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  res.header('Access-Control-Allow-Origin', origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, Cookie');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
+    res.status(200).end();
     return;
   }
-  next();
-});
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    message: 'Rent Management System API is running on Vercel',
-    timestamp: new Date().toISOString()
-  });
-});
+  // Health check endpoint
+  if (req.url === '/api/health' || req.url === '/health') {
+    res.status(200).json({
+      status: 'ok',
+      message: 'Rent Management System API is running on Vercel',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development'
+    });
+    return;
+  }
 
-// Placeholder for main API routes - in production you'd import the built server
-app.all('/api/*', (req, res) => {
-  res.status(501).json({ 
-    error: 'API routes not yet configured for serverless deployment',
-    message: 'Please configure the server routes for Vercel deployment',
-    path: req.path,
+  // For other API routes, return a helpful message
+  res.status(404).json({
+    error: 'API endpoint not found',
+    message: 'This deployment uses a simplified API structure. For full functionality, consider using Vercel API Routes or adapting the Express server.',
+    availableEndpoints: [
+      '/api/health - Health check'
+    ],
+    path: req.url,
     method: req.method
   });
-});
-
-// For Vercel serverless functions, we need to export a handler
-export default function handler(req, res) {
-  return app(req, res);
 }
