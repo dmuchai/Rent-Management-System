@@ -326,25 +326,14 @@ export async function registerRoutes(app: Express) {
                         } else if (data.session) {
                             showMessage('Sign in successful! Redirecting...', 'success');
                             
-                            // Send the token to our backend and set as cookie
-                            const response = await fetch('/api/auth/set-session', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({
-                                    access_token: data.session.access_token,
-                                    refresh_token: data.session.refresh_token
-                                })
-                            });
+                            // Redirect to frontend with token in URL for cross-domain auth
+                            const token = encodeURIComponent(data.session.access_token);
+                            const refreshToken = encodeURIComponent(data.session.refresh_token);
                             
-                            if (response.ok) {
-                                setTimeout(() => {
-                                    window.location.href = 'https://property-manager-ke.vercel.app/dashboard';
-                                }, 1000);
-                            } else {
-                                showMessage('Failed to set session');
-                            }
+                            showMessage('Sign in successful! Redirecting...', 'success');
+                            setTimeout(() => {
+                                window.location.href = 'https://property-manager-ke.vercel.app/auth-callback?token=' + token + '&refresh=' + refreshToken;
+                            }, 1000);
                         }
                     } catch (e) {
                         showMessage('Sign in failed. Please try again.');
@@ -371,11 +360,12 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: 'Access token required' });
       }
 
-      // Set the access token as an httpOnly cookie
+      // Set the access token as an httpOnly cookie for cross-domain access
       res.cookie('supabase-auth-token', access_token, { 
         httpOnly: true, 
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        sameSite: 'none', // Allow cross-domain cookies
+        domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined,
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
       });
 
@@ -384,7 +374,8 @@ export async function registerRoutes(app: Express) {
         res.cookie('supabase-refresh-token', refresh_token, { 
           httpOnly: true, 
           secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
+          sameSite: 'none', // Allow cross-domain cookies
+          domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined,
           maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
       }
@@ -401,14 +392,11 @@ export async function registerRoutes(app: Express) {
     try {
       const { access_token, refresh_token } = req.query;
       if (access_token) {
-        // Set cookie or session with the token
-        res.cookie('supabase-auth-token', access_token, { 
-          httpOnly: true, 
-          secure: process.env.NODE_ENV === 'production' 
-        });
-        res.redirect('https://property-manager-ke.vercel.app/dashboard');
+        // Redirect to frontend with token for cross-domain auth
+        const token = encodeURIComponent(access_token);
+        res.redirect(`https://property-manager-ke.vercel.app/auth-callback?token=${token}`);
       } else {
-        res.redirect('/login?error=auth_failed');
+        res.redirect('https://property-manager-ke.vercel.app/login?error=auth_failed');
       }
     } catch (error) {
       res.redirect('/login?error=auth_failed');

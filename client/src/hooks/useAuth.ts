@@ -60,21 +60,33 @@ export function useAuth() {
   const { data: user, isLoading, error } = useQuery<User>({
     queryKey: ["/api/auth/user"],
     queryFn: async (): Promise<User> => {
+      // Check for token in localStorage first
+      const token = localStorage.getItem('supabase-auth-token');
+      
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/auth/user`, {
-        credentials: 'include', // Include cookies for authentication
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
       });
       
       if (!response.ok) {
+        // Clear invalid token
+        localStorage.removeItem('supabase-auth-token');
+        localStorage.removeItem('supabase-refresh-token');
         throw new Error(`Authentication failed: ${response.status} ${response.statusText}`);
       }
-      
+
       const userData = await response.json();
       return userData;
     },
     retry: false,
-  });
-
-  return {
+  });  return {
     user,
     isLoading,
     error,

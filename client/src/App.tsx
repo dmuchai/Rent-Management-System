@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import "./debug"; // Import debug config to check API configuration
 import Landing from "@/pages/landing";
 import LandlordDashboard from "@/pages/dashboard/landlord";
+import AuthCallback from "@/pages/auth-callback";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -42,6 +43,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/auth-callback" component={AuthCallback} />
       <Route path="/dashboard" component={() => {
         if (!isAuthenticated) {
           return <Landing />;
