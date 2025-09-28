@@ -18,6 +18,7 @@ import ReportGenerator from "@/components/reports/ReportGenerator";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
+import { API_BASE_URL } from "@/lib/config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -107,7 +108,7 @@ export default function LandlordDashboard() {
   // Logout handler
   const handleLogout = async () => {
     try {
-      const response = await fetch("/api/auth/logout", {
+      const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
         method: "POST",
         credentials: "include",
       });

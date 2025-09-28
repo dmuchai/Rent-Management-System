@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { User } from "@shared/schema";
+import { API_BASE_URL } from "@/lib/config";
 
 // Import auth utility to access the same clearing functions
 import "../lib/auth";
@@ -59,7 +60,7 @@ export function useAuth() {
   const { data: user, isLoading, error } = useQuery<User>({
     queryKey: ["/api/auth/user"],
     queryFn: async (): Promise<User> => {
-      const response = await fetch("/api/auth/user", {
+      const response = await fetch(`${API_BASE_URL}/api/auth/user`, {
         credentials: 'include', // Include cookies for authentication
       });
       
