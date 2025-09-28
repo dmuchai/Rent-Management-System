@@ -16,9 +16,21 @@ export async function apiRequest(
   // Construct full URL with base URL for production
   const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
   
+  // Get token from localStorage for authorization
+  const token = localStorage.getItem('supabase-auth-token');
+  const headers: Record<string, string> = {};
+  
+  if (data) {
+    headers["Content-Type"] = "application/json";
+  }
+  
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
   const res = await fetch(fullUrl, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
