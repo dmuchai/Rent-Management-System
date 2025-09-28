@@ -60,7 +60,7 @@ app.use((req, res, next) => {
       message: "Rent Management API Server", 
       version: "1.0.0",
       status: "running",
-      frontend: "https://rent-management-system-chi.vercel.app"
+      frontend: "https://property-manager-ke.vercel.app"
     });
   });
 

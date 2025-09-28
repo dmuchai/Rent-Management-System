@@ -340,7 +340,7 @@ export async function registerRoutes(app: Express) {
                             
                             if (response.ok) {
                                 setTimeout(() => {
-                                    window.location.href = '/dashboard';
+                                    window.location.href = 'https://property-manager-ke.vercel.app/dashboard';
                                 }, 1000);
                             } else {
                                 showMessage('Failed to set session');
@@ -406,7 +406,7 @@ export async function registerRoutes(app: Express) {
           httpOnly: true, 
           secure: process.env.NODE_ENV === 'production' 
         });
-        res.redirect('/dashboard');
+        res.redirect('https://property-manager-ke.vercel.app/dashboard');
       } else {
         res.redirect('/login?error=auth_failed');
       }
@@ -833,7 +833,7 @@ export async function registerRoutes(app: Express) {
                                     
                                     showMessage('Account setup complete! Redirecting to dashboard...', 'success');
                                     setTimeout(() => {
-                                        window.location.href = '/dashboard';
+                                        window.location.href = 'https://property-manager-ke.vercel.app/dashboard';
                                     }, 2000);
                                 } else {
                                     showMessage('Account created but session setup failed. Please sign in.');
