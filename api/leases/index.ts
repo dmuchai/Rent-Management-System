@@ -51,11 +51,14 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       const leaseCreateSchema = z.object({
         tenantId: z.string().min(1, 'Tenant is required'),
         unitId: z.string().min(1, 'Unit is required'),
-        startDate: z.string().or(z.date()),
-        endDate: z.string().or(z.date()),
-        rentAmount: z.string().min(1, 'Rent amount is required'),
-        depositAmount: z.string().optional(),
+        startDate: z.coerce.date(),
+        endDate: z.coerce.date(),
+        rentAmount: z.coerce.number().positive('Rent amount must be positive'),
+        depositAmount: z.coerce.number().positive().optional(),
         isActive: z.boolean().default(true),
+      }).refine((data) => data.startDate < data.endDate, {
+        message: 'Start date must be before end date',
+        path: ['endDate'],
       });
 
       const leaseData = leaseCreateSchema.parse(req.body);
@@ -85,17 +88,45 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(404).json({ message: 'Tenant not found' });
       }
 
+      // Check for date conflicts with existing leases on the same unit
+      const existingLeases = await db.query.leases.findMany({
+        where: eq(leases.unitId, leaseData.unitId)
+      });
+
+      const newStartDate = new Date(leaseData.startDate);
+      const newEndDate = new Date(leaseData.endDate);
+
+      // Check for overlapping lease periods
+      const hasConflict = existingLeases.some(existingLease => {
+        const existingStart = new Date(existingLease.startDate);
+        const existingEnd = new Date(existingLease.endDate);
+        
+        // Overlap occurs if: newStart <= existingEnd AND newEnd >= existingStart
+        return newStartDate <= existingEnd && newEndDate >= existingStart;
+      });
+
+      if (hasConflict) {
+        return res.status(409).json({ 
+          message: 'Lease dates conflict with an existing lease for this unit',
+          error: 'LEASE_DATE_CONFLICT'
+        });
+      }
+
       const [lease] = await db.insert(leases)
         .values({
           ...leaseData,
-          startDate: new Date(leaseData.startDate),
-          endDate: new Date(leaseData.endDate),
+          startDate: newStartDate,
+          endDate: newEndDate,
         })
         .returning();
 
       return res.status(201).json(lease);
     } catch (error) {
-      console.error('Error creating lease:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Error creating lease:', errorMessage);
+      if (process.env.NODE_ENV !== 'production' && error instanceof Error) {
+        console.error('Stack trace:', error.stack);
+      }
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: 'Invalid input', errors: error.errors });
       }

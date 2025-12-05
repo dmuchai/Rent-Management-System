@@ -115,7 +115,7 @@ Create `/api/auth/login.ts` to handle email/password login
 ## Benefits
 
 ### Performance
-- ✅ **No cold starts** - Vercel functions wake instantly
+- ✅ **Reduced cold starts** - Vercel functions use Fluid compute to minimize cold starts, though they can still occur on first invocation or after periods of inactivity (especially on Hobby plan). Significantly better than Render's 30-60s cold starts.
 - ✅ **Global CDN** - Functions deployed to edge locations
 - ✅ **Same-origin** - Faster requests, no pre-flight CORS checks
 
@@ -127,7 +127,7 @@ Create `/api/auth/login.ts` to handle email/password login
 ### Cost
 - ✅ **Free tier** - Vercel Hobby plan includes:
   - 100GB bandwidth
-  - 100K function invocations/month
+  - 150,000 Function Invocations per month
   - 100 hours function execution time
   - Far exceeds typical usage for this app
 
@@ -165,7 +165,7 @@ You can now remove:
 **Solution**: Check `SUPABASE_SERVICE_ROLE_KEY` is set and valid
 
 ### Issue: Function timeout
-**Solution**: Optimize database queries or increase `maxDuration` in `vercel.json` (max 10s on Hobby plan)
+**Solution**: Optimize database queries or increase `maxDuration` in `vercel.json` (max 60s on Hobby plan)
 
 ## Rollback Plan
 

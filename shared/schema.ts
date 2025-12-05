@@ -243,6 +243,13 @@ export const insertTenantSchema = createInsertSchema(tenants).omit({
   updatedAt: true,
 });
 
+export const updateTenantSchema = createInsertSchema(tenants).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
 export const insertLeaseSchema = createInsertSchema(leases).omit({
   id: true,
   createdAt: true,
@@ -276,6 +283,7 @@ export type Unit = typeof units.$inferSelect;
 export type InsertUnit = z.infer<typeof insertUnitSchema>;
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
+export type UpdateTenant = z.infer<typeof updateTenantSchema>;
 export type Lease = typeof leases.$inferSelect;
 export type InsertLease = z.infer<typeof insertLeaseSchema>;
 export type Payment = typeof payments.$inferSelect;

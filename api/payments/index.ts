@@ -3,13 +3,18 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from './_lib/auth';
 import { db } from './_lib/db';
 import { payments, leases, units, properties } from '../shared/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, desc, lt, and } from 'drizzle-orm';
 import { z } from 'zod';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   if (req.method === 'GET') {
     try {
-      // Get all payments for landlord's properties
+      // Parse pagination parameters
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100); // Max 100 items per page
+      const cursor = req.query.cursor as string | undefined; // Payment ID to start after
+      const status = req.query.status as string | undefined; // Optional filter by status
+
+      // Get all payments for landlord's properties with pagination
       const userProperties = await db.query.properties.findMany({
         where: eq(properties.ownerId, auth.userId),
         with: {
@@ -17,7 +22,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
             with: {
               leases: {
                 with: {
-                  payments: true,
+                  payments: {
+                    orderBy: (payments, { desc }) => [desc(payments.createdAt)],
+                    limit: limit + 1, // Fetch one extra to check if there are more
+                    where: cursor ? lt(payments.id, cursor) : undefined,
+                  },
                   tenant: true,
                 }
               }
@@ -27,25 +36,61 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       });
 
       // Flatten payments and enrich with context
-      const allPayments: any[] = [];
+      let allPayments: any[] = [];
       userProperties.forEach(property => {
         property.units.forEach(unit => {
           unit.leases.forEach(lease => {
             lease.payments.forEach(payment => {
+              // Apply status filter if provided
+              if (status && payment.status !== status) {
+                return;
+              }
+              
               allPayments.push({
                 ...payment,
                 tenant: lease.tenant,
                 unit: { id: unit.id, unitNumber: unit.unitNumber },
                 property: { id: property.id, name: property.name }
-              });
+              amount: z.coerce.number().positive('Amount must be positive'),
             });
           });
         });
       });
 
-      return res.status(200).json(allPayments);
+      // Sort by createdAt descending for consistent ordering
+      allPayments.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      // Check if there are more results
+      const hasMore = allPayments.length > limit;
+      if (hasMore) {
+        allPayments = allPayments.slice(0, limit);
+      }
+
+      // Get the cursor for next page (ID of last item)
+      const nextCursor = hasMore && allPayments.length > 0 
+        ? allPayments[allPayments.length - 1].id 
+        : null;
+
+      return res.status(200).json({
+        data: allPayments,
+        pagination: {
+          limit,
+          nextCursor,
+      if (!lease.unit || !lease.unit.property || lease.unit.property.ownerId !== auth.userId) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+        }
+      });
     } catch (error) {
-      console.error('Error fetching payments:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Error fetching payments:', errorMessage);
+      if (process.env.NODE_ENV !== 'production' && error instanceof Error) {
+        console.error('Stack trace:', error.stack);
+      }
       return res.status(500).json({ message: 'Failed to fetch payments' });
     }
   }
@@ -94,7 +139,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
       return res.status(201).json(payment);
     } catch (error) {
-      console.error('Error creating payment:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Error creating payment:', errorMessage);
+      if (process.env.NODE_ENV !== 'production' && error instanceof Error) {
+        console.error('Stack trace:', error.stack);
+      }
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: 'Invalid input', errors: error.errors });
       }

@@ -26,18 +26,18 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(404).json({ message: 'Unit not found' });
       }
 
+      // Ensure property relation is loaded
+      if (!unit.property) {
+        console.error('Unit property relation missing for unit:', id);
+        return res.status(500).json({ message: 'Unit data integrity error' });
+      }
+
       // Verify property ownership
       if (unit.property.ownerId !== auth.userId) {
         return res.status(403).json({ message: 'Access denied' });
       }
 
       return res.status(200).json(unit);
-    } catch (error) {
-      console.error('Error fetching unit:', error);
-      return res.status(500).json({ message: 'Failed to fetch unit' });
-    }
-  }
-
   if (req.method === 'PUT') {
     try {
       const existingUnit = await db.query.units.findFirst({
@@ -51,26 +51,26 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(404).json({ message: 'Unit not found' });
       }
 
-      if (existingUnit.property.ownerId !== auth.userId) {
-        return res.status(403).json({ message: 'Access denied' });
+      if (!existingUnit.property) {
+        console.error('Unit has no associated property:', id);
+        return res.status(500).json({ message: 'Data integrity error' });
       }
-
-      const unitData = insertUnitSchema.partial().parse(req.body);
+      const unitData = insertUnitSchema.partial().omit({ propertyId: true }).parse(req.body);
 
       const [updatedUnit] = await db.update(units)
         .set(unitData)
         .where(eq(units.id, id))
         .returning();
 
-      return res.status(200).json(updatedUnit);
-    } catch (error) {
-      console.error('Error updating unit:', error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: 'Invalid input', errors: error.errors });
+      if (!existingUnit) {
+        return res.status(404).json({ message: 'Unit not found' });
       }
-      return res.status(500).json({ message: 'Failed to update unit' });
-    }
-  }
+
+      // Ensure property relation is loaded
+      if (!existingUnit.property) {
+        console.error('Unit property relation missing for unit:', id);
+        return res.status(500).json({ message: 'Unit data integrity error' });
+      }
 
   if (req.method === 'DELETE') {
     try {
@@ -85,6 +85,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(404).json({ message: 'Unit not found' });
       }
 
+      if (!existingUnit.property) {
+        console.error('Unit has no associated property:', id);
+        return res.status(500).json({ message: 'Data integrity error' });
+      }
+
       if (existingUnit.property.ownerId !== auth.userId) {
         return res.status(403).json({ message: 'Access denied' });
       }
@@ -94,6 +99,41 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       return res.status(204).send();
     } catch (error) {
       console.error('Error deleting unit:', error);
+      return res.status(500).json({ message: 'Failed to delete unit' });
+    }
+  }
+  if (req.method === 'DELETE') {
+    try {
+      const existingUnit = await db.query.units.findFirst({
+        where: eq(units.id, id),
+        with: {
+          property: true,
+        }
+      });
+
+      if (!existingUnit) {
+        return res.status(404).json({ message: 'Unit not found' });
+      }
+
+      // Ensure property relation is loaded
+      if (!existingUnit.property) {
+        console.error('Unit property relation missing for unit:', id);
+        return res.status(500).json({ message: 'Unit data integrity error' });
+      }
+
+      if (existingUnit.property.ownerId !== auth.userId) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      await db.delete(units).where(eq(units.id, id));
+
+      return res.status(204).end();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Error deleting unit:', errorMessage);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Stack trace:', error instanceof Error ? error.stack : 'N/A');
+      }
       return res.status(500).json({ message: 'Failed to delete unit' });
     }
   }

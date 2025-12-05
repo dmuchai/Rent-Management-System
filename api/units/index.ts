@@ -79,5 +79,5 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     }
   }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+  return res.status(405).json({ message: 'Method not allowed' });
 });

@@ -10,7 +10,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   const { id } = req.query;
 
   if (typeof id !== 'string') {
-    return res.status(400).json({ error: 'Invalid property ID' });
+    return res.status(400).json({ message: 'Invalid property ID' });
   }
 
   if (req.method === 'GET') {
@@ -94,5 +94,5 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     }
   }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+  return res.status(405).json({ message: 'Method not allowed' });
 });
