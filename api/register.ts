@@ -3,6 +3,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default function handler(req: VercelRequest, res: VercelResponse) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  // Get base path from environment variable (for subdirectory deployments)
+  const basePath = process.env.BASE_PATH || '';
   
   if (!supabaseUrl || !supabaseKey) {
     return res.status(500).send(`
@@ -156,7 +158,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
           
           <div style="margin-top: 20px;">
               <span>Already have an account? </span>
-              <a href="/api/login" class="link">Sign in here</a>
+              <a href="${basePath}/api/login" class="link">Sign in here</a>
           </div>
       </div>
 
@@ -180,6 +182,18 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
               const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
               
               return minLength && hasUpper && hasLower && hasNumber && hasSpecial;
+          }
+
+          // Helper function to build absolute paths respecting base path
+          const BASE_PATH = ${JSON.stringify(basePath)};
+          function buildPath(path) {
+              // Remove leading slash from path if present
+              const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+              // Combine base path with clean path, ensuring proper slashes
+              if (BASE_PATH) {
+                  return BASE_PATH + '/' + cleanPath;
+              }
+              return '/' + cleanPath;
           }
 
           // Initialize when DOM is ready
@@ -280,23 +294,23 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
                                   
                                   showMessage('Setup complete! Redirecting...', 'success');
                                   setTimeout(() => {
-                                      // Use relative URL to respect base path for subdirectory deployments
-                                      window.location.href = 'dashboard';
+                                      // Build absolute path to dashboard respecting base path
+                                      window.location.href = buildPath('dashboard');
                                   }, 500);
                               } catch (syncError) {
                                   console.error('Failed to set up session:', syncError);
                                   showMessage('Session setup failed. Please sign in manually.', 'error');
                                   setTimeout(() => {
-                                      // Use relative URL to respect base path for subdirectory deployments
-                                      window.location.href = 'api/login';
+                                      // Build absolute path to login respecting base path
+                                      window.location.href = buildPath('api/login');
                                   }, 2000);
                               }
                           } else {
                               // Email confirmation required
                               showMessage('Account created! Please check your email for a verification link before signing in.', 'success');
                               setTimeout(() => {
-                                  // Use relative URL to respect base path for subdirectory deployments
-                                  window.location.href = 'api/login';
+                                  // Build absolute path to login respecting base path
+                                  window.location.href = buildPath('api/login');
                               }, 3000);
                           }
                       }

@@ -41,14 +41,9 @@ window.location.href = buildPath('api/login');  // → /app/api/login
 window.location.href = buildPath('dashboard');  // → /app/dashboard
 ```
 
-### Server-Side (API Routes)
-API routes use relative URLs (without leading slash) to respect the base path:
+### Browser Relative URL Resolution
+When using relative URLs in client-side navigation, the browser automatically respects the base path:
 
-```javascript
-// Relative URL automatically respects base path
-window.location.href = 'dashboard';     // → /app/dashboard
-window.location.href = 'api/login';     // → /app/api/login
-```
 
 ## Files Updated
 

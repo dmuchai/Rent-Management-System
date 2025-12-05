@@ -3,6 +3,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default function handler(req: VercelRequest, res: VercelResponse) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  // Get base path from environment variable (for subdirectory deployments)
+  const basePath = process.env.BASE_PATH || '';
   
   if (!supabaseUrl || !supabaseKey) {
     return res.status(500).send(`
@@ -142,11 +144,23 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
           
           <div style="margin-top: 20px;">
               <span>Don't have an account? </span>
-              <a href="/api/register" class="link">Create one here</a>
+              <a href="${basePath}/api/register" class="link">Create one here</a>
           </div>
       </div>
 
       <script>
+          // Helper function to build absolute paths respecting base path
+          const BASE_PATH = ${JSON.stringify(basePath)};
+          function buildPath(path) {
+              // Remove leading slash from path if present
+              const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+              // Combine base path with clean path, ensuring proper slashes
+              if (BASE_PATH) {
+                  return BASE_PATH + '/' + cleanPath;
+              }
+              return '/' + cleanPath;
+          }
+
           function showMessage(text, type = 'error') {
               const messageDiv = document.getElementById('message');
               messageDiv.className = type;
@@ -224,8 +238,8 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
                               showMessage('Redirecting to dashboard...', 'success');
                               setTimeout(() => {
-                                  // Use relative URL to respect base path for subdirectory deployments
-                                  window.location.href = 'dashboard';
+                                  // Build absolute path to dashboard respecting base path
+                                  window.location.href = buildPath('dashboard');
                               }, 500);
                           } catch (sessionError) {
                               console.error('Session setup error:', sessionError);
@@ -245,7 +259,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
                       const { data, error } = await window.supabaseClient.auth.signInWithOAuth({
                           provider: 'google',
                           options: {
-                              redirectTo: window.location.origin + '/auth-callback'
+                              redirectTo: window.location.origin + buildPath('auth-callback')
                           }
                       });
                       
