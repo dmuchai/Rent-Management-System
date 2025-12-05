@@ -14,10 +14,20 @@ export default function AuthCallback() {
 
       if (token) {
         try {
-          // Store tokens in localStorage for the frontend to use
-          localStorage.setItem('supabase-auth-token', token);
-          if (refreshToken) {
-            localStorage.setItem('supabase-refresh-token', refreshToken);
+          // Set session via server-side httpOnly cookies instead of localStorage
+          // This protects tokens from XSS attacks
+          const response = await fetch('/api/auth/set-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              access_token: token,
+              refresh_token: refreshToken
+            }),
+            credentials: 'include' // Important: include cookies
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to establish session');
           }
 
           // Clear the auth query cache to force a refresh

@@ -204,18 +204,32 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
                       if (error) {
                           showMessage(error.message);
                       } else if (data.session) {
-                          showMessage('Sign in successful! Redirecting...', 'success');
+                          showMessage('Sign in successful! Setting up session...', 'success');
                           
-                          // Store tokens in localStorage
-                          localStorage.setItem('supabase-auth-token', data.session.access_token);
-                          if (data.session.refresh_token) {
-                              localStorage.setItem('supabase-refresh-token', data.session.refresh_token);
+                          // Set session via server-side httpOnly cookies
+                          try {
+                              const sessionResponse = await fetch('/api/auth/set-session', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                      access_token: data.session.access_token,
+                                      refresh_token: data.session.refresh_token
+                                  }),
+                                  credentials: 'include' // Important: include cookies in request
+                              });
+
+                              if (!sessionResponse.ok) {
+                                  throw new Error('Failed to establish session');
+                              }
+
+                              showMessage('Redirecting to dashboard...', 'success');
+                              setTimeout(() => {
+                                  window.location.href = '/dashboard';
+                              }, 500);
+                          } catch (sessionError) {
+                              console.error('Session setup error:', sessionError);
+                              showMessage('Session setup failed. Please try again.');
                           }
-                          
-                          // Redirect to auth callback page
-                          setTimeout(() => {
-                              window.location.href = '/auth-callback';
-                          }, 500);
                       }
                   } catch (e) {
                       console.error('Sign in error:', e);

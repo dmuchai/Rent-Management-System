@@ -248,35 +248,47 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
                       if (data.user) {
                           if (data.session) {
                               // User is immediately confirmed
-                              showMessage('Account created successfully! Redirecting...', 'success');
+                              showMessage('Account created successfully! Setting up session...', 'success');
                               
-                              // Store tokens in localStorage
-                              localStorage.setItem('supabase-auth-token', data.session.access_token);
-                              if (data.session.refresh_token) {
-                                  localStorage.setItem('supabase-refresh-token', data.session.refresh_token);
-                              }
-                              
-                              // Sync user to database
+                              // Set session via server-side httpOnly cookies
                               try {
+                                  const sessionResponse = await fetch('/api/auth/set-session', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                          access_token: data.session.access_token,
+                                          refresh_token: data.session.refresh_token
+                                      }),
+                                      credentials: 'include' // Important: include cookies in request
+                                  });
+
+                                  if (!sessionResponse.ok) {
+                                      throw new Error('Failed to establish session');
+                                  }
+
+                                  // Sync user to database
                                   await fetch('/api/auth/sync-user', {
                                       method: 'POST',
-                                      headers: { 
-                                          'Content-Type': 'application/json',
-                                          'Authorization': 'Bearer ' + data.session.access_token
-                                      },
+                                      headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify({
                                           firstName: firstName,
                                           lastName: lastName,
                                           role: role
-                                      })
+                                      }),
+                                      credentials: 'include' // Auth cookie will be sent automatically
                                   });
+                                  
+                                  showMessage('Setup complete! Redirecting...', 'success');
+                                  setTimeout(() => {
+                                      window.location.href = '/dashboard';
+                                  }, 500);
                               } catch (syncError) {
-                                  console.error('Failed to sync user:', syncError);
+                                  console.error('Failed to set up session:', syncError);
+                                  showMessage('Session setup failed. Please sign in manually.', 'error');
+                                  setTimeout(() => {
+                                      window.location.href = '/api/login';
+                                  }, 2000);
                               }
-                              
-                              setTimeout(() => {
-                                  window.location.href = '/auth-callback';
-                              }, 1000);
                           } else {
                               // Email confirmation required
                               showMessage('Account created! Please check your email for a verification link before signing in.', 'success');

@@ -12,13 +12,28 @@ if (!supabaseUrl || !supabaseServiceKey) {
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; user: User } | null> {
-  // Get token from Authorization header
+  let token: string | undefined;
+
+  // First, try to get token from Authorization header (for backward compatibility)
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
   }
 
-  const token = authHeader.substring(7);
+  // If no Authorization header, try to get token from httpOnly cookie
+  if (!token && req.headers.cookie) {
+    const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
+      const [key, value] = cookie.trim().split('=');
+      acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
+    
+    token = cookies['supabase-auth-token'];
+  }
+
+  if (!token) {
+    return null;
+  }
   
   try {
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
