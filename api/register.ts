@@ -191,7 +191,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
               
               try {
                   const { createClient } = supabase;
-                  window.supabaseClient = createClient('${supabaseUrl}', '${supabaseKey}');
+                  window.supabaseClient = createClient(${JSON.stringify(supabaseUrl)}, ${JSON.stringify(supabaseKey)});
               } catch (e) {
                   showMessage('Failed to initialize authentication system');
                   return;

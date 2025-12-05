@@ -174,7 +174,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
               // Create Supabase client
               try {
                   const { createClient } = supabase;
-                  window.supabaseClient = createClient('${supabaseUrl}', '${supabaseKey}');
+                  window.supabaseClient = createClient(${JSON.stringify(supabaseUrl)}, ${JSON.stringify(supabaseKey)});
                   console.log('Supabase client created');
               } catch (e) {
                   console.error('Failed to create Supabase client:', e);
