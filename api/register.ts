@@ -22,7 +22,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   <html>
   <head>
       <title>Create Account - Property Management System</title>
-      <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+      <script src="https://unpkg.com/@supabase/supabase-js@2.86.2/dist/umd/supabase.js" integrity="sha384-3gSkGTU67vfvjBrMLOIytMD2rIsZlAefmd2YZFPniL/usqpCRtzshR3U2c5HJzY2" crossorigin="anonymous"></script>
       <style>
           body { font-family: Arial, sans-serif; max-width: 450px; margin: 50px auto; padding: 20px; background-color: #f5f5f5; }
           .register-container { 
