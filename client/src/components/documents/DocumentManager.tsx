@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { buildPath } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
@@ -43,7 +44,8 @@ export default function DocumentManager() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = '/api/login';
+          // Use buildPath to support subdirectory deployments
+          window.location.href = buildPath('api/login');
         }, 500);
         return;
       }

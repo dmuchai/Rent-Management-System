@@ -224,7 +224,8 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
                               showMessage('Redirecting to dashboard...', 'success');
                               setTimeout(() => {
-                                  window.location.href = '/dashboard';
+                                  // Use relative URL to respect base path for subdirectory deployments
+                                  window.location.href = 'dashboard';
                               }, 500);
                           } catch (sessionError) {
                               console.error('Session setup error:', sessionError);

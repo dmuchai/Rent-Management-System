@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { API_BASE_URL } from "@/lib/config";
+import { buildPath } from "@/lib/config";
 
 export default function Landing() {
   const redirectToLogin = () => {
-    // Redirect to server-side login page on Render backend
-    window.location.href = `${API_BASE_URL}/api/login`;
+    // Use buildPath to support subdirectory deployments
+    window.location.href = buildPath('api/login');
   };
 
   return (

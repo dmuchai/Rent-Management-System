@@ -280,20 +280,23 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
                                   
                                   showMessage('Setup complete! Redirecting...', 'success');
                                   setTimeout(() => {
-                                      window.location.href = '/dashboard';
+                                      // Use relative URL to respect base path for subdirectory deployments
+                                      window.location.href = 'dashboard';
                                   }, 500);
                               } catch (syncError) {
                                   console.error('Failed to set up session:', syncError);
                                   showMessage('Session setup failed. Please sign in manually.', 'error');
                                   setTimeout(() => {
-                                      window.location.href = '/api/login';
+                                      // Use relative URL to respect base path for subdirectory deployments
+                                      window.location.href = 'api/login';
                                   }, 2000);
                               }
                           } else {
                               // Email confirmation required
                               showMessage('Account created! Please check your email for a verification link before signing in.', 'success');
                               setTimeout(() => {
-                                  window.location.href = '/api/login';
+                                  // Use relative URL to respect base path for subdirectory deployments
+                                  window.location.href = 'api/login';
                               }, 3000);
                           }
                       }

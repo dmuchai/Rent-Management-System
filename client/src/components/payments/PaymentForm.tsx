@@ -6,6 +6,7 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { buildPath } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -83,7 +84,8 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = '/api/login';
+          // Use buildPath to support subdirectory deployments
+          window.location.href = buildPath('api/login');
         }, 500);
         return;
       }

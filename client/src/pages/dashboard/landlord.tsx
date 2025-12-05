@@ -120,7 +120,8 @@ export default function LandlordDashboard() {
         });
         
         // Clear any client-side auth state and redirect
-        window.location.href = "/";
+        // Use buildPath to support subdirectory deployments
+        window.location.href = buildPath('');
       } else {
         throw new Error("Logout failed");
       }

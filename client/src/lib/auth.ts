@@ -1,4 +1,5 @@
 import { queryClient } from "./queryClient";
+import { buildPath } from "./config";
 
 /**
  * Clear authentication-related keys from localStorage and sessionStorage
@@ -96,10 +97,11 @@ export async function logout() {
     });
     
     // Redirect to home with logout parameter
-    window.location.href = '/?logout=true&t=' + Date.now();
+    // Use buildPath to support subdirectory deployments
+    window.location.href = buildPath('?logout=true&t=' + Date.now());
   } catch (error) {
     console.error('Logout error:', error);
     // Force redirect even if error
-    window.location.href = '/?logout=true&t=' + Date.now();
+    window.location.href = buildPath('?logout=true&t=' + Date.now());
   }
 }

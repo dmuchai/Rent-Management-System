@@ -5,6 +5,7 @@ import { insertTenantSchema, type InsertTenant } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { buildPath } from "@/lib/config";
 import {
   Dialog,
   DialogContent,
@@ -68,7 +69,8 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = '/api/login';
+          // Use buildPath to support subdirectory deployments
+          window.location.href = buildPath('api/login');
         }, 500);
         return;
       }
