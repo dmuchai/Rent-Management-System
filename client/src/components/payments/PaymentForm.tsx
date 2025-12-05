@@ -79,11 +79,11 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
+          description: "Session expired. Redirecting to login...",
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'https://rent-management-backend.onrender.com'}/api/login`;
+          window.location.href = '/api/login';
         }, 500);
         return;
       }
