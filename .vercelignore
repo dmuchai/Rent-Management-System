@@ -1,0 +1,15 @@
+# Ignore API directory - backend is hosted separately
+_api_backup/
+api/
+
+# Ignore server files
+server/
+
+# Ignore documentation
+*.md
+!README.md
+
+# Ignore local development files
+.env
+.env.local
+node_modules/
