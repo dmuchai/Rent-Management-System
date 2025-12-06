@@ -1,11 +1,7 @@
-# Ignore API directory - backend is hosted separately
-_api_backup/
-api/
-
-# Ignore server files
+# Ignore server files (Express backend is separate)
 server/
 
-# Ignore documentation
+# Ignore documentation (except README)
 *.md
 !README.md
 
