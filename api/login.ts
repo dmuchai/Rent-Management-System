@@ -21,130 +21,303 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   
   const loginHtml = `
   <!DOCTYPE html>
-  <html>
+  <html lang="en" class="h-full">
   <head>
-      <title>Sign In - Property Management System</title>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Sign In - PropertyFlow</title>
       <script src="https://unpkg.com/@supabase/supabase-js@2.86.2/dist/umd/supabase.js" integrity="sha384-3gSkGTU67vfvjBrMLOIytMD2rIsZlAefmd2YZFPniL/usqpCRtzshR3U2c5HJzY2" crossorigin="anonymous"></script>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
       <style>
-          body { font-family: Arial, sans-serif; max-width: 400px; margin: 100px auto; padding: 20px; background-color: #f5f5f5; }
-          .login-container { 
-              text-align: center; 
-              background: white; 
-              padding: 40px; 
-              border-radius: 12px; 
-              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          
+          body { 
+              font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+              min-height: 100vh;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              display: flex;
+              flex-direction: column;
           }
-          .logo { font-size: 2rem; margin-bottom: 10px; }
-          .title { color: #333; margin-bottom: 30px; }
-          input { 
-              width: 100%; 
-              padding: 12px 16px; 
-              margin: 8px 0; 
-              border: 2px solid #e1e5e9; 
-              border-radius: 8px; 
-              font-size: 14px;
-              box-sizing: border-box;
+          
+          .header {
+              background: rgba(255, 255, 255, 0.95);
+              backdrop-filter: blur(10px);
+              border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+              padding: 1rem 2rem;
           }
-          input:focus { 
-              outline: none; 
-              border-color: #007bff; 
+          
+          .header-content {
+              max-width: 1200px;
+              margin: 0 auto;
+              display: flex;
+              justify-between;
+              align-items: center;
           }
-          .btn { 
-              width: 100%;
-              padding: 12px; 
-              border: none; 
-              border-radius: 8px; 
-              font-size: 16px; 
-              font-weight: 500;
-              cursor: pointer; 
-              margin: 8px 0;
-              transition: background-color 0.2s;
+          
+          .logo-section {
+              display: flex;
+              align-items: center;
+              gap: 0.75rem;
           }
-          .btn-primary { 
-              background: #007bff; 
-              color: white; 
+          
+          .logo-icon {
+              font-size: 1.5rem;
+              color: #667eea;
           }
-          .btn-primary:hover { 
-              background: #0056b3; 
+          
+          .logo-text {
+              font-size: 1.5rem;
+              font-weight: 700;
+              color: #1a202c;
           }
-          .btn-google {
-              background: #db4437;
-              color: white;
-              margin-top: 20px;
+          
+          .back-link {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.5rem;
+              color: #4a5568;
+              text-decoration: none;
+              font-size: 0.875rem;
+              transition: color 0.2s;
           }
-          .btn-google:hover {
-              background: #c23321;
+          
+          .back-link:hover {
+              color: #667eea;
           }
-          .error { 
-              color: #dc3545; 
-              background: #f8d7da; 
-              border: 1px solid #f5c6cb; 
-              padding: 10px; 
-              border-radius: 4px; 
-              margin: 15px 0; 
+          
+          .container {
+              flex: 1;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              padding: 2rem;
           }
-          .success { 
-              color: #155724; 
-              background: #d4edda; 
-              border: 1px solid #c3e6cb; 
-              padding: 10px; 
-              border-radius: 4px; 
-              margin: 15px 0; 
-          }
-          .divider { 
-              margin: 20px 0; 
-              text-align: center; 
-              color: #666; 
-              position: relative;
-          }
-          .divider::before {
-              content: '';
-              position: absolute;
-              top: 50%;
-              left: 0;
-              right: 0;
-              height: 1px;
-              background: #ddd;
-              z-index: 0;
-          }
-          .divider span {
+          
+          .login-card {
               background: white;
-              padding: 0 15px;
-              position: relative;
-              z-index: 1;
+              border-radius: 1rem;
+              box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+              padding: 3rem;
+              width: 100%;
+              max-width: 420px;
           }
-          .link { 
-              color: #007bff; 
-              text-decoration: none; 
-              font-size: 14px;
+          
+          .card-header {
+              text-align: center;
+              margin-bottom: 2rem;
           }
-          .link:hover { 
-              text-decoration: underline; 
+          
+          .card-title {
+              font-size: 1.875rem;
+              font-weight: 700;
+              color: #1a202c;
+              margin-bottom: 0.5rem;
+          }
+          
+          .card-subtitle {
+              color: #718096;
+              font-size: 0.875rem;
+          }
+          
+          .form-group {
+              margin-bottom: 1.25rem;
+          }
+          
+          .form-label {
+              display: block;
+              font-size: 0.875rem;
+              font-weight: 500;
+              color: #374151;
+              margin-bottom: 0.5rem;
+          }
+          
+          .form-input {
+              width: 100%;
+              padding: 0.75rem 1rem;
+              border: 2px solid #e2e8f0;
+              border-radius: 0.5rem;
+              font-size: 1rem;
+              transition: all 0.2s;
+          }
+          
+          .form-input:focus {
+              outline: none;
+              border-color: #667eea;
+              box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+          }
+          
+          .btn {
+              width: 100%;
+              padding: 0.875rem 1rem;
+              border: none;
+              border-radius: 0.5rem;
+              font-size: 1rem;
+              font-weight: 600;
+              cursor: pointer;
+              transition: all 0.2s;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              gap: 0.5rem;
+          }
+          
+          .btn-primary {
+              background: #667eea;
+              color: white;
+              margin-top: 1rem;
+          }
+          
+          .btn-primary:hover {
+              background: #5568d3;
+              transform: translateY(-1px);
+              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+          }
+          
+          .btn-google {
+              background: white;
+              color: #374151;
+              border: 2px solid #e2e8f0;
+              margin-top: 1rem;
+          }
+          
+          .btn-google:hover {
+              background: #f7fafc;
+              border-color: #cbd5e0;
+          }
+          
+          .divider {
+              display: flex;
+              align-items: center;
+              text-align: center;
+              margin: 1.5rem 0;
+              color: #a0aec0;
+              font-size: 0.875rem;
+          }
+          
+          .divider::before,
+          .divider::after {
+              content: '';
+              flex: 1;
+              border-bottom: 1px solid #e2e8f0;
+          }
+          
+          .divider span {
+              padding: 0 1rem;
+          }
+          
+          .alert {
+              padding: 0.875rem 1rem;
+              border-radius: 0.5rem;
+              margin-bottom: 1.5rem;
+              font-size: 0.875rem;
+          }
+          
+          .alert-error {
+              background: #fee;
+              color: #c53030;
+              border: 1px solid #fc8181;
+          }
+          
+          .alert-success {
+              background: #f0fff4;
+              color: #2f855a;
+              border: 1px solid #9ae6b4;
+          }
+          
+          .footer-text {
+              text-align: center;
+              margin-top: 1.5rem;
+              color: #718096;
+              font-size: 0.875rem;
+          }
+          
+          .footer-link {
+              color: #667eea;
+              text-decoration: none;
+              font-weight: 600;
+          }
+          
+          .footer-link:hover {
+              text-decoration: underline;
+          }
+          
+          @media (max-width: 640px) {
+              .login-card {
+                  padding: 2rem;
+              }
+              .header {
+                  padding: 1rem;
+              }
           }
       </style>
   </head>
   <body>
-      <div class="login-container">
-          <div class="logo">🏠</div>
-          <h2 class="title">Property Management System</h2>
-          <p>Sign in to manage your properties</p>
-          
-          <div id="message" style="display: none;"></div>
-          
-          <input type="email" id="email" placeholder="Email address" required>
-          <input type="password" id="password" placeholder="Password" required>
-          
-          <button class="btn btn-primary" onclick="signIn()">Sign In</button>
-          
-          <div class="divider">
-              <span>or</span>
+      <header class="header">
+          <div class="header-content">
+              <div class="logo-section">
+                  <i class="fas fa-building logo-icon"></i>
+                  <span class="logo-text">PropertyFlow</span>
+              </div>
+              <a href="${basePath}/" class="back-link">
+                  <i class="fas fa-arrow-left"></i>
+                  <span>Back to Home</span>
+              </a>
           </div>
-          
-          <button class="btn btn-google" onclick="signInWithGoogle()">Sign in with Google</button>
-          
-          <div style="margin-top: 20px;">
-              <span>Don't have an account? </span>
-              <a href="${basePath}/api/register" class="link">Create one here</a>
+      </header>
+
+      <div class="container">
+          <div class="login-card">
+              <div class="card-header">
+                  <h1 class="card-title">Welcome Back</h1>
+                  <p class="card-subtitle">Sign in to manage your properties</p>
+              </div>
+              
+              <div id="message" style="display: none;"></div>
+              
+              <form onsubmit="event.preventDefault(); signIn();">
+                  <div class="form-group">
+                      <label for="email" class="form-label">Email Address</label>
+                      <input 
+                          type="email" 
+                          id="email" 
+                          class="form-input"
+                          placeholder="you@example.com"
+                          required
+                          autocomplete="email"
+                      >
+                  </div>
+                  
+                  <div class="form-group">
+                      <label for="password" class="form-label">Password</label>
+                      <input 
+                          type="password" 
+                          id="password" 
+                          class="form-input"
+                          placeholder="Enter your password"
+                          required
+                          autocomplete="current-password"
+                      >
+                  </div>
+                  
+                  <button type="submit" class="btn btn-primary">
+                      <i class="fas fa-sign-in-alt"></i>
+                      <span>Sign In</span>
+                  </button>
+              </form>
+              
+              <div class="divider">
+                  <span>OR</span>
+              </div>
+              
+              <button class="btn btn-google" onclick="signInWithGoogle()">
+                  <i class="fab fa-google"></i>
+                  <span>Continue with Google</span>
+              </button>
+              
+              <p class="footer-text">
+                  Don't have an account? 
+                  <a href="${basePath}/api/register" class="footer-link">Sign up</a>
+              </p>
           </div>
       </div>
 
@@ -163,7 +336,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
           function showMessage(text, type = 'error') {
               const messageDiv = document.getElementById('message');
-              messageDiv.className = type;
+              messageDiv.className = 'alert alert-' + type;
               messageDiv.textContent = text;
               messageDiv.style.display = 'block';
           }

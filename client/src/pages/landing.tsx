@@ -129,6 +129,251 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* Pricing Section */}
+      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold mb-4">Simple, Transparent Pricing</h2>
+            <p className="text-xl text-muted-foreground">Choose the plan that fits your property portfolio</p>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {/* Starter Plan */}
+            <div className="bg-card p-8 rounded-xl border border-border hover:border-primary transition-colors">
+              <h3 className="text-xl font-bold mb-2">Starter</h3>
+              <div className="mb-6">
+                <span className="text-4xl font-bold">$29</span>
+                <span className="text-muted-foreground">/month</span>
+              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Up to 5 properties</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Unlimited tenants</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Payment tracking</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Basic reports</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Email support</span>
+                </li>
+              </ul>
+              <Button className="w-full" variant="outline" onClick={redirectToLogin}>
+                Get Started
+              </Button>
+            </div>
+
+            {/* Professional Plan */}
+            <div className="bg-primary/5 p-8 rounded-xl border-2 border-primary relative">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-1 rounded-full text-sm font-medium">
+                Most Popular
+              </div>
+              <h3 className="text-xl font-bold mb-2">Professional</h3>
+              <div className="mb-6">
+                <span className="text-4xl font-bold">$79</span>
+                <span className="text-muted-foreground">/month</span>
+              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Up to 25 properties</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Unlimited tenants</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Pesapal integration</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Advanced reports</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Document storage</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Priority support</span>
+                </li>
+              </ul>
+              <Button className="w-full" onClick={redirectToLogin}>
+                Get Started
+              </Button>
+            </div>
+
+            {/* Enterprise Plan */}
+            <div className="bg-card p-8 rounded-xl border border-border hover:border-primary transition-colors">
+              <h3 className="text-xl font-bold mb-2">Enterprise</h3>
+              <div className="mb-6">
+                <span className="text-4xl font-bold">$199</span>
+                <span className="text-muted-foreground">/month</span>
+              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Unlimited properties</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Unlimited tenants</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>All integrations</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>Custom reports</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>API access</span>
+                </li>
+                <li className="flex items-start">
+                  <i className="fas fa-check text-primary mr-2 mt-1"></i>
+                  <span>24/7 phone support</span>
+                </li>
+              </ul>
+              <Button className="w-full" variant="outline" onClick={redirectToLogin}>
+                Contact Sales
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Contact Section */}
+      <section id="contact" className="py-20 bg-muted/50 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold mb-4">Get in Touch</h2>
+            <p className="text-xl text-muted-foreground">Have questions? We're here to help</p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-12">
+            {/* Contact Form */}
+            <div>
+              <form className="space-y-4" onSubmit={(e) => {
+                e.preventDefault();
+                alert('Thank you for your message! We will get back to you soon.');
+              }}>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Name</label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full px-4 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Your name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Email</label>
+                  <input
+                    type="email"
+                    required
+                    className="w-full px-4 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="your@email.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Message</label>
+                  <textarea
+                    required
+                    rows={4}
+                    className="w-full px-4 py-2 rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="How can we help you?"
+                  ></textarea>
+                </div>
+                <Button type="submit" className="w-full">
+                  Send Message
+                </Button>
+              </form>
+            </div>
+
+            {/* Contact Info */}
+            <div className="space-y-6">
+              <div className="bg-card p-6 rounded-xl border border-border">
+                <div className="flex items-start">
+                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                    <i className="fas fa-envelope text-primary"></i>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-1">Email</h4>
+                    <p className="text-muted-foreground">support@propertyflow.com</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-card p-6 rounded-xl border border-border">
+                <div className="flex items-start">
+                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                    <i className="fas fa-phone text-primary"></i>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-1">Phone</h4>
+                    <p className="text-muted-foreground">+254 700 123 456</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-card p-6 rounded-xl border border-border">
+                <div className="flex items-start">
+                  <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+                    <i className="fas fa-map-marker-alt text-primary"></i>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-1">Office</h4>
+                    <p className="text-muted-foreground">Nairobi, Kenya</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex space-x-4 pt-4">
+                <a href="#" className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center hover:bg-primary/20 transition-colors">
+                  <i className="fab fa-twitter text-primary"></i>
+                </a>
+                <a href="#" className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center hover:bg-primary/20 transition-colors">
+                  <i className="fab fa-facebook text-primary"></i>
+                </a>
+                <a href="#" className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center hover:bg-primary/20 transition-colors">
+                  <i className="fab fa-linkedin text-primary"></i>
+                </a>
+                <a href="#" className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center hover:bg-primary/20 transition-colors">
+                  <i className="fab fa-instagram text-primary"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-card border-t border-border py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center mb-4 md:mb-0">
+              <i className="fas fa-building text-primary text-xl mr-2"></i>
+              <span className="text-lg font-bold">PropertyFlow</span>
+            </div>
+            <p className="text-muted-foreground text-sm">
+              © 2025 PropertyFlow. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
