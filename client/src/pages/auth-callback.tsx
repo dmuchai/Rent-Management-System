@@ -51,9 +51,14 @@ export default function AuthCallback() {
           // Clear the auth query cache to force a refresh
           queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
 
+          console.log('Session established successfully, redirecting to dashboard...');
+          
           // Clean up URL and redirect to dashboard
-          window.history.replaceState({}, '', '/dashboard');
-          setLocation('/dashboard');
+          setTimeout(() => {
+            window.history.replaceState({}, '', '/dashboard');
+            setLocation('/dashboard');
+            console.log('Redirect executed');
+          }, 100);
         } catch (error) {
           console.error('Auth callback error:', error);
           const errorMsg = error instanceof Error ? error.message : 'unknown error';
