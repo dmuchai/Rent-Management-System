@@ -20,6 +20,8 @@ export default function AuthCallback() {
 
       if (token) {
         try {
+          console.log('Auth callback: Setting session with token');
+          
           // Set session via server-side httpOnly cookies instead of localStorage
           // This protects tokens from XSS attacks
           const response = await fetch('/api/auth/set-session', {
@@ -32,10 +34,18 @@ export default function AuthCallback() {
             credentials: 'include' // Important: include cookies
           });
 
+          const responseText = await response.text();
+          console.log('Set session response:', response.status, responseText);
+          
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
+            let errorData;
+            try {
+              errorData = JSON.parse(responseText);
+            } catch {
+              errorData = { error: 'Unknown error', details: responseText };
+            }
             console.error('Set session failed:', response.status, errorData);
-            throw new Error(`Failed to establish session: ${errorData.error || response.statusText}`);
+            throw new Error(`Failed to establish session: ${errorData.error || errorData.details || response.statusText}`);
           }
 
           // Clear the auth query cache to force a refresh
