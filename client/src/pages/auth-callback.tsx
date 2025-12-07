@@ -49,7 +49,10 @@ export default function AuthCallback() {
           }
 
           // Clear the auth query cache to force a refresh
-          queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+          await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+          
+          // Wait for the auth query to refetch
+          await queryClient.refetchQueries({ queryKey: ["/api/auth/user"] });
 
           console.log('Session established successfully, redirecting to dashboard...');
           
