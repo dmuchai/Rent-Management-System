@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseAdmin } from '../_lib/auth';
+import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Handle CORS preflight
@@ -20,14 +20,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('Set session: Missing Supabase configuration');
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Set session: Missing Supabase configuration', { 
+        hasUrl: !!supabaseUrl, 
+        hasKey: !!supabaseServiceKey 
+      });
       return res.status(500).json({ error: 'Server configuration error' });
     }
 
-    // Use admin client to verify the token
+    // Create admin client to verify the token
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(access_token);
     
     if (error) {
