@@ -1,66 +1,67 @@
 // POST /api/auth/logout endpoint
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseAdmin } from '../_lib/auth';
+import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader) {
-    return res.status(400).json({ 
-      error: 'Authorization header is required',
-      message: 'Please provide an Authorization header with a Bearer token'
-    });
-  }
-
-  if (!authHeader.startsWith('Bearer ')) {
-    return res.status(422).json({ 
-      error: 'Invalid authorization format',
-      message: 'Authorization header must use Bearer token format: "Bearer <token>"'
-    });
-  }
-
-  const token = authHeader.substring(7).trim();
-  
-  if (!token || token.length === 0) {
-    return res.status(400).json({ 
-      error: 'Token is required',
-      message: 'Bearer token cannot be empty'
-    });
-  }
-
   try {
+    // Get token from cookie
+    let token: string | undefined;
+    
+    if (req.headers.cookie) {
+      const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
+        const [key, value] = cookie.trim().split('=');
+        acc[key] = value;
+        return acc;
+      }, {} as Record<string, string>);
+      
+      token = cookies['supabase-auth-token'];
+    }
+
+    if (!token) {
+      // Already logged out
+      return res.status(200).json({ 
+        success: true,
+        message: 'Already logged out'
+      });
+    }
+
+    // Verify and sign out
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing Supabase configuration');
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     const { data: { user }, error: verifyError } = await supabaseAdmin.auth.getUser(token);
     
     if (verifyError || !user) {
-      console.warn('Logout attempted with invalid token (treating as no-op)');
+      console.warn('Logout attempted with invalid token');
+      // Clear cookies anyway
+      res.setHeader('Set-Cookie', [
+        'supabase-auth-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax',
+        'supabase-refresh-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax'
+      ]);
       return res.status(200).json({ 
         success: true,
-        message: 'Already logged out or token invalid'
+        message: 'Logged out'
       });
     }
 
-    const { error: signOutError } = await supabaseAdmin.auth.admin.signOut(token);
+    // Sign out from Supabase
+    await supabaseAdmin.auth.admin.signOut(token);
     
-    if (signOutError) {
-      const errorMessage = signOutError.message || 'Unknown error during sign out';
-      console.error('Supabase signOut error:', errorMessage);
-      
-      if (signOutError.message?.includes('not found') || signOutError.message?.includes('invalid')) {
-        return res.status(200).json({ 
-          success: true,
-          message: 'Session already ended'
-        });
-      }
-      
-      return res.status(500).json({ 
-        error: 'Failed to sign out',
-        message: 'An error occurred while signing out. Please try again.'
-      });
-    }
+    // Clear cookies
+    res.setHeader('Set-Cookie', [
+      'supabase-auth-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax',
+      'supabase-refresh-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax'
+    ]);
 
     return res.status(200).json({ 
       success: true,

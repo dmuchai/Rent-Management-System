@@ -1,12 +1,18 @@
 // GET/POST /api/leases - List all leases or create new lease
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from './_lib/auth';
-import { db } from './_lib/db';
-import { leases, units, properties, tenants } from '../shared/schema';
+import { verifyAuthToken } from '../_lib/verify-auth';
+import { db } from '../_lib/db';
+import { leases, units, properties, tenants } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
-export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const auth = await verifyAuthToken(req);
+  
+  if (!auth) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   if (req.method === 'GET') {
     try {
       // Get all leases for landlord's properties
@@ -135,4 +141,4 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
-});
+}

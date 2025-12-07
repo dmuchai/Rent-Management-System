@@ -1,12 +1,18 @@
 // GET/POST /api/payments - List all payments or create new payment
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from './_lib/auth';
-import { db } from './_lib/db';
-import { payments, leases, units, properties } from '../shared/schema';
+import { verifyAuthToken } from '../_lib/verify-auth';
+import { db } from '../_lib/db';
+import { payments, leases, units, properties } from '../../shared/schema';
 import { eq, sql, desc, lt, and } from 'drizzle-orm';
 import { z } from 'zod';
 
-export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const auth = await verifyAuthToken(req);
+  
+  if (!auth) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   if (req.method === 'GET') {
     try {
       // Parse pagination parameters
@@ -152,4 +158,4 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
-});
+}
