@@ -116,6 +116,7 @@ async function handleSetSession(req: VercelRequest, res: VercelResponse) {
   const { access_token, refresh_token } = req.body;
 
   if (!access_token) {
+    console.error('Set session: No access token provided');
     return res.status(400).json({ error: 'Access token required' });
   }
 
@@ -124,24 +125,35 @@ async function handleSetSession(req: VercelRequest, res: VercelResponse) {
     const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
+      console.error('Set session: Missing Supabase configuration');
       return res.status(500).json({ error: 'Server configuration error' });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Use admin client to verify the token
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(access_token);
     
-    const { data: { user }, error } = await supabase.auth.getUser(access_token);
+    if (error) {
+      console.error('Set session: Token verification failed:', error.message);
+      return res.status(401).json({ error: 'Invalid token', details: error.message });
+    }
     
-    if (error || !user) {
-      return res.status(401).json({ error: 'Invalid token' });
+    if (!user) {
+      console.error('Set session: No user found for token');
+      return res.status(401).json({ error: 'Invalid token - no user' });
     }
 
-    res.setHeader('Set-Cookie', [
-      `supabase-auth-token=${access_token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600`,
-      refresh_token 
-        ? `supabase-refresh-token=${refresh_token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`
-        : ''
-    ].filter(Boolean));
+    // Set httpOnly cookies for security
+    const cookies = [
+      `supabase-auth-token=${access_token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600`
+    ];
+    
+    if (refresh_token) {
+      cookies.push(`supabase-refresh-token=${refresh_token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`);
+    }
+    
+    res.setHeader('Set-Cookie', cookies);
 
+    console.log('Set session: Success for user', user.id);
     return res.status(200).json({ 
       success: true,
       message: 'Session established',
@@ -152,7 +164,8 @@ async function handleSetSession(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error('Set session error:', error);
-    return res.status(500).json({ error: 'Failed to set session' });
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({ error: 'Failed to set session', details: errorMsg });
   }
 }
 

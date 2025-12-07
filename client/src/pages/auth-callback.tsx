@@ -33,7 +33,9 @@ export default function AuthCallback() {
           });
 
           if (!response.ok) {
-            throw new Error('Failed to establish session');
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Set session failed:', response.status, errorData);
+            throw new Error(`Failed to establish session: ${errorData.error || response.statusText}`);
           }
 
           // Clear the auth query cache to force a refresh
@@ -44,7 +46,8 @@ export default function AuthCallback() {
           setLocation('/dashboard');
         } catch (error) {
           console.error('Auth callback error:', error);
-          setLocation('/?error=auth_callback_failed');
+          const errorMsg = error instanceof Error ? error.message : 'unknown error';
+          setLocation(`/?error=auth_callback_failed&details=${encodeURIComponent(errorMsg)}`);
         }
       } else {
         // No token, redirect to home with error
