@@ -12,12 +12,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-      const { data: { user: supabaseUser }, error: authError } = await supabaseAdmin.auth.getUser(auth.user.id);
-
-      if (authError || !supabaseUser) {
-        console.error('Failed to fetch user from Supabase Auth:', authError);
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
+      // auth.user already contains the verified Supabase user from requireAuth
+      const supabaseUser = auth.user;
 
       const dbUser = await db.query.users.findFirst({
         where: eq(users.id, supabaseUser.id)
