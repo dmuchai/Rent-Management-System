@@ -8,9 +8,15 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleAuthCallback = async () => {
+      // Supabase OAuth returns tokens in URL hash fragment
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      
+      // Also check query params as fallback
       const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get('token');
-      const refreshToken = urlParams.get('refresh');
+      const token = accessToken || urlParams.get('token');
+      const refresh = refreshToken || urlParams.get('refresh');
 
       if (token) {
         try {
@@ -21,7 +27,7 @@ export default function AuthCallback() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               access_token: token,
-              refresh_token: refreshToken
+              refresh_token: refresh
             }),
             credentials: 'include' // Important: include cookies
           });
@@ -42,6 +48,7 @@ export default function AuthCallback() {
         }
       } else {
         // No token, redirect to home with error
+        console.error('No access token found in URL');
         setLocation('/?error=no_token');
       }
     };
