@@ -7,6 +7,11 @@ export default function Landing() {
     window.location.href = buildPath('api/login');
   };
 
+  const redirectToRegister = () => {
+    // Use buildPath to support subdirectory deployments
+    window.location.href = buildPath('api/register');
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -31,7 +36,7 @@ export default function Landing() {
                 Sign In
               </Button>
               <Button 
-                onClick={redirectToLogin}
+                onClick={redirectToRegister}
                 data-testid="button-getstarted"
               >
                 Get Started
@@ -53,7 +58,7 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               size="lg" 
-              onClick={redirectToLogin}
+              onClick={redirectToRegister}
               data-testid="button-freetrial"
             >
               Start Free Trial
@@ -168,7 +173,7 @@ export default function Landing() {
                   <span>Email support</span>
                 </li>
               </ul>
-              <Button className="w-full" variant="outline" onClick={redirectToLogin}>
+              <Button className="w-full" variant="outline" onClick={redirectToRegister}>
                 Get Started
               </Button>
             </div>
@@ -209,7 +214,7 @@ export default function Landing() {
                   <span>Priority support</span>
                 </li>
               </ul>
-              <Button className="w-full" onClick={redirectToLogin}>
+              <Button className="w-full" onClick={redirectToRegister}>
                 Get Started
               </Button>
             </div>
@@ -247,7 +252,7 @@ export default function Landing() {
                   <span>24/7 phone support</span>
                 </li>
               </ul>
-              <Button className="w-full" variant="outline" onClick={redirectToLogin}>
+              <Button className="w-full" variant="outline" onClick={redirectToRegister}>
                 Contact Sales
               </Button>
             </div>
