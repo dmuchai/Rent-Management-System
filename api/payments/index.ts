@@ -1,13 +1,33 @@
 // GET/POST /api/payments - List all payments or create new payment
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { verifyAuthToken } from '../_lib/verify-auth';
+import { createClient } from '@supabase/supabase-js';
 import { db } from '../_lib/db';
 import { payments, leases, units, properties } from '../../shared/schema';
 import { eq, sql, desc, lt, and } from 'drizzle-orm';
 import { z } from 'zod';
 
+async function verifyAuth(req: VercelRequest) {
+  let token: string | undefined;
+  if (req.headers.cookie) {
+    const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
+      const [key, value] = cookie.trim().split('=');
+      acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
+    token = cookies['supabase-auth-token'];
+  }
+  if (!token) return null;
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseServiceKey) return null;
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) return null;
+  return { userId: user.id, user };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const auth = await verifyAuthToken(req);
+  const auth = await verifyAuth(req);
   
   if (!auth) {
     return res.status(401).json({ error: 'Unauthorized' });
