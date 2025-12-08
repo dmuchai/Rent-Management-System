@@ -54,6 +54,24 @@ export default function AuthCallback() {
           // Wait for the auth query to refetch
           await queryClient.refetchQueries({ queryKey: ["/api/auth/user"] });
 
+          // Sync user to database
+          try {
+            console.log('Syncing user to database...');
+            const syncResponse = await fetch('/api/auth/sync-user', {
+              method: 'POST',
+              credentials: 'include'
+            });
+            
+            if (syncResponse.ok) {
+              console.log('User synced to database successfully');
+            } else {
+              console.error('Failed to sync user to database:', await syncResponse.text());
+            }
+          } catch (syncError) {
+            console.error('Error syncing user:', syncError);
+            // Don't fail the login if user sync fails
+          }
+
           console.log('Session established successfully, redirecting to dashboard...');
           
           // Clean up URL and redirect to dashboard
