@@ -148,10 +148,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     try {
+      console.log('Request body:', JSON.stringify(req.body, null, 2));
+      console.log('Auth userId:', auth.userId);
+      
       const propertyData = insertPropertySchema.parse({ 
         ...req.body, 
         ownerId: auth.userId 
       });
+      
+      console.log('Validated property data:', JSON.stringify(propertyData, null, 2));
       
       const [property] = await db.insert(properties)
         .values(propertyData)
@@ -160,10 +165,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json(property);
     } catch (error) {
       console.error('Error creating property:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('Error message:', error instanceof Error ? error.message : String(error));
+      
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: 'Invalid input', errors: error.errors });
       }
-      return res.status(500).json({ message: 'Failed to create property' });
+      return res.status(500).json({ 
+        message: 'Failed to create property',
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 
