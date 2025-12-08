@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { db } from '../_lib/db';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import { users } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 
@@ -60,30 +61,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Sync user to database
     try {
-      const existingUser = await db.query.users.findFirst({
-        where: eq(users.id, user.id)
-      });
+      const databaseUrl = process.env.DATABASE_URL;
+      if (!databaseUrl) {
+        console.error('Set session: DATABASE_URL not configured');
+      } else {
+        const sql = postgres(databaseUrl, { 
+          prepare: false,
+          max: 1,
+        });
+        const db = drizzle(sql);
 
-      if (!existingUser) {
-        // Create new user record
-        const fullName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User';
-        const parts = fullName.trim().split(/\s+/).filter((part: string) => part.length > 0);
-        
-        const firstName = parts[0] || 'User';
-        const lastName = parts.slice(1).join(' ') || null;
-
-        await db.insert(users).values({
-          id: user.id,
-          email: user.email || '',
-          firstName: firstName,
-          lastName: lastName,
-          profileImageUrl: user.user_metadata?.avatar_url || null,
-          role: 'landlord',
+        const existingUser = await db.query.users.findFirst({
+          where: eq(users.id, user.id)
         });
 
-        console.log('Set session: Created new user in database:', user.id);
-      } else {
-        console.log('Set session: User already exists in database:', user.id);
+        if (!existingUser) {
+          // Create new user record
+          const fullName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User';
+          const parts = fullName.trim().split(/\s+/).filter((part: string) => part.length > 0);
+          
+          const firstName = parts[0] || 'User';
+          const lastName = parts.slice(1).join(' ') || null;
+
+          await db.insert(users).values({
+            id: user.id,
+            email: user.email || '',
+            firstName: firstName,
+            lastName: lastName,
+            profileImageUrl: user.user_metadata?.avatar_url || null,
+            role: 'landlord',
+          });
+
+          console.log('Set session: Created new user in database:', user.id);
+        } else {
+          console.log('Set session: User already exists in database:', user.id);
+        }
+        
+        await sql.end();
       }
     } catch (dbError) {
       console.error('Set session: Failed to sync user to database:', dbError);
