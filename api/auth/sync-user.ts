@@ -1,7 +1,8 @@
 // POST /api/auth/sync-user endpoint
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { db } from '../_lib/db';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import { users } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 
@@ -45,6 +46,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Create database connection
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    console.error('Sync user: DATABASE_URL not configured');
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+
+  const sql = postgres(databaseUrl, { 
+    prepare: false,
+    max: 1,
+  });
+  const db = drizzle(sql);
+
   try {
     // auth.user already contains the verified Supabase user from auth verification
     const supabaseUser = auth.user;
@@ -70,10 +84,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .where(eq(users.id, supabaseUser.id))
             .returning();
 
+          await sql.end();
           return res.status(200).json(updatedUser);
         }
       }
 
+      await sql.end();
       return res.status(200).json(existingUser);
     } else {
       // Create new user
@@ -81,6 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const emailValue = email || supabaseUser.email;
       if (!emailValue) {
+        await sql.end();
         return res.status(400).json({ error: 'Email is required for new user' });
       }
 
@@ -99,11 +116,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         role: role || 'landlord',
       }).returning();
 
+      await sql.end();
       return res.status(201).json(newUser);
     }
   } catch (error) {
+    await sql.end();
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('Error syncing user:', errorMessage);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
     return res.status(500).json({ error: 'Internal server error', details: errorMessage });
   }
 }
