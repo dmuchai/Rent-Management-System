@@ -2,9 +2,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import postgres from 'postgres';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { users } from '../../shared/schema';
-import { eq } from 'drizzle-orm';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -57,42 +54,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     prepare: false,
     max: 1,
   });
-  const db = drizzle(sql);
 
   try {
     // auth.user already contains the verified Supabase user from auth verification
     const supabaseUser = auth.user;
 
-    const existingUser = await db.query.users.findFirst({
-      where: eq(users.id, supabaseUser.id)
-    });
+    // Check if user exists using raw SQL
+    const existingUsers = await sql`
+      SELECT * FROM users WHERE id = ${supabaseUser.id}
+    `;
 
-    if (existingUser) {
-      // For POST, allow updates
-      if (req.method === 'POST') {
-        const { email, firstName, lastName, role } = req.body;
-        
-        const updateData: any = {};
-        if (email !== undefined) updateData.email = email;
-        if (firstName !== undefined) updateData.firstName = firstName;
-        if (lastName !== undefined) updateData.lastName = lastName;
-        if (role !== undefined) updateData.role = role;
-
-        if (Object.keys(updateData).length > 0) {
-          const [updatedUser] = await db.update(users)
-            .set(updateData)
-            .where(eq(users.id, supabaseUser.id))
-            .returning();
-
-          await sql.end();
-          return res.status(200).json(updatedUser);
-        }
-      }
-
+    if (existingUsers.length > 0) {
+      // User exists
       await sql.end();
-      return res.status(200).json(existingUser);
+      return res.status(200).json(existingUsers[0]);
     } else {
-      // Create new user
+      // Create new user using raw SQL
       const { email, firstName, lastName, role } = req.body || {};
       
       const emailValue = email || supabaseUser.email;
@@ -107,17 +84,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const firstPart = parts[0] || 'User';
       const lastParts = parts.slice(1);
 
-      const [newUser] = await db.insert(users).values({
-        id: supabaseUser.id,
-        email: emailValue,
-        firstName: firstName || firstPart,
-        lastName: lastName || lastParts.join(' ') || null,
-        profileImageUrl: supabaseUser.user_metadata?.avatar_url || null,
-        role: role || 'landlord',
-      }).returning();
+      const newUsers = await sql`
+        INSERT INTO users (id, email, first_name, last_name, profile_image_url, role, created_at, updated_at)
+        VALUES (
+          ${supabaseUser.id},
+          ${emailValue},
+          ${firstName || firstPart},
+          ${lastName || lastParts.join(' ') || null},
+          ${supabaseUser.user_metadata?.avatar_url || null},
+          ${role || 'landlord'},
+          NOW(),
+          NOW()
+        )
+        RETURNING *
+      `;
 
       await sql.end();
-      return res.status(201).json(newUser);
+      return res.status(201).json(newUsers[0]);
     }
   } catch (error) {
     await sql.end();
