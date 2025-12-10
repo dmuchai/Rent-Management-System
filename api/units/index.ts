@@ -1,7 +1,8 @@
 // Consolidated handler for /api/units and /api/units/[id]
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { db } from '../_lib/db';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import { units, properties, insertUnitSchema } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -33,7 +34,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { id, propertyId } = req.query;
+  // Create database connection
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+
+  const sql = postgres(databaseUrl, { 
+    prepare: false,
+    max: 1,
+  });
+  const db = drizzle(sql);
+
+  try {
+const { id, propertyId } = req.query;
 
   // Handle /api/units/[id] - specific unit operations
   if (id && typeof id === 'string') {
@@ -212,4 +226,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(405).json({ message: 'Method not allowed' });
+  } finally {
+    await sql.end();
+  }
 }

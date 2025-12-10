@@ -1,7 +1,8 @@
 // Consolidated handler for /api/properties and /api/properties/[id]
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
-import { db } from '../_lib/db';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import { properties, insertPropertySchema } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -41,7 +42,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { id } = req.query;
+  // Create database connection
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+
+  const sql = postgres(databaseUrl, { 
+    prepare: false,
+    max: 1,
+  });
+  const db = drizzle(sql);
+
+  try {
+    const { id } = req.query;
 
   // Handle /api/properties/[id] - specific property operations
   if (id && typeof id === 'string') {
@@ -179,4 +193,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
+  } finally {
+    await sql.end();
+  }
 }

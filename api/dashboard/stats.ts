@@ -56,4 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return res.status(500).json({ error: 'Failed to fetch dashboard statistics', details: errorMessage });
   }
+  } finally {
+    await sql.end();
+  }
 }
