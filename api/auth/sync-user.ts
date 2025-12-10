@@ -59,9 +59,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // auth.user already contains the verified Supabase user from auth verification
     const supabaseUser = auth.user;
 
-    // Check if user exists using raw SQL
+    // Check if user exists using raw SQL (explicitly use public schema)
     const existingUsers = await sql`
-      SELECT * FROM users WHERE id = ${supabaseUser.id}
+      SELECT * FROM public.users WHERE id = ${supabaseUser.id}
     `;
 
     if (existingUsers.length > 0) {
@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const lastParts = parts.slice(1);
 
       const newUsers = await sql`
-        INSERT INTO users (id, email, first_name, last_name, profile_image_url, role, created_at, updated_at)
+        INSERT INTO public.users (id, email, first_name, last_name, profile_image_url, role, created_at, updated_at)
         VALUES (
           ${supabaseUser.id},
           ${emailValue},
