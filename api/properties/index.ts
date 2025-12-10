@@ -146,12 +146,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Handle /api/properties - list all or create new
   if (req.method === 'GET') {
     try {
-      const userProperties = await db.query.properties.findMany({
-        where: eq(properties.ownerId, auth.userId),
-        with: {
-          units: true,
-        }
-      });
+      // Use raw SQL to get properties
+      const userProperties = await sql`
+        SELECT * FROM public.properties 
+        WHERE owner_id = ${auth.userId}
+        ORDER BY created_at DESC
+      `;
 
       return res.status(200).json(userProperties);
     } catch (error) {
@@ -165,26 +165,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('Request body:', JSON.stringify(req.body, null, 2));
       console.log('Auth userId:', auth.userId);
       
-      const propertyData = insertPropertySchema.parse({ 
-        ...req.body, 
-        ownerId: auth.userId 
-      });
+      const { name, address, propertyType, totalUnits, description, imageUrl } = req.body;
       
-      console.log('Validated property data:', JSON.stringify(propertyData, null, 2));
+      // Validate required fields
+      if (!name || !address || !propertyType || !totalUnits) {
+        return res.status(400).json({ message: 'Missing required fields' });
+      }
       
-      const [property] = await db.insert(properties)
-        .values(propertyData)
-        .returning();
+      console.log('Creating property with raw SQL');
+      
+      // Use raw SQL to insert property
+      const newProperties = await sql`
+        INSERT INTO public.properties (
+          name, address, property_type, total_units, description, image_url, owner_id, created_at, updated_at
+        )
+        VALUES (
+          ${name},
+          ${address},
+          ${propertyType},
+          ${parseInt(totalUnits)},
+          ${description || null},
+          ${imageUrl || null},
+          ${auth.userId},
+          NOW(),
+          NOW()
+        )
+        RETURNING *
+      `;
 
-      return res.status(201).json(property);
+      return res.status(201).json(newProperties[0]);
     } catch (error) {
       console.error('Error creating property:', error);
       console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       console.error('Error message:', error instanceof Error ? error.message : String(error));
       
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: 'Invalid input', errors: error.errors });
-      }
       return res.status(500).json({ 
         message: 'Failed to create property',
         error: error instanceof Error ? error.message : String(error)
