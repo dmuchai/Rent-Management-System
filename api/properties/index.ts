@@ -51,6 +51,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = postgres(databaseUrl, { 
     prepare: false,
     max: 1,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    ssl: 'require',
   });
   const db = drizzle(sql);
 
