@@ -1,93 +1,57 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
+import { API_BASE_URL } from "@/lib/config";
 
 export default function AuthCallback() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const [status, setStatus] = useState("Completing sign in...");
 
   useEffect(() => {
     const handleAuthCallback = async () => {
-      // Supabase OAuth returns tokens in URL hash fragment
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const accessToken = hashParams.get('access_token');
-      const refreshToken = hashParams.get('refresh_token');
-      
-      // Also check query params as fallback
       const urlParams = new URLSearchParams(window.location.search);
-      const token = accessToken || urlParams.get('token');
-      const refresh = refreshToken || urlParams.get('refresh');
+      const token = urlParams.get('token');
+      const refreshToken = urlParams.get('refresh');
 
       if (token) {
         try {
-          console.log('Auth callback: Setting session with token');
+          // Store tokens in localStorage for the frontend to use
+          localStorage.setItem('supabase-auth-token', token);
+          if (refreshToken) {
+            localStorage.setItem('supabase-refresh-token', refreshToken);
+          }
+
+          setStatus("Syncing user profile...");
           
-          // Set session via server-side httpOnly cookies instead of localStorage
-          // This protects tokens from XSS attacks
-          const response = await fetch('/api/auth/set-session', {
+          // Call sync-user to ensure user exists in public.users table
+          const syncResponse = await fetch(`${API_BASE_URL}/api/auth/sync-user`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              access_token: token,
-              refresh_token: refresh
-            }),
-            credentials: 'include' // Important: include cookies
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include', // Send httpOnly cookies
           });
 
-          const responseText = await response.text();
-          console.log('Set session response:', response.status, responseText);
-          
-          if (!response.ok) {
-            let errorData;
-            try {
-              errorData = JSON.parse(responseText);
-            } catch {
-              errorData = { error: 'Unknown error', details: responseText };
-            }
-            console.error('Set session failed:', response.status, errorData);
-            throw new Error(`Failed to establish session: ${errorData.error || errorData.details || response.statusText}`);
+          if (!syncResponse.ok) {
+            console.error('Failed to sync user:', await syncResponse.text());
+            // Continue anyway - user might already exist
           }
+
+          setStatus("Redirecting to dashboard...");
 
           // Clear the auth query cache to force a refresh
-          await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-          
-          // Wait for the auth query to refetch
-          await queryClient.refetchQueries({ queryKey: ["/api/auth/user"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
 
-          // Sync user to database
-          try {
-            console.log('Syncing user to database...');
-            const syncResponse = await fetch('/api/auth/sync-user', {
-              method: 'POST',
-              credentials: 'include'
-            });
-            
-            if (syncResponse.ok) {
-              console.log('User synced to database successfully');
-            } else {
-              console.error('Failed to sync user to database:', await syncResponse.text());
-            }
-          } catch (syncError) {
-            console.error('Error syncing user:', syncError);
-            // Don't fail the login if user sync fails
-          }
-
-          console.log('Session established successfully, redirecting to dashboard...');
-          
           // Clean up URL and redirect to dashboard
-          setTimeout(() => {
-            window.history.replaceState({}, '', '/dashboard');
-            setLocation('/dashboard');
-            console.log('Redirect executed');
-          }, 100);
+          window.history.replaceState({}, '', '/dashboard');
+          setLocation('/dashboard');
         } catch (error) {
           console.error('Auth callback error:', error);
-          const errorMsg = error instanceof Error ? error.message : 'unknown error';
-          setLocation(`/?error=auth_callback_failed&details=${encodeURIComponent(errorMsg)}`);
+          setLocation('/?error=auth_callback_failed');
         }
       } else {
         // No token, redirect to home with error
-        console.error('No access token found in URL');
         setLocation('/?error=no_token');
       }
     };
@@ -99,7 +63,7 @@ export default function AuthCallback() {
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-        <p className="text-muted-foreground">Completing sign in...</p>
+        <p className="text-muted-foreground">{status}</p>
       </div>
     </div>
   );
