@@ -10,49 +10,78 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleAuthCallback = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get('token');
-      const refreshToken = urlParams.get('refresh');
+      try {
+        setStatus("Processing authentication...");
 
-      if (token) {
-        try {
-          // Store tokens in localStorage for the frontend to use
-          localStorage.setItem('supabase-auth-token', token);
-          if (refreshToken) {
-            localStorage.setItem('supabase-refresh-token', refreshToken);
-          }
+        // Extract the hash fragment from URL (Supabase OAuth callback format)
+        // URL format: /auth-callback#access_token=xxx&refresh_token=yyy&...
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const error = hashParams.get('error');
+        const errorDescription = hashParams.get('error_description');
 
-          setStatus("Syncing user profile...");
-          
-          // Call sync-user to ensure user exists in public.users table
-          const syncResponse = await fetch(`${API_BASE_URL}/api/auth/sync-user`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include', // Send httpOnly cookies
-          });
-
-          if (!syncResponse.ok) {
-            console.error('Failed to sync user:', await syncResponse.text());
-            // Continue anyway - user might already exist
-          }
-
-          setStatus("Redirecting to dashboard...");
-
-          // Clear the auth query cache to force a refresh
-          queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-
-          // Clean up URL and redirect to dashboard
-          window.history.replaceState({}, '', '/dashboard');
-          setLocation('/dashboard');
-        } catch (error) {
-          console.error('Auth callback error:', error);
-          setLocation('/?error=auth_callback_failed');
+        if (error) {
+          console.error('OAuth error:', error, errorDescription);
+          setLocation(`/?error=${error}`);
+          return;
         }
-      } else {
-        // No token, redirect to home with error
-        setLocation('/?error=no_token');
+
+        if (!accessToken) {
+          console.error('No access token in callback');
+          setLocation('/?error=no_token');
+          return;
+        }
+
+        setStatus("Setting up session...");
+
+        // Send tokens to backend to set httpOnly cookies
+        const setSessionResponse = await fetch(`${API_BASE_URL}/api/auth/set-session`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          }),
+          credentials: 'include',
+        });
+
+        if (!setSessionResponse.ok) {
+          const errorText = await setSessionResponse.text();
+          console.error('Failed to set session:', errorText);
+          setLocation('/?error=session_setup_failed');
+          return;
+        }
+
+        setStatus("Syncing user profile...");
+
+        // Call sync-user to ensure user exists in public.users table
+        const syncResponse = await fetch(`${API_BASE_URL}/api/auth/sync-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        });
+
+        if (!syncResponse.ok) {
+          console.error('Failed to sync user:', await syncResponse.text());
+          // Continue anyway - user might already exist
+        }
+
+        setStatus("Redirecting to dashboard...");
+
+        // Clear the auth query cache to force a refresh
+        await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+
+        // Clean up URL and redirect to dashboard
+        window.history.replaceState({}, '', '/dashboard');
+        setLocation('/dashboard');
+      } catch (error) {
+        console.error('Auth callback error:', error);
+        setLocation('/?error=auth_callback_failed');
       }
     };
 
