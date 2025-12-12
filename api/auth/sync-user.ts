@@ -58,16 +58,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // auth.user already contains the verified Supabase user from auth verification
     const supabaseUser = auth.user;
+    
+    console.log('Syncing user:', supabaseUser.id, supabaseUser.email);
 
     // Check if user exists using raw SQL (explicitly use public schema)
     const existingUsers = await sql`
       SELECT * FROM public.users WHERE id = ${supabaseUser.id}
     `;
+    
+    console.log('Existing users found:', existingUsers.length);
 
     if (existingUsers.length > 0) {
-      // User exists
+      // User exists - update their info
+      const emailValue = supabaseUser.email;
+      const fullName = supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || emailValue?.split('@')[0] || 'User';
+      const parts = fullName.trim().split(/\s+/).filter((part: string) => part.length > 0);
+      
+      const firstPart = parts[0] || 'User';
+      const lastParts = parts.slice(1);
+      
+      const updatedUsers = await sql`
+        UPDATE public.users
+        SET 
+          email = ${emailValue},
+          first_name = ${firstPart},
+          last_name = ${lastParts.join(' ') || existingUsers[0].last_name},
+          profile_image_url = ${supabaseUser.user_metadata?.avatar_url || existingUsers[0].profile_image_url},
+          updated_at = NOW()
+        WHERE id = ${supabaseUser.id}
+        RETURNING *
+      `;
+      
       await sql.end();
-      return res.status(200).json(existingUsers[0]);
+      console.log('User updated successfully');
+      return res.status(200).json(updatedUsers[0]);
     } else {
       // Create new user using raw SQL
       const { email, firstName, lastName, role } = req.body || {};
@@ -84,6 +108,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const firstPart = parts[0] || 'User';
       const lastParts = parts.slice(1);
 
+      console.log('Creating new user with:', { emailValue, firstPart, lastParts });
+
       const newUsers = await sql`
         INSERT INTO public.users (id, email, first_name, last_name, profile_image_url, role, created_at, updated_at)
         VALUES (
@@ -96,10 +122,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           NOW(),
           NOW()
         )
+        ON CONFLICT (id) DO UPDATE SET
+          email = EXCLUDED.email,
+          first_name = EXCLUDED.first_name,
+          last_name = EXCLUDED.last_name,
+          profile_image_url = EXCLUDED.profile_image_url,
+          updated_at = NOW()
         RETURNING *
       `;
 
       await sql.end();
+      console.log('User created successfully');
       return res.status(201).json(newUsers[0]);
     }
   } catch (error) {
@@ -107,6 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('Error syncing user:', errorMessage);
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+    console.error('Error details:', error);
     return res.status(500).json({ error: 'Internal server error', details: errorMessage });
   }
 }
