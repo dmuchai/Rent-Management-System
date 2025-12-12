@@ -136,11 +136,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json(newUsers[0]);
     }
   } catch (error) {
-    await sql.end();
+    try {
+      await sql.end();
+    } catch (endError) {
+      console.error('Error closing SQL connection:', endError);
+    }
+    
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Error syncing user:', errorMessage);
+    console.error('=== Error syncing user ===');
+    console.error('Error message:', errorMessage);
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
-    console.error('Error details:', error);
-    return res.status(500).json({ error: 'Internal server error', details: errorMessage });
+    console.error('Error details:', JSON.stringify(error, null, 2));
+    console.error('========================');
+    
+    return res.status(500).json({ 
+      error: 'Internal server error', 
+      details: errorMessage,
+      hint: 'Check if DATABASE_URL is configured correctly in Vercel'
+    });
   }
 }

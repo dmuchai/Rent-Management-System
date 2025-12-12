@@ -26,15 +26,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Set httpOnly cookies for the tokens
-    const isProduction = process.env.NODE_ENV === 'production';
+    // Vercel deployments are always HTTPS in production
+    const isProduction = process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production';
     
-    // Set access token cookie
-    res.setHeader('Set-Cookie', [
-      `supabase-auth-token=${access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${isProduction ? '; Secure' : ''}`,
-      refresh_token 
-        ? `supabase-refresh-token=${refresh_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${isProduction ? '; Secure' : ''}`
-        : ''
-    ].filter(Boolean));
+    // Build cookie strings
+    const cookies = [];
+    
+    // Access token cookie (1 hour)
+    cookies.push(
+      `supabase-auth-token=${access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600${isProduction ? '; Secure' : ''}`
+    );
+    
+    // Refresh token cookie (30 days)
+    if (refresh_token) {
+      cookies.push(
+        `supabase-refresh-token=${refresh_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${isProduction ? '; Secure' : ''}`
+      );
+    }
+    
+    // Set cookies - must use array for multiple Set-Cookie headers
+    res.setHeader('Set-Cookie', cookies);
+
+    console.log('Session cookies set for user:', user.id);
 
     return res.status(200).json({ 
       success: true, 
