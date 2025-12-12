@@ -1,6 +1,7 @@
 // GET /api/dashboard/stats - Get dashboard statistics
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import postgres from 'postgres';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -42,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // For now, return empty stats - we'll add database queries later
+    // Return empty stats for now - database queries will be added later
     return res.status(200).json({
       totalProperties: 0,
       totalTenants: 0,
@@ -55,8 +56,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('Error fetching dashboard stats:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     return res.status(500).json({ error: 'Failed to fetch dashboard statistics', details: errorMessage });
-  }
-  } finally {
-    await sql.end();
   }
 }
