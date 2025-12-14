@@ -12,31 +12,16 @@ if (!supabaseUrl || !supabaseServiceKey) {
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; user: User } | null> {
-  let token: string | undefined;
-
-  // First, try to get token from Authorization header (for backward compatibility)
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  }
-
-  // If no Authorization header, try to get token from httpOnly cookie
-  if (!token && req.headers.cookie) {
-    const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
-      const [key, value] = cookie.trim().split('=');
-      acc[key] = value;
-      return acc;
-    }, {} as Record<string, string>);
-    
-    token = cookies['supabase-auth-token'];
-  }
-
-  if (!token) {
+  // Get token from httpOnly cookie set by auth-callback
+  const authToken = req.cookies['supabase-auth-token'];
+  
+  if (!authToken) {
+    console.error('Auth verification failed: No auth token cookie found');
     return null;
   }
   
   try {
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(authToken);
     
     if (error || !user) {
       console.error('Auth verification failed: Invalid or expired token');
@@ -54,7 +39,7 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
   }
 }
 
-export function requireAuth(handler: (req: VercelRequest, res: VercelResponse, auth: { userId: string; user: User }) => Promise<VercelResponse | void>) {
+export function requireAuth(handler: (req: VercelRequest, res: VercelResponse, auth: { userId: string; user: User }) => Promise<void>) {
   return async (req: VercelRequest, res: VercelResponse) => {
     const auth = await verifyAuth(req);
     
