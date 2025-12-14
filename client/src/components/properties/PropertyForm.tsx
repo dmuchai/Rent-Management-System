@@ -6,7 +6,6 @@ import { insertPropertySchema, type InsertProperty } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { buildPath } from "@/lib/config";
 import {
   Dialog,
   DialogContent,
@@ -72,8 +71,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
           variant: "destructive",
         });
         setTimeout(() => {
-          // Use buildPath to support subdirectory deployments
-          window.location.href = buildPath('api/login');
+          window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'https://rent-management-backend.onrender.com'}/api/login`;
         }, 500);
         return;
       }
@@ -188,7 +186,8 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
                   <FormControl>
                     <Textarea 
                       placeholder="Modern apartment complex with amenities..." 
-                      {...field} 
+                      {...field}
+                      value={field.value || ""}
                       data-testid="input-property-description"
                     />
                   </FormControl>
@@ -206,7 +205,8 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
                   <FormControl>
                     <Input 
                       placeholder="https://example.com/image.jpg" 
-                      {...field} 
+                      {...field}
+                      value={field.value || ""}
                       data-testid="input-property-image"
                     />
                   </FormControl>

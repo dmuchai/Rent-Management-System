@@ -5,7 +5,6 @@ import { insertTenantSchema, type InsertTenant } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { buildPath } from "@/lib/config";
 import {
   Dialog,
   DialogContent,
@@ -65,12 +64,11 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
-          description: "Session expired. Redirecting to login...",
+          description: "You are logged out. Logging in again...",
           variant: "destructive",
         });
         setTimeout(() => {
-          // Use buildPath to support subdirectory deployments
-          window.location.href = buildPath('api/login');
+          window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'https://rent-management-backend.onrender.com'}/api/login`;
         }, 500);
         return;
       }
@@ -174,7 +172,8 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
                   <FormControl>
                     <Input 
                       placeholder="+254 700 000 001" 
-                      {...field} 
+                      {...field}
+                      value={field.value || ""}
                       data-testid="input-tenant-emergency"
                     />
                   </FormControl>

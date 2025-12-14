@@ -6,7 +6,6 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { buildPath } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +32,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
   const queryClient = useQueryClient();
   const [paymentMethod, setPaymentMethod] = useState("mpesa");
 
-  const { data: leases = [] } = useQuery({
+  const { data: leases = [] } = useQuery<any[]>({
     queryKey: ["/api/leases"],
     enabled: !tenantView,
   });
@@ -62,8 +61,8 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
         });
       }
     },
-    onSuccess: (response) => {
-      if (tenantView && response.redirectUrl) {
+    onSuccess: (response: any) => {
+      if (tenantView && response?.redirectUrl) {
         // Redirect to Pesapal for payment
         window.location.href = response.redirectUrl;
       } else {
@@ -80,12 +79,11 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
-          description: "Session expired. Redirecting to login...",
+          description: "You are logged out. Logging in again...",
           variant: "destructive",
         });
         setTimeout(() => {
-          // Use buildPath to support subdirectory deployments
-          window.location.href = buildPath('api/login');
+          window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'https://rent-management-backend.onrender.com'}/api/login`;
         }, 500);
         return;
       }

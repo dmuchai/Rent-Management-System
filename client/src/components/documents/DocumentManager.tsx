@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { buildPath } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
@@ -20,7 +19,7 @@ export default function DocumentManager() {
   const queryClient = useQueryClient();
   const [activeCategory, setActiveCategory] = useState("lease");
 
-  const { data: documents = [], isLoading } = useQuery({
+  const { data: documents = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/documents", { category: activeCategory }],
     retry: false,
   });
@@ -40,12 +39,11 @@ export default function DocumentManager() {
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
-          description: "Session expired. Redirecting to login...",
+          description: "You are logged out. Logging in again...",
           variant: "destructive",
         });
         setTimeout(() => {
-          // Use buildPath to support subdirectory deployments
-          window.location.href = buildPath('api/login');
+          window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'https://rent-management-backend.onrender.com'}/api/login`;
         }, 500);
         return;
       }
@@ -76,7 +74,7 @@ export default function DocumentManager() {
   };
 
   const handleUploadComplete = (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
-    if (result.successful.length > 0) {
+    if (result.successful && result.successful.length > 0) {
       const file = result.successful[0];
       const uploadURL = (file as any).uploadURL;
       

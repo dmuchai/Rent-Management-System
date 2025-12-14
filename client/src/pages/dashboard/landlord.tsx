@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { buildPath } from "@/lib/config";
 import { useLocation } from "wouter";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
@@ -121,8 +120,7 @@ export default function LandlordDashboard() {
         });
         
         // Clear any client-side auth state and redirect
-        // Use buildPath to support subdirectory deployments
-        window.location.href = buildPath('');
+        window.location.href = "/";
       } else {
         throw new Error("Logout failed");
       }
@@ -843,13 +841,13 @@ export default function LandlordDashboard() {
       <div className="flex h-screen">
         <Sidebar 
           activeSection={activeSection} 
-          onSectionChange={setActiveSection}
+          onSectionChange={(section) => setActiveSection(section as DashboardSection)}
         />
         
         <div className="flex-1 overflow-auto">
           <Header 
             title={sectionTitles[activeSection]}
-            onSectionChange={setActiveSection}
+            onSectionChange={(section) => setActiveSection(section as DashboardSection)}
           />
           
           <div className="p-6">
@@ -1084,7 +1082,7 @@ export default function LandlordDashboard() {
                     <SelectValue placeholder="Choose a tenant" />
                   </SelectTrigger>
                   <SelectContent>
-                    {tenants.map((tenant) => (
+                    {tenants.map((tenant: any) => (
                       <SelectItem key={tenant.id} value={tenant.id}>
                         {tenant.firstName} {tenant.lastName}
                       </SelectItem>
@@ -1107,7 +1105,7 @@ export default function LandlordDashboard() {
                     <SelectValue placeholder="Select property (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    {properties.map((property) => (
+                    {properties.map((property: any) => (
                       <SelectItem key={property.id} value={property.id}>
                         {property.name} - {property.address}
                       </SelectItem>
