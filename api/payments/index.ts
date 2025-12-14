@@ -1,142 +1,90 @@
 // GET/POST /api/payments - List all payments or create new payment
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-import postgres from 'postgres';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { payments, leases, units, properties } from '../../shared/schema';
-import { eq, sql, desc, lt, and } from 'drizzle-orm';
+import { requireAuth } from '../_lib/auth';
+import { createDbConnection } from '../_lib/db';
 import { z } from 'zod';
 
-async function verifyAuth(req: VercelRequest) {
-  let token: string | undefined;
-  if (req.headers.cookie) {
-    const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
-      const [key, value] = cookie.trim().split('=');
-      acc[key] = value;
-      return acc;
-    }, {} as Record<string, string>);
-    token = cookies['supabase-auth-token'];
-  }
-  if (!token) return null;
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !supabaseServiceKey) return null;
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return null;
-  return { userId: user.id, user };
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const auth = await verifyAuth(req);
-  
-  if (!auth) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  // Create database connection
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    return res.status(500).json({ error: 'Database not configured' });
-  }
-
-  const sql = postgres(databaseUrl, { 
-    prepare: false,
-    max: 1,
-  });
-  const db = drizzle(sql);
-
+export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
+  const sql = createDbConnection();
   try {
-if (req.method === 'GET') {
-    try {
+    if (req.method === 'GET') {
       // Parse pagination parameters
-      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100); // Max 100 items per page
-      const cursor = req.query.cursor as string | undefined; // Payment ID to start after
-      const status = req.query.status as string | undefined; // Optional filter by status
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      const status = req.query.status as string | undefined;
 
-      // Get all payments for landlord's properties with pagination
-      const userProperties = await db.query.properties.findMany({
-        where: eq(properties.ownerId, auth.userId),
-        with: {
-          units: {
-            with: {
-              leases: {
-                with: {
-                  payments: {
-                    orderBy: (payments, { desc }) => [desc(payments.createdAt)],
-                    limit: limit + 1, // Fetch one extra to check if there are more
-                    where: cursor ? lt(payments.id, cursor) : undefined,
-                  },
-                  tenant: true,
-                }
-              }
-            }
-          }
-        }
-      });
-
-      // Flatten payments and enrich with context
-      let allPayments: any[] = [];
-      userProperties.forEach(property => {
-        property.units.forEach(unit => {
-          unit.leases.forEach(lease => {
-            lease.payments.forEach(payment => {
-              // Apply status filter if provided
-              if (status && payment.status !== status) {
-                return;
-              }
-              
-              allPayments.push({
-                ...payment,
-                tenant: lease.tenant,
-                unit: { id: unit.id, unitNumber: unit.unitNumber },
-                property: { id: property.id, name: property.name }
-              amount: z.coerce.number().positive('Amount must be positive'),
-            });
-          });
-        });
-      });
-
-      // Sort by createdAt descending for consistent ordering
-      allPayments.sort((a, b) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
-        return dateB - dateA;
-      });
-
-      // Check if there are more results
-      const hasMore = allPayments.length > limit;
-      if (hasMore) {
-        allPayments = allPayments.slice(0, limit);
+      // Get all payments for landlord's properties
+      let payments;
+      if (status) {
+        payments = await sql`
+          SELECT 
+            pm.*,
+            t.id as tenant_id, t.first_name, t.last_name, t.email as tenant_email,
+            u.id as unit_id, u.unit_number,
+            p.id as property_id, p.name as property_name
+          FROM public.payments pm
+          INNER JOIN public.leases l ON pm.lease_id = l.id
+          INNER JOIN public.tenants t ON l.tenant_id = t.id
+          INNER JOIN public.units u ON l.unit_id = u.id
+          INNER JOIN public.properties p ON u.property_id = p.id
+          WHERE p.owner_id = ${auth.userId} AND pm.status = ${status}
+          ORDER BY pm.created_at DESC
+          LIMIT ${limit}
+        `;
+      } else {
+        payments = await sql`
+          SELECT 
+            pm.*,
+            t.id as tenant_id, t.first_name, t.last_name, t.email as tenant_email,
+            u.id as unit_id, u.unit_number,
+            p.id as property_id, p.name as property_name
+          FROM public.payments pm
+          INNER JOIN public.leases l ON pm.lease_id = l.id
+          INNER JOIN public.tenants t ON l.tenant_id = t.id
+          INNER JOIN public.units u ON l.unit_id = u.id
+          INNER JOIN public.properties p ON u.property_id = p.id
+          WHERE p.owner_id = ${auth.userId}
+          ORDER BY pm.created_at DESC
+          LIMIT ${limit}
+        `;
       }
 
-      // Get the cursor for next page (ID of last item)
-      const nextCursor = hasMore && allPayments.length > 0 
-        ? allPayments[allPayments.length - 1].id 
-        : null;
+      // Format the response
+      const formattedPayments = payments.map((payment: any) => ({
+        id: payment.id,
+        leaseId: payment.lease_id,
+        amount: payment.amount,
+        dueDate: payment.due_date,
+        paidDate: payment.paid_date,
+        paymentMethod: payment.payment_method,
+        status: payment.status,
+        description: payment.description,
+        createdAt: payment.created_at,
+        tenant: {
+          id: payment.tenant_id,
+          firstName: payment.first_name,
+          lastName: payment.last_name,
+          email: payment.tenant_email,
+        },
+        unit: {
+          id: payment.unit_id,
+          unitNumber: payment.unit_number,
+        },
+        property: {
+          id: payment.property_id,
+          name: payment.property_name,
+        }
+      }));
 
-      return res.status(200).json({
-        data: allPayments,
+      res.status(200).json({
+        data: formattedPayments,
         pagination: {
           limit,
-          nextCursor,
-      if (!lease.unit || !lease.unit.property || lease.unit.property.ownerId !== auth.userId) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
+          nextCursor: null,
         }
       });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('Error fetching payments:', errorMessage);
-      if (process.env.NODE_ENV !== 'production' && error instanceof Error) {
-        console.error('Stack trace:', error.stack);
-      }
-      return res.status(500).json({ message: 'Failed to fetch payments' });
     }
-  }
 
-  if (req.method === 'POST') {
-    try {
+    if (req.method === 'POST') {
       const paymentCreateSchema = z.object({
         leaseId: z.string().min(1, 'Lease is required'),
         amount: z.string().min(1, 'Amount is required'),
@@ -150,49 +98,44 @@ if (req.method === 'GET') {
       const paymentData = paymentCreateSchema.parse(req.body);
 
       // Verify lease belongs to landlord's property
-      const lease = await db.query.leases.findFirst({
-        where: eq(leases.id, paymentData.leaseId),
-        with: {
-          unit: {
-            with: {
-              property: true,
-            }
-          }
-        }
-      });
+      const leases = await sql`
+        SELECT l.*, u.property_id, p.owner_id
+        FROM public.leases l
+        INNER JOIN public.units u ON l.unit_id = u.id
+        INNER JOIN public.properties p ON u.property_id = p.id
+        WHERE l.id = ${paymentData.leaseId}
+      `;
+      if (leases.length === 0) {
+        res.status(404).json({ message: 'Lease not found' });
+      } else if (leases[0].owner_id !== auth.userId) {
+        res.status(403).json({ message: 'Access denied' });
+      } else {
+        const [payment] = await sql`
+        INSERT INTO public.payments (lease_id, amount, due_date, paid_date, payment_method, status, description)
+        VALUES (
+          ${paymentData.leaseId},
+          ${paymentData.amount},
+          ${new Date(paymentData.dueDate)},
+          ${paymentData.paidDate ? new Date(paymentData.paidDate) : null},
+          ${paymentData.paymentMethod},
+          ${paymentData.status},
+          ${paymentData.description || null}
+        )
+        RETURNING *
+        `;
 
-      if (!lease) {
-        return res.status(404).json({ message: 'Lease not found' });
+        res.status(201).json(payment);
       }
-
-      if (lease.unit.property.ownerId !== auth.userId) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      const [payment] = await db.insert(payments)
-        .values({
-          ...paymentData,
-          dueDate: new Date(paymentData.dueDate),
-          paidDate: paymentData.paidDate ? new Date(paymentData.paidDate) : null,
-        })
-        .returning();
-
-      return res.status(201).json(payment);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('Error creating payment:', errorMessage);
-      if (process.env.NODE_ENV !== 'production' && error instanceof Error) {
-        console.error('Stack trace:', error.stack);
-      }
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: 'Invalid input', errors: error.errors });
-      }
-      return res.status(500).json({ message: 'Failed to create payment' });
+    } else {
+      res.status(405).json({ error: 'Method not allowed' });
     }
-  }
-
-  return res.status(405).json({ error: 'Method not allowed' });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ message: 'Invalid input', errors: error.errors });
+    } else {
+      res.status(500).json({ message: 'Failed to process request' });
+    }
   } finally {
     await sql.end();
   }
-}
+});

@@ -2,9 +2,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import postgres from 'postgres';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { properties, insertPropertySchema } from '../../shared/schema';
-import { eq } from 'drizzle-orm';
+import { insertPropertySchema } from '../../shared/schema';
 import { z } from 'zod';
 
 async function verifyAuth(req: VercelRequest) {
@@ -55,161 +53,159 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     connect_timeout: 10,
     ssl: 'require',
   });
-  const db = drizzle(sql);
 
   try {
     const { id } = req.query;
 
-  // Handle /api/properties/[id] - specific property operations
-  if (id && typeof id === 'string') {
-    if (req.method === 'GET') {
-      try {
-        const property = await db.query.properties.findFirst({
-          where: eq(properties.id, id),
-          with: {
-            units: true,
-          }
-        });
+    // Handle /api/properties/[id] - specific property operations
+    if (id && typeof id === 'string') {
+      if (req.method === 'GET') {
+        // Get property with units using raw SQL
+        const propertyResult = await sql`
+          SELECT p.*, 
+            json_agg(
+              json_build_object(
+                'id', u.id,
+                'unitNumber', u.unit_number,
+                'bedrooms', u.bedrooms,
+                'bathrooms', u.bathrooms,
+                'rentAmount', u.rent_amount,
+                'isOccupied', u.is_occupied
+              )
+            ) FILTER (WHERE u.id IS NOT NULL) as units
+          FROM public.properties p
+          LEFT JOIN public.units u ON u.property_id = p.id
+          WHERE p.id = ${id}
+          GROUP BY p.id
+        `;
 
-        if (!property) {
-          return res.status(404).json({ message: 'Property not found' });
+        if (propertyResult.length === 0) {
+          res.status(404).json({ message: 'Property not found' });
+        } else if (propertyResult[0].owner_id !== auth.userId) {
+          res.status(403).json({ message: 'Access denied' });
+        } else {
+          res.status(200).json({
+            id: propertyResult[0].id,
+            name: propertyResult[0].name,
+            address: propertyResult[0].address,
+            propertyType: propertyResult[0].property_type,
+            totalUnits: propertyResult[0].total_units,
+            description: propertyResult[0].description,
+            imageUrl: propertyResult[0].image_url,
+            ownerId: propertyResult[0].owner_id,
+            createdAt: propertyResult[0].created_at,
+            updatedAt: propertyResult[0].updated_at,
+            units: propertyResult[0].units || []
+          });
         }
-
-        // Verify ownership
-        if (property.ownerId !== auth.userId) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-
-        return res.status(200).json(property);
-      } catch (error) {
-        console.error('Error fetching property:', error);
-        return res.status(500).json({ message: 'Failed to fetch property' });
-      }
-    }
-
-    if (req.method === 'PUT') {
-      try {
+      } else if (req.method === 'PUT') {
         // First verify ownership
-        const existingProperty = await db.query.properties.findFirst({
-          where: eq(properties.id, id)
-        });
+        const existingProperty = await sql`
+          SELECT * FROM public.properties WHERE id = ${id}
+        `;
 
-        if (!existingProperty) {
-          return res.status(404).json({ message: 'Property not found' });
+        if (existingProperty.length === 0) {
+          res.status(404).json({ message: 'Property not found' });
+        } else if (existingProperty[0].owner_id !== auth.userId) {
+          res.status(403).json({ message: 'Access denied' });
+        } else {
+          const propertyData = insertPropertySchema.partial().parse(req.body);
+          
+          // Update all fields at once (simpler approach)
+          const [updatedProperty] = await sql`
+            UPDATE public.properties 
+            SET 
+              name = COALESCE(${propertyData.name || null}, name),
+              address = COALESCE(${propertyData.address || null}, address),
+              property_type = COALESCE(${propertyData.propertyType || null}, property_type),
+              total_units = COALESCE(${propertyData.totalUnits || null}, total_units),
+              description = COALESCE(${propertyData.description !== undefined ? propertyData.description : null}, description),
+              image_url = COALESCE(${propertyData.imageUrl !== undefined ? propertyData.imageUrl : null}, image_url),
+              updated_at = NOW()
+            WHERE id = ${id}
+            RETURNING *
+          `;
+
+          res.status(200).json(updatedProperty);
         }
+      } else if (req.method === 'DELETE') {
+        // First verify ownership
+        const existingProperty = await sql`
+          SELECT * FROM public.properties WHERE id = ${id}
+        `;
 
-        if (existingProperty.ownerId !== auth.userId) {
-          return res.status(403).json({ message: 'Access denied' });
+        if (existingProperty.length === 0) {
+          res.status(404).json({ message: 'Property not found' });
+        } else if (existingProperty[0].owner_id !== auth.userId) {
+          res.status(403).json({ message: 'Access denied' });
+        } else {
+          await sql`DELETE FROM public.properties WHERE id = ${id}`;
+          res.status(204).send('');
         }
+      } else {
+        res.status(405).json({ message: 'Method not allowed' });
+      }
+    } else {
+      // Handle /api/properties - list all or create new
+      if (req.method === 'GET') {
+        // Use raw SQL to get properties
+        const userProperties = await sql`
+          SELECT * FROM public.properties 
+          WHERE owner_id = ${auth.userId}
+          ORDER BY created_at DESC
+        `;
 
-        const propertyData = insertPropertySchema.partial().parse(req.body);
+        res.status(200).json(userProperties);
+      } else if (req.method === 'POST') {
+        console.log('Request body:', JSON.stringify(req.body, null, 2));
+        console.log('Auth userId:', auth.userId);
         
-        const [updatedProperty] = await db.update(properties)
-          .set(propertyData)
-          .where(eq(properties.id, id))
-          .returning();
+        const { name, address, propertyType, totalUnits, description, imageUrl } = req.body;
+        
+        // Validate required fields
+        if (!name || !address || !propertyType || !totalUnits) {
+          res.status(400).json({ message: 'Missing required fields' });
+        } else {
+          console.log('Creating property with raw SQL');
+          
+          // Use raw SQL to insert property
+          const newProperties = await sql`
+            INSERT INTO public.properties (
+              name, address, property_type, total_units, description, image_url, owner_id, created_at, updated_at
+            )
+            VALUES (
+              ${name},
+              ${address},
+              ${propertyType},
+              ${parseInt(totalUnits)},
+              ${description || null},
+              ${imageUrl || null},
+              ${auth.userId},
+              NOW(),
+              NOW()
+            )
+            RETURNING *
+          `;
 
-        return res.status(200).json(updatedProperty);
-      } catch (error) {
-        console.error('Error updating property:', error);
-        if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: 'Invalid input', errors: error.errors });
+          res.status(201).json(newProperties[0]);
         }
-        return res.status(500).json({ message: 'Failed to update property' });
+      } else {
+        res.status(405).json({ error: 'Method not allowed' });
       }
     }
-
-    if (req.method === 'DELETE') {
-      try {
-        // First verify ownership
-        const existingProperty = await db.query.properties.findFirst({
-          where: eq(properties.id, id)
-        });
-
-        if (!existingProperty) {
-          return res.status(404).json({ message: 'Property not found' });
-        }
-
-        if (existingProperty.ownerId !== auth.userId) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-
-        await db.delete(properties).where(eq(properties.id, id));
-
-        return res.status(204).send('');
-      } catch (error) {
-        console.error('Error deleting property:', error);
-        return res.status(500).json({ message: 'Failed to delete property' });
-      }
-    }
-
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
-
-  // Handle /api/properties - list all or create new
-  if (req.method === 'GET') {
-    try {
-      // Use raw SQL to get properties
-      const userProperties = await sql`
-        SELECT * FROM public.properties 
-        WHERE owner_id = ${auth.userId}
-        ORDER BY created_at DESC
-      `;
-
-      return res.status(200).json(userProperties);
-    } catch (error) {
-      console.error('Error fetching properties:', error);
-      return res.status(500).json({ message: 'Failed to fetch properties' });
-    }
-  }
-
-  if (req.method === 'POST') {
-    try {
-      console.log('Request body:', JSON.stringify(req.body, null, 2));
-      console.log('Auth userId:', auth.userId);
-      
-      const { name, address, propertyType, totalUnits, description, imageUrl } = req.body;
-      
-      // Validate required fields
-      if (!name || !address || !propertyType || !totalUnits) {
-        return res.status(400).json({ message: 'Missing required fields' });
-      }
-      
-      console.log('Creating property with raw SQL');
-      
-      // Use raw SQL to insert property
-      const newProperties = await sql`
-        INSERT INTO public.properties (
-          name, address, property_type, total_units, description, image_url, owner_id, created_at, updated_at
-        )
-        VALUES (
-          ${name},
-          ${address},
-          ${propertyType},
-          ${parseInt(totalUnits)},
-          ${description || null},
-          ${imageUrl || null},
-          ${auth.userId},
-          NOW(),
-          NOW()
-        )
-        RETURNING *
-      `;
-
-      return res.status(201).json(newProperties[0]);
-    } catch (error) {
-      console.error('Error creating property:', error);
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      console.error('Error message:', error instanceof Error ? error.message : String(error));
-      
-      return res.status(500).json({ 
-        message: 'Failed to create property',
+  } catch (error) {
+    console.error('Error in properties handler:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ message: 'Invalid input', errors: error.errors });
+    } else {
+      res.status(500).json({ 
+        message: 'Failed to process request',
         error: error instanceof Error ? error.message : String(error)
       });
     }
-  }
-
-  return res.status(405).json({ error: 'Method not allowed' });
   } finally {
     await sql.end();
   }

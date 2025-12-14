@@ -1,93 +1,63 @@
 // GET/POST /api/leases - List all leases or create new lease
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-import postgres from 'postgres';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { leases, units, properties, tenants } from '../../shared/schema';
-import { eq } from 'drizzle-orm';
+import { requireAuth } from '../_lib/auth';
+import { createDbConnection } from '../_lib/db';
 import { z } from 'zod';
 
-async function verifyAuth(req: VercelRequest) {
-  let token: string | undefined;
-  if (req.headers.cookie) {
-    const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
-      const [key, value] = cookie.trim().split('=');
-      acc[key] = value;
-      return acc;
-    }, {} as Record<string, string>);
-    token = cookies['supabase-auth-token'];
-  }
-  if (!token) return null;
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !supabaseServiceKey) return null;
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return null;
-  return { userId: user.id, user };
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const auth = await verifyAuth(req);
-  
-  if (!auth) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  // Create database connection
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    return res.status(500).json({ error: 'Database not configured' });
-  }
-
-  const sql = postgres(databaseUrl, { 
-    prepare: false,
-    max: 1,
-  });
-  const db = drizzle(sql);
-
+export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
+  const sql = createDbConnection();
   try {
-if (req.method === 'GET') {
-    try {
-      // Get all leases for landlord's properties
-      const userProperties = await db.query.properties.findMany({
-        where: eq(properties.ownerId, auth.userId),
-        with: {
-          units: {
-            with: {
-              leases: {
-                with: {
-                  tenant: true,
-                  unit: true,
-                }
-              }
-            }
-          }
+    if (req.method === 'GET') {
+      // Get all leases for landlord's properties with tenant and unit details
+      const leases = await sql`
+        SELECT 
+          l.*,
+          t.id as tenant_id, t.first_name, t.last_name, t.email as tenant_email, t.phone as tenant_phone,
+          u.id as unit_id, u.unit_number, u.bedrooms, u.bathrooms, u.rent_amount as unit_rent,
+          p.id as property_id, p.name as property_name
+        FROM public.leases l
+        INNER JOIN public.tenants t ON l.tenant_id = t.id
+        INNER JOIN public.units u ON l.unit_id = u.id
+        INNER JOIN public.properties p ON u.property_id = p.id
+        WHERE p.owner_id = ${auth.userId}
+        ORDER BY l.created_at DESC
+      `;
+
+      // Format the response to match expected structure
+      const formattedLeases = leases.map((lease: any) => ({
+        id: lease.id,
+        tenantId: lease.tenant_id,
+        unitId: lease.unit_id,
+        startDate: lease.start_date,
+        endDate: lease.end_date,
+        rentAmount: lease.rent_amount,
+        depositAmount: lease.deposit_amount,
+        isActive: lease.is_active,
+        createdAt: lease.created_at,
+        tenant: {
+          id: lease.tenant_id,
+          firstName: lease.first_name,
+          lastName: lease.last_name,
+          email: lease.tenant_email,
+          phone: lease.tenant_phone,
+        },
+        unit: {
+          id: lease.unit_id,
+          unitNumber: lease.unit_number,
+          bedrooms: lease.bedrooms,
+          bathrooms: lease.bathrooms,
+          rentAmount: lease.unit_rent,
+        },
+        property: {
+          id: lease.property_id,
+          name: lease.property_name,
         }
-      });
+      }));
 
-      // Flatten leases
-      const allLeases: any[] = [];
-      userProperties.forEach(property => {
-        property.units.forEach(unit => {
-          unit.leases.forEach(lease => {
-            allLeases.push({
-              ...lease,
-              property: { id: property.id, name: property.name }
-            });
-          });
-        });
-      });
-
-      return res.status(200).json(allLeases);
-    } catch (error) {
-      console.error('Error fetching leases:', error);
-      return res.status(500).json({ message: 'Failed to fetch leases' });
+      res.status(200).json(formattedLeases);
     }
-  }
 
-  if (req.method === 'POST') {
-    try {
+    if (req.method === 'POST') {
       const leaseCreateSchema = z.object({
         tenantId: z.string().min(1, 'Tenant is required'),
         unitId: z.string().min(1, 'Unit is required'),
@@ -104,78 +74,69 @@ if (req.method === 'GET') {
       const leaseData = leaseCreateSchema.parse(req.body);
 
       // Verify unit belongs to landlord
-      const unit = await db.query.units.findFirst({
-        where: eq(units.id, leaseData.unitId),
-        with: {
-          property: true,
-        }
-      });
-
-      if (!unit) {
-        return res.status(404).json({ message: 'Unit not found' });
-      }
-
-      if (unit.property.ownerId !== auth.userId) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
+      const units = await sql`
+        SELECT u.*, p.owner_id
+        FROM public.units u
+        INNER JOIN public.properties p ON u.property_id = p.id
+        WHERE u.id = ${leaseData.unitId}
+      `;
+      if (units.length === 0) {
+        res.status(404).json({ message: 'Unit not found' });
+      } else if (units[0].owner_id !== auth.userId) {
+        res.status(403).json({ message: 'Access denied' });
+      } else {
 
       // Verify tenant exists
-      const tenant = await db.query.tenants.findFirst({
-        where: eq(tenants.id, leaseData.tenantId)
-      });
+      const tenants = await sql`
+        SELECT * FROM public.tenants WHERE id = ${leaseData.tenantId}
+      `;
 
-      if (!tenant) {
-        return res.status(404).json({ message: 'Tenant not found' });
+      if (tenants.length === 0) {
+        res.status(404).json({ message: 'Tenant not found' });
+      } else {
+        // Check for date conflicts with existing leases on the same unit
+        const existingLeases = await sql`
+        SELECT * FROM public.leases 
+        WHERE unit_id = ${leaseData.unitId}
+        AND (start_date, end_date) OVERLAPS (${leaseData.startDate}, ${leaseData.endDate})
+        `;
+        if (existingLeases.length > 0) {
+          res.status(409).json({ 
+            message: 'Lease dates conflict with an existing lease for this unit',
+            error: 'LEASE_DATE_CONFLICT'
+          });
+        } else {
+          const [lease] = await sql`
+        INSERT INTO public.leases (tenant_id, unit_id, start_date, end_date, rent_amount, deposit_amount, is_active)
+        VALUES (
+          ${leaseData.tenantId},
+          ${leaseData.unitId},
+          ${leaseData.startDate},
+          ${leaseData.endDate},
+          ${leaseData.rentAmount},
+          ${leaseData.depositAmount || null},
+          ${leaseData.isActive}
+        )
+        RETURNING *
+          `;
+
+          res.status(201).json(lease);
+        }
       }
-
-      // Check for date conflicts with existing leases on the same unit
-      const existingLeases = await db.query.leases.findMany({
-        where: eq(leases.unitId, leaseData.unitId)
-      });
-
-      const newStartDate = new Date(leaseData.startDate);
-      const newEndDate = new Date(leaseData.endDate);
-
-      // Check for overlapping lease periods
-      const hasConflict = existingLeases.some(existingLease => {
-        const existingStart = new Date(existingLease.startDate);
-        const existingEnd = new Date(existingLease.endDate);
-        
-        // Overlap occurs if: newStart <= existingEnd AND newEnd >= existingStart
-        return newStartDate <= existingEnd && newEndDate >= existingStart;
-      });
-
-      if (hasConflict) {
-        return res.status(409).json({ 
-          message: 'Lease dates conflict with an existing lease for this unit',
-          error: 'LEASE_DATE_CONFLICT'
-        });
       }
-
-      const [lease] = await db.insert(leases)
-        .values({
-          ...leaseData,
-          startDate: newStartDate,
-          endDate: newEndDate,
-        })
-        .returning();
-
-      return res.status(201).json(lease);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('Error creating lease:', errorMessage);
-      if (process.env.NODE_ENV !== 'production' && error instanceof Error) {
-        console.error('Stack trace:', error.stack);
-      }
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: 'Invalid input', errors: error.errors });
-      }
-      return res.status(500).json({ message: 'Failed to create lease' });
+    } else {
+      res.status(405).json({ error: 'Method not allowed' });
     }
-  }
-
-  return res.status(405).json({ error: 'Method not allowed' });
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production' && error instanceof Error) {
+      console.error('Stack trace:', error.stack);
+    }
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ message: 'Invalid input', errors: error.errors });
+    } else {
+      res.status(500).json({ message: 'Failed to process request' });
+    }
   } finally {
     await sql.end();
   }
-}
+});

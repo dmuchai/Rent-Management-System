@@ -1,232 +1,82 @@
-// Consolidated handler for /api/units and /api/units/[id]
+// GET/POST /api/units - List units or create new unit
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-import postgres from 'postgres';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { units, properties, insertUnitSchema } from '../../shared/schema';
-import { eq } from 'drizzle-orm';
+import { requireAuth } from '../_lib/auth';
+import { createDbConnection } from '../_lib/db';
+import { insertUnitSchema } from '../../shared/schema';
 import { z } from 'zod';
 
-async function verifyAuth(req: VercelRequest) {
-  let token: string | undefined;
-  if (req.headers.cookie) {
-    const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
-      const [key, value] = cookie.trim().split('=');
-      acc[key] = value;
-      return acc;
-    }, {} as Record<string, string>);
-    token = cookies['supabase-auth-token'];
-  }
-  if (!token) return null;
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !supabaseServiceKey) return null;
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return null;
-  return { userId: user.id, user };
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const auth = await verifyAuth(req);
-  
-  if (!auth) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  // Create database connection
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    return res.status(500).json({ error: 'Database not configured' });
-  }
-
-  const sql = postgres(databaseUrl, { 
-    prepare: false,
-    max: 1,
-  });
-  const db = drizzle(sql);
+export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
+  const sql = createDbConnection();
 
   try {
-const { id, propertyId } = req.query;
-
-  // Handle /api/units/[id] - specific unit operations
-  if (id && typeof id === 'string') {
     if (req.method === 'GET') {
-      try {
-        const unit = await db.query.units.findFirst({
-          where: eq(units.id, id),
-          with: {
-            property: true,
-          }
-        });
+      const { propertyId } = req.query;
 
-        if (!unit) {
-          return res.status(404).json({ message: 'Unit not found' });
-        }
-
-        if (!unit.property) {
-          console.error('Unit property relation missing for unit:', id);
-          return res.status(500).json({ message: 'Unit data integrity error' });
-        }
-
-        if (unit.property.ownerId !== auth.userId) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-
-        return res.status(200).json(unit);
-      } catch (error) {
-        console.error('Error fetching unit:', error);
-        return res.status(500).json({ message: 'Failed to fetch unit' });
-      }
-    }
-
-    if (req.method === 'PUT') {
-      try {
-        const existingUnit = await db.query.units.findFirst({
-          where: eq(units.id, id),
-          with: {
-            property: true,
-          }
-        });
-
-        if (!existingUnit) {
-          return res.status(404).json({ message: 'Unit not found' });
-        }
-
-        if (!existingUnit.property) {
-          console.error('Unit has no associated property:', id);
-          return res.status(500).json({ message: 'Data integrity error' });
-        }
-
-        if (existingUnit.property.ownerId !== auth.userId) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-
-        const unitData = insertUnitSchema.partial().omit({ propertyId: true }).parse(req.body);
-
-        const [updatedUnit] = await db.update(units)
-          .set(unitData)
-          .where(eq(units.id, id))
-          .returning();
-
-        return res.status(200).json(updatedUnit);
-      } catch (error) {
-        console.error('Error updating unit:', error);
-        if (error instanceof z.ZodError) {
-          return res.status(400).json({ message: 'Invalid input', errors: error.errors });
-        }
-        return res.status(500).json({ message: 'Failed to update unit' });
-      }
-    }
-
-    if (req.method === 'DELETE') {
-      try {
-        const existingUnit = await db.query.units.findFirst({
-          where: eq(units.id, id),
-          with: {
-            property: true,
-          }
-        });
-
-        if (!existingUnit) {
-          return res.status(404).json({ message: 'Unit not found' });
-        }
-
-        if (!existingUnit.property) {
-          console.error('Unit property relation missing for unit:', id);
-          return res.status(500).json({ message: 'Unit data integrity error' });
-        }
-
-        if (existingUnit.property.ownerId !== auth.userId) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-
-        await db.delete(units).where(eq(units.id, id));
-
-        return res.status(204).send('');
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error('Error deleting unit:', errorMessage);
-        return res.status(500).json({ message: 'Failed to delete unit' });
-      }
-    }
-
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // Handle /api/units - list all or create new
-  if (req.method === 'GET') {
-    try {
       if (propertyId && typeof propertyId === 'string') {
         // Get units for a specific property
-        const property = await db.query.properties.findFirst({
-          where: eq(properties.id, propertyId)
-        });
+        const properties = await sql`
+          SELECT * FROM public.properties WHERE id = ${propertyId}
+        `;
 
-        if (!property) {
-          return res.status(404).json({ message: 'Property not found' });
+        if (properties.length === 0) {
+          res.status(404).json({ message: 'Property not found' });
+        } else if (properties[0].owner_id !== auth.userId) {
+          res.status(403).json({ message: 'Access denied' });
+        } else {
+          const propertyUnits = await sql`
+            SELECT * FROM public.units WHERE property_id = ${propertyId}
+          `;
+          res.status(200).json(propertyUnits);
         }
-
-        if (property.ownerId !== auth.userId) {
-          return res.status(403).json({ message: 'Access denied' });
-        }
-
-        const propertyUnits = await db.query.units.findMany({
-          where: eq(units.propertyId, propertyId)
-        });
-
-        return res.status(200).json(propertyUnits);
+      } else {
+        // Get all units for all user's properties
+        const allUnits = await sql`
+          SELECT u.*
+          FROM public.units u
+          INNER JOIN public.properties p ON u.property_id = p.id
+          WHERE p.owner_id = ${auth.userId}
+          ORDER BY u.created_at DESC
+        `;
+        res.status(200).json(allUnits);
       }
-
-      // Get all units for all user's properties
-      const userProperties = await db.query.properties.findMany({
-        where: eq(properties.ownerId, auth.userId),
-        with: {
-          units: true
-        }
-      });
-
-      const allUnits = userProperties.flatMap(p => p.units);
-      return res.status(200).json(allUnits);
-    } catch (error) {
-      console.error('Error fetching units:', error);
-      return res.status(500).json({ message: 'Failed to fetch units' });
-    }
-  }
-
-  if (req.method === 'POST') {
-    try {
+    } else if (req.method === 'POST') {
       const unitData = insertUnitSchema.parse(req.body);
 
       // Verify property ownership
-      const property = await db.query.properties.findFirst({
-        where: eq(properties.id, unitData.propertyId)
-      });
+      const properties = await sql`
+        SELECT * FROM public.properties WHERE id = ${unitData.propertyId}
+      `;
 
-      if (!property) {
-        return res.status(404).json({ message: 'Property not found' });
+      if (properties.length === 0) {
+        res.status(404).json({ message: 'Property not found' });
+      } else if (properties[0].owner_id !== auth.userId) {
+        res.status(403).json({ message: 'Access denied' });
+      } else {
+        const [unit] = await sql`
+          INSERT INTO public.units (property_id, unit_number, bedrooms, bathrooms, rent_amount, is_occupied)
+          VALUES (
+            ${unitData.propertyId},
+            ${unitData.unitNumber},
+            ${unitData.bedrooms},
+            ${unitData.bathrooms},
+            ${unitData.rentAmount},
+            ${unitData.isOccupied || false}
+          )
+          RETURNING *
+        `;
+        res.status(201).json(unit);
       }
-
-      if (property.ownerId !== auth.userId) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      const [unit] = await db.insert(units)
-        .values(unitData)
-        .returning();
-
-      return res.status(201).json(unit);
-    } catch (error) {
-      console.error('Error creating unit:', error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: 'Invalid input', errors: error.errors });
-      }
-      return res.status(500).json({ message: 'Failed to create unit' });
+    } else {
+      res.status(405).json({ message: 'Method not allowed' });
     }
-  }
-
-  return res.status(405).json({ message: 'Method not allowed' });
+  } catch (error) {
+    console.error('Error in units endpoint:', error);
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ message: 'Invalid input', errors: error.errors });
+    } else {
+      res.status(500).json({ message: 'Failed to process request' });
+    }
   } finally {
     await sql.end();
   }
-}
+});
