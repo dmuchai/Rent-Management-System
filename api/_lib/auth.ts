@@ -50,8 +50,26 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
   }
 }
 
+export function setCorsHeaders(req: VercelRequest, res: VercelResponse) {
+  const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, '') || '';
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+}
+
 export function requireAuth(handler: (req: VercelRequest, res: VercelResponse, auth: { userId: string; user: User }) => Promise<void>) {
   return async (req: VercelRequest, res: VercelResponse) => {
+    // Set CORS headers for all requests
+    setCorsHeaders(req, res);
+
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+
     const auth = await verifyAuth(req);
     
     if (!auth) {
