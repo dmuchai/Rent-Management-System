@@ -73,26 +73,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (existingUsers.length > 0) {
       // User exists - update their info
-      const emailValue = supabaseUser.email;
+      const emailValue = supabaseUser.email || '';
       const fullName = supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || emailValue?.split('@')[0] || 'User';
       const parts = fullName.trim().split(/\s+/).filter((part: string) => part.length > 0);
       
       const firstPart = parts[0] || 'User';
       const lastParts = parts.slice(1);
+      const lastName = lastParts.length > 0 ? lastParts.join(' ') : (existingUsers[0].last_name || '');
+      const profileImageUrl = supabaseUser.user_metadata?.avatar_url || existingUsers[0].profile_image_url || '';
       
       const updatedUsers = await sql`
         UPDATE public.users
         SET 
           email = ${emailValue},
           first_name = ${firstPart},
-          last_name = ${lastParts.join(' ') || existingUsers[0].last_name},
-          profile_image_url = ${supabaseUser.user_metadata?.avatar_url || existingUsers[0].profile_image_url},
+          last_name = ${lastName},
+          profile_image_url = ${profileImageUrl},
           updated_at = NOW()
         WHERE id = ${supabaseUser.id}
         RETURNING *
       `;
       
-      await sql.end();
       console.log('User updated successfully');
       return res.status(200).json(updatedUsers[0]);
     } else {
@@ -101,7 +102,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const emailValue = email || supabaseUser.email;
       if (!emailValue) {
-        await sql.end();
         return res.status(400).json({ error: 'Email is required for new user' });
       }
 
@@ -134,17 +134,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         RETURNING *
       `;
 
-      await sql.end();
       console.log('User created successfully');
       return res.status(201).json(newUsers[0]);
     }
   } catch (error) {
-    try {
-      await sql.end();
-    } catch (endError) {
-      console.error('Error closing SQL connection:', endError);
-    }
-    
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('=== Error syncing user ===');
     console.error('Error message:', errorMessage);
@@ -157,5 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       details: errorMessage,
       hint: 'Check if DATABASE_URL is configured correctly in Vercel'
     });
+  } finally {
+    await sql.end().catch(err => console.error('Error closing connection:', err));
   }
 }

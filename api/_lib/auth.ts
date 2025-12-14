@@ -9,14 +9,24 @@ if (!supabaseUrl || !supabaseServiceKey) {
   throw new Error('Missing required environment variables: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set');
 }
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+});
 
 export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; user: User } | null> {
   // Get token from httpOnly cookie set by auth-callback
   const authToken = req.cookies['supabase-auth-token'];
   
+  // Debug logging
+  console.log('Auth verification - cookies present:', Object.keys(req.cookies || {}));
+  console.log('Auth verification - has token:', !!authToken);
+  
   if (!authToken) {
     console.error('Auth verification failed: No auth token cookie found');
+    console.error('Available cookies:', JSON.stringify(req.cookies));
     return null;
   }
   
@@ -24,10 +34,11 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(authToken);
     
     if (error || !user) {
-      console.error('Auth verification failed: Invalid or expired token');
+      console.error('Auth verification failed: Invalid or expired token', error);
       return null;
     }
 
+    console.log('Auth verification successful for user:', user.id);
     return { userId: user.id, user };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
