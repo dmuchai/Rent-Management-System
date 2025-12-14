@@ -9,36 +9,34 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   const sql = createDbConnection();
 
   try {
-    if (req.method === 'GET') {
-      const { propertyId } = req.query;
+    const { propertyId } = req.query;
 
-      if (propertyId && typeof propertyId === 'string') {
-        // Get units for a specific property
-        const properties = await sql`
-          SELECT * FROM public.properties WHERE id = ${propertyId}
-        `;
+    if (req.method === 'GET' && propertyId && typeof propertyId === 'string') {
+      // Get units for a specific property
+      const properties = await sql`
+        SELECT * FROM public.properties WHERE id = ${propertyId}
+      `;
 
-        if (properties.length === 0) {
-          res.status(404).json({ message: 'Property not found' });
-        } else if (properties[0].owner_id !== auth.userId) {
-          res.status(403).json({ message: 'Access denied' });
-        } else {
-          const propertyUnits = await sql`
-            SELECT * FROM public.units WHERE property_id = ${propertyId}
-          `;
-          res.status(200).json(propertyUnits);
-        }
+      if (properties.length === 0) {
+        res.status(404).json({ message: 'Property not found' });
+      } else if (properties[0].owner_id !== auth.userId) {
+        res.status(403).json({ message: 'Access denied' });
       } else {
-        // Get all units for all user's properties
-        const allUnits = await sql`
-          SELECT u.*
-          FROM public.units u
-          INNER JOIN public.properties p ON u.property_id = p.id
-          WHERE p.owner_id = ${auth.userId}
-          ORDER BY u.created_at DESC
+        const propertyUnits = await sql`
+          SELECT * FROM public.units WHERE property_id = ${propertyId}
         `;
-        res.status(200).json(allUnits);
+        res.status(200).json(propertyUnits);
       }
+    } else if (req.method === 'GET') {
+      // Get all units for all user's properties
+      const allUnits = await sql`
+        SELECT u.*
+        FROM public.units u
+        INNER JOIN public.properties p ON u.property_id = p.id
+        WHERE p.owner_id = ${auth.userId}
+        ORDER BY u.created_at DESC
+      `;
+      res.status(200).json(allUnits);
     } else if (req.method === 'POST') {
       const unitData = insertUnitSchema.parse(req.body);
 
@@ -57,10 +55,10 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           VALUES (
             ${unitData.propertyId},
             ${unitData.unitNumber},
-            ${unitData.bedrooms},
-            ${unitData.bathrooms},
+            ${unitData.bedrooms ?? null},
+            ${unitData.bathrooms ?? null},
             ${unitData.rentAmount},
-            ${unitData.isOccupied || false}
+            ${unitData.isOccupied ?? false}
           )
           RETURNING *
         `;
