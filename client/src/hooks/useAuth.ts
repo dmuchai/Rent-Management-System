@@ -60,8 +60,12 @@ export function useAuth() {
   const { data: user, isLoading, error } = useQuery<User>({
     queryKey: ["/api/auth/user"],
     queryFn: async (): Promise<User> => {
+      // Using httpOnly cookies for authentication - no need to check localStorage
       const response = await fetch(`${API_BASE_URL}/api/auth/user`, {
-        credentials: 'include', // This will send httpOnly cookies
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Send httpOnly cookies
       });
       
       if (!response.ok) {

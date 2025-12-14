@@ -16,19 +16,18 @@ export async function apiRequest(
   // Construct full URL with base URL for production
   const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
   
-  // Authentication now handled via httpOnly cookies automatically
-  // No need to manually add Authorization header
   const headers: Record<string, string> = {};
   
   if (data) {
     headers["Content-Type"] = "application/json";
   }
   
+  // Using httpOnly cookies for authentication - no need for Bearer token
   const res = await fetch(fullUrl, {
     method,
     headers,
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include", // Important: sends httpOnly cookies automatically
+    credentials: "include", // Send httpOnly cookies
   });
 
   await throwIfResNotOk(res);
