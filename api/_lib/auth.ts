@@ -20,38 +20,51 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
   // Get token from httpOnly cookie set by auth-callback
   const authToken = req.cookies['supabase-auth-token'];
   
-  // Enhanced debug logging
-  console.log('=== Auth Verification Debug ===');
-  console.log('Request URL:', req.url);
-  console.log('Request headers (cookie):', req.headers.cookie ? 'present' : 'missing');
-  console.log('Parsed cookies:', Object.keys(req.cookies || {}));
-  console.log('Has supabase-auth-token:', !!authToken);
-  console.log('Token length:', authToken ? authToken.length : 0);
-  console.log('===============================');
+  // Debug logging (only in non-production or when DEBUG flag is set)
+  const isDebugMode = process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production';
+  
+  if (isDebugMode) {
+    console.log('=== Auth Verification Debug ===');
+    console.log('Request path:', req.url?.split('?')[0]); // Only log path, not query params
+    console.log('Cookie header present:', !!req.headers.cookie);
+    console.log('Parsed cookie keys:', Object.keys(req.cookies || {}));
+    console.log('Has supabase-auth-token:', !!authToken);
+    console.log('Token length:', authToken ? authToken.length : 0);
+    console.log('===============================');
+  }
   
   if (!authToken) {
     console.error('❌ Auth verification failed: No auth token cookie found');
-    console.error('Available cookies:', JSON.stringify(req.cookies));
-    console.error('Raw cookie header:', req.headers.cookie || 'none');
+    if (isDebugMode) {
+      console.error('Available cookie keys:', Object.keys(req.cookies || {}));
+    }
     return null;
   }
   
   try {
-    console.log('Verifying token with Supabase...');
+    if (isDebugMode) {
+      console.log('Verifying token with Supabase...');
+    }
+    
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(authToken);
     
     if (error || !user) {
       console.error('❌ Auth verification failed: Invalid or expired token');
-      console.error('Supabase error:', error);
+      if (isDebugMode) {
+        console.error('Supabase error:', error?.message);
+      }
       return null;
     }
 
-    console.log('✅ Auth verification successful for user:', user.id, user.email);
+    if (isDebugMode) {
+      console.log('✅ Auth verification successful for user:', user.id);
+      console.log('User email:', user.email);
+    }
     return { userId: user.id, user };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('❌ Auth verification exception:', errorMessage);
-    if (error instanceof Error) {
+    if (isDebugMode && error instanceof Error) {
       console.error('Stack trace:', error.stack);
     }
     return null;

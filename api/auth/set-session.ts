@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('SUPABASE_SERVICE_ROLE_KEY configured:', !!supabaseServiceKey);
     console.log('Request origin:', req.headers.origin);
     console.log('========================');
-  }
+    console.log('✅ Token verified successfully for user:', user.id);
 
   // Set CORS headers to allow credentials
   const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, '') || '';
