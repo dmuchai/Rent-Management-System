@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     const auth = await verifyAuth(req);
     
-    console.log('✅ User info retrieved successfully for user ID:', auth.user.id);
+    if (!auth) {
       console.error('❌ User fetch failed: Authentication failed');
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -43,9 +43,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       id: auth.user.id,
       email: auth.user.email,
       user_metadata: auth.user.user_metadata,
-    return res.status(500).json({ 
-      error: 'Internal server error'
     });
+  } catch (error) {
+    console.error('❌ Error fetching user');
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error details:', errorMessage);
     
     const isDebugMode = process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production';

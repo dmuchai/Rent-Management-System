@@ -33,6 +33,14 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+// Create Supabase client once at module level to avoid recreating on every request
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+});
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Debug logging (only in non-production or when DEBUG flag is set)
   const isDebugMode = process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production';
@@ -43,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('SUPABASE_SERVICE_ROLE_KEY configured:', !!supabaseServiceKey);
     console.log('Request origin:', req.headers.origin);
     console.log('========================');
-    console.log('✅ Token verified successfully for user:', user.id);
+  }
 
   // Set CORS headers to allow credentials
   const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, '') || '';
@@ -64,7 +72,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { access_token, refresh_token } = req.body;
-  const isDebugMode = process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production';
 
   if (!access_token) {
     console.error('❌ Missing access_token in request body');
@@ -78,10 +85,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (isDebugMode) {
-      console.log('Creating Supabase client and verifying token...');
+      console.log('Verifying token with Supabase...');
     }
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(access_token);
+    
+    // Verify token with timeout to prevent function timeout
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Token verification timeout')), 25000)
+    );
+    
+    const verifyPromise = supabaseAdmin.auth.getUser(access_token);
+    
+    const { data: { user }, error } = await Promise.race([
+      verifyPromise,
+      timeoutPromise
+    ]) as any;
 
     if (error || !user) {
       console.error('❌ Token verification failed');
