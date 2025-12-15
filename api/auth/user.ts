@@ -22,19 +22,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    console.log('Fetching user info...');
     const auth = await verifyAuth(req);
     
     if (!auth) {
+      console.error('❌ User fetch failed: Authentication failed');
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    console.log('✅ User info retrieved successfully for:', auth.user.email);
     return res.status(200).json({
       id: auth.user.id,
       email: auth.user.email,
       user_metadata: auth.user.user_metadata,
     });
   } catch (error) {
-    console.error('Error fetching user:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ Error fetching user:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error details:', errorMessage);
+    if (error instanceof Error) {
+      console.error('Stack trace:', error.stack);
+    }
+    return res.status(500).json({ 
+      error: 'Internal server error',
+      details: errorMessage 
+    });
   }
 }

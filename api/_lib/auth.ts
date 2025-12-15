@@ -20,30 +20,38 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
   // Get token from httpOnly cookie set by auth-callback
   const authToken = req.cookies['supabase-auth-token'];
   
-  // Debug logging
-  console.log('Auth verification - cookies present:', Object.keys(req.cookies || {}));
-  console.log('Auth verification - has token:', !!authToken);
+  // Enhanced debug logging
+  console.log('=== Auth Verification Debug ===');
+  console.log('Request URL:', req.url);
+  console.log('Request headers (cookie):', req.headers.cookie ? 'present' : 'missing');
+  console.log('Parsed cookies:', Object.keys(req.cookies || {}));
+  console.log('Has supabase-auth-token:', !!authToken);
+  console.log('Token length:', authToken ? authToken.length : 0);
+  console.log('===============================');
   
   if (!authToken) {
-    console.error('Auth verification failed: No auth token cookie found');
+    console.error('❌ Auth verification failed: No auth token cookie found');
     console.error('Available cookies:', JSON.stringify(req.cookies));
+    console.error('Raw cookie header:', req.headers.cookie || 'none');
     return null;
   }
   
   try {
+    console.log('Verifying token with Supabase...');
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(authToken);
     
     if (error || !user) {
-      console.error('Auth verification failed: Invalid or expired token', error);
+      console.error('❌ Auth verification failed: Invalid or expired token');
+      console.error('Supabase error:', error);
       return null;
     }
 
-    console.log('Auth verification successful for user:', user.id);
+    console.log('✅ Auth verification successful for user:', user.id, user.email);
     return { userId: user.id, user };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Auth verification error:', errorMessage);
-    if (process.env.NODE_ENV !== 'production' && error instanceof Error) {
+    console.error('❌ Auth verification exception:', errorMessage);
+    if (error instanceof Error) {
       console.error('Stack trace:', error.stack);
     }
     return null;
