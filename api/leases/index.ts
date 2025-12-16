@@ -54,7 +54,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         }
       }));
 
-      res.status(200).json(formattedLeases);
+      return res.status(200).json(formattedLeases);
     }
 
     if (req.method === 'POST') {
@@ -80,11 +80,14 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         INNER JOIN public.properties p ON u.property_id = p.id
         WHERE u.id = ${leaseData.unitId}
       `;
+      
       if (units.length === 0) {
-        res.status(404).json({ message: 'Unit not found' });
-      } else if (units[0].owner_id !== auth.userId) {
-        res.status(403).json({ message: 'Access denied' });
-      } else {
+        return res.status(404).json({ message: 'Unit not found' });
+      }
+      
+      if (units[0].owner_id !== auth.userId) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
 
       // Verify tenant exists
       const tenants = await sql`
@@ -92,21 +95,24 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       `;
 
       if (tenants.length === 0) {
-        res.status(404).json({ message: 'Tenant not found' });
-      } else {
-        // Check for date conflicts with existing leases on the same unit
-        const existingLeases = await sql`
+        return res.status(404).json({ message: 'Tenant not found' });
+      }
+      
+      // Check for date conflicts with existing leases on the same unit
+      const existingLeases = await sql`
         SELECT * FROM public.leases 
         WHERE unit_id = ${leaseData.unitId}
         AND (start_date, end_date) OVERLAPS (${leaseData.startDate}, ${leaseData.endDate})
-        `;
-        if (existingLeases.length > 0) {
-          res.status(409).json({ 
-            message: 'Lease dates conflict with an existing lease for this unit',
-            error: 'LEASE_DATE_CONFLICT'
-          });
-        } else {
-          const [lease] = await sql`
+      `;
+      
+      if (existingLeases.length > 0) {
+        return res.status(409).json({ 
+          message: 'Lease dates conflict with an existing lease for this unit',
+          error: 'LEASE_DATE_CONFLICT'
+        });
+      }
+      
+      const [lease] = await sql`
         INSERT INTO public.leases (tenant_id, unit_id, start_date, end_date, rent_amount, deposit_amount, is_active)
         VALUES (
           ${leaseData.tenantId},
@@ -118,15 +124,12 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           ${leaseData.isActive}
         )
         RETURNING *
-          `;
+      `;
 
-          res.status(201).json(lease);
-        }
-      }
-      }
-    } else {
-      res.status(405).json({ error: 'Method not allowed' });
+      return res.status(201).json(lease);
     }
+    
+    return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     if (process.env.NODE_ENV !== 'production' && error instanceof Error) {
       console.error('Stack trace:', error.stack);
