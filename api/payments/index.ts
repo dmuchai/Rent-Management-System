@@ -75,7 +75,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         }
       }));
 
-      res.status(200).json({
+      return res.status(200).json({
         data: formattedPayments,
         pagination: {
           limit,
@@ -106,11 +106,12 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         WHERE l.id = ${paymentData.leaseId}
       `;
       if (leases.length === 0) {
-        res.status(404).json({ message: 'Lease not found' });
+        return res.status(404).json({ message: 'Lease not found' });
       } else if (leases[0].owner_id !== auth.userId) {
-        res.status(403).json({ message: 'Access denied' });
-      } else {
-        const [payment] = await sql`
+        return res.status(403).json({ message: 'Access denied' });
+      }
+      
+      const [payment] = await sql`
         INSERT INTO public.payments (lease_id, amount, due_date, paid_date, payment_method, status, description)
         VALUES (
           ${paymentData.leaseId},
@@ -122,13 +123,12 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           ${paymentData.description || null}
         )
         RETURNING *
-        `;
+      `;
 
-        res.status(201).json(payment);
-      }
-    } else {
-      res.status(405).json({ error: 'Method not allowed' });
+      return res.status(201).json(payment);
     }
+    
+    return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ message: 'Invalid input', errors: error.errors });
