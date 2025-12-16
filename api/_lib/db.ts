@@ -13,33 +13,32 @@ export function createDbConnection() {
     );
   }
 
-  // Parse and properly decode the connection string
-  // Vercel/Supabase URL-encodes special characters in passwords
+  // Parse and decode the connection string
+  // Supabase/Vercel URL-encodes special characters in passwords
   let finalConnectionString = connectionString;
-  
-  console.log('Original DATABASE_URL has encoded chars:', connectionString.includes('%'));
   
   if (connectionString.includes('%')) {
     try {
-      // Match: postgresql://username:password@rest-of-url
-      const urlMatch = connectionString.match(/^(postgresql:\/\/)([^:]+):([^@]+)@(.+)$/);
+      // Use URL parser to properly extract components
+      // Temporarily replace postgresql:// with http:// for URL parsing
+      const tempUrl = connectionString.replace('postgresql://', 'http://');
+      const parsedUrl = new URL(tempUrl);
       
-      if (urlMatch) {
-        const [, protocol, username, encodedPassword, hostAndRest] = urlMatch;
-        console.log('Regex matched. Decoding password...');
-        
-        // Decode only the password part
-        const decodedPassword = decodeURIComponent(encodedPassword);
-        finalConnectionString = `${protocol}${username}:${decodedPassword}@${hostAndRest}`;
-        
-        console.log('✅ Successfully decoded DATABASE_URL password');
-      } else {
-        console.warn('⚠️ DATABASE_URL pattern did not match regex, using original');
-      }
+      // Decode the password (URL.password is already decoded by the URL parser)
+      const decodedPassword = parsedUrl.password;
+      
+      // Reconstruct the connection string with decoded password
+      // Format: postgresql://username:password@host:port/database?params
+      finalConnectionString = `postgresql://${parsedUrl.username}:${decodedPassword}@${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}`;
+      
+      console.log('✅ Successfully decoded DATABASE_URL using URL parser');
     } catch (error) {
       console.error('❌ Failed to parse/decode DATABASE_URL:', error);
+      // Fall back to original
       finalConnectionString = connectionString;
     }
+  } else {
+    console.log('No encoded characters in DATABASE_URL, using as-is');
   }
 
   // Use postgres-js for serverless edge compatibility with optimized pool settings
