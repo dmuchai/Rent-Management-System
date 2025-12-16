@@ -14,26 +14,32 @@ export function createDbConnection() {
   }
 
   // Parse and properly decode the connection string
-  // Vercel/Supabase URL-encodes special characters in passwords, but we need to be careful
-  // not to decode the entire URL as that can break the @ symbols in the hostname
+  // Vercel/Supabase URL-encodes special characters in passwords
   let finalConnectionString = connectionString;
   
-  try {
-    // Match pattern: postgresql://user:password@host:port/database
-    const urlMatch = connectionString.match(/^(postgresql:\/\/)([^:]+):([^@]+)@(.+)$/);
-    
-    if (urlMatch && connectionString.includes('%')) {
-      const [, protocol, username, password, hostAndDb] = urlMatch;
-      // Decode only the password part which may contain URL-encoded characters
-      const decodedPassword = decodeURIComponent(password);
-      finalConnectionString = `${protocol}${username}:${decodedPassword}@${hostAndDb}`;
+  console.log('Original DATABASE_URL has encoded chars:', connectionString.includes('%'));
+  
+  if (connectionString.includes('%')) {
+    try {
+      // Match: postgresql://username:password@rest-of-url
+      const urlMatch = connectionString.match(/^(postgresql:\/\/)([^:]+):([^@]+)@(.+)$/);
       
-      console.log('Decoded password in DATABASE_URL');
+      if (urlMatch) {
+        const [, protocol, username, encodedPassword, hostAndRest] = urlMatch;
+        console.log('Regex matched. Decoding password...');
+        
+        // Decode only the password part
+        const decodedPassword = decodeURIComponent(encodedPassword);
+        finalConnectionString = `${protocol}${username}:${decodedPassword}@${hostAndRest}`;
+        
+        console.log('✅ Successfully decoded DATABASE_URL password');
+      } else {
+        console.warn('⚠️ DATABASE_URL pattern did not match regex, using original');
+      }
+    } catch (error) {
+      console.error('❌ Failed to parse/decode DATABASE_URL:', error);
+      finalConnectionString = connectionString;
     }
-  } catch (error) {
-    // If parsing/decoding fails, use the original string
-    console.warn('Failed to parse DATABASE_URL, using original:', error);
-    finalConnectionString = connectionString;
   }
 
   // Use postgres-js for serverless edge compatibility with optimized pool settings
