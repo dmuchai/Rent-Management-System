@@ -127,6 +127,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       console.log('Creating new user with:', { emailValue, firstPart, lastParts });
 
+      // First, check if email already exists (from a different auth provider)
+      const emailCheck = await sql`
+        SELECT * FROM public.users WHERE email = ${emailValue}
+      `;
+      
+      if (emailCheck.length > 0) {
+        // User with this email exists - update it with new Supabase ID
+        const updatedUsers = await sql`
+          UPDATE public.users
+          SET 
+            id = ${supabaseUser.id},
+            first_name = ${firstName || firstPart},
+            last_name = ${lastName || lastParts.join(' ') || null},
+            profile_image_url = ${supabaseUser.user_metadata?.avatar_url || null},
+            updated_at = NOW()
+          WHERE email = ${emailValue}
+          RETURNING *
+        `;
+        console.log('User updated with new Supabase ID');
+        return res.status(200).json(updatedUsers[0]);
+      }
+      
+      // No existing user - create new one
       const newUsers = await sql`
         INSERT INTO public.users (id, email, first_name, last_name, profile_image_url, role, created_at, updated_at)
         VALUES (
@@ -139,12 +162,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           NOW(),
           NOW()
         )
-        ON CONFLICT (id) DO UPDATE SET
-          email = EXCLUDED.email,
-          first_name = EXCLUDED.first_name,
-          last_name = EXCLUDED.last_name,
-          profile_image_url = EXCLUDED.profile_image_url,
-          updated_at = NOW()
         RETURNING *
       `;
 
