@@ -173,7 +173,9 @@ export default function LandlordDashboard() {
     queryKey: ["/api/payments"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/payments");
-      return await response.json();
+      const result = await response.json();
+      // API returns { data: [], pagination: {} }, extract the data array
+      return result.data || result || [];
     },
     retry: false,
   });

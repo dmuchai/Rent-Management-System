@@ -5,8 +5,7 @@ import { createDbConnection } from '../_lib/db.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   if (req.method !== 'GET') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   const sql = createDbConnection();
@@ -95,7 +94,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       }
     }));
 
-    res.status(200).json({
+    return res.status(200).json({
       totalProperties,
       totalTenants,
       totalRevenue: totalRevenue.toFixed(2),
@@ -105,7 +104,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     });
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
-    res.status(500).json({ error: 'Failed to fetch dashboard statistics' });
+    return res.status(500).json({ error: 'Failed to fetch dashboard statistics' });
   } finally {
     await sql.end();
   }
