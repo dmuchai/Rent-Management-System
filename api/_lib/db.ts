@@ -13,21 +13,31 @@ export function createDbConnection() {
     );
   }
 
-  // Decode URL-encoded characters in the connection string
-  // Vercel/Supabase sometimes URL-encodes special characters in passwords
-  let decodedConnectionString = connectionString;
+  // Parse and properly decode the connection string
+  // Vercel/Supabase URL-encodes special characters in passwords, but we need to be careful
+  // not to decode the entire URL as that can break the @ symbols in the hostname
+  let finalConnectionString = connectionString;
+  
   try {
-    // Only decode if it contains URL-encoded characters
-    if (connectionString.includes('%')) {
-      decodedConnectionString = decodeURIComponent(connectionString);
+    // Match pattern: postgresql://user:password@host:port/database
+    const urlMatch = connectionString.match(/^(postgresql:\/\/)([^:]+):([^@]+)@(.+)$/);
+    
+    if (urlMatch && connectionString.includes('%')) {
+      const [, protocol, username, password, hostAndDb] = urlMatch;
+      // Decode only the password part which may contain URL-encoded characters
+      const decodedPassword = decodeURIComponent(password);
+      finalConnectionString = `${protocol}${username}:${decodedPassword}@${hostAndDb}`;
+      
+      console.log('Decoded password in DATABASE_URL');
     }
   } catch (error) {
-    // If decoding fails, use the original string
-    console.warn('Failed to decode DATABASE_URL, using original:', error);
+    // If parsing/decoding fails, use the original string
+    console.warn('Failed to parse DATABASE_URL, using original:', error);
+    finalConnectionString = connectionString;
   }
 
   // Use postgres-js for serverless edge compatibility with optimized pool settings
-  const sql = postgres(decodedConnectionString, {
+  const sql = postgres(finalConnectionString, {
     prepare: false,              // Disable prepared statements for edge compatibility
     max: 1,                      // Limit to 1 connection per serverless instance
     idle_timeout: 20,            // Close idle connections after 20 seconds
