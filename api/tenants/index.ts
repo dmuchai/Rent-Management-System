@@ -1,8 +1,8 @@
 // GET/POST /api/tenants - List all tenants or create new tenant
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { createDbConnection } from '../_lib/db';
-import { insertTenantSchema } from '../../shared/schema';
+import { requireAuth } from '../_lib/auth.js';
+import { createDbConnection } from '../_lib/db.js';
+import { insertTenantSchema } from '../../shared/schema.js';
 import { z } from 'zod';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {

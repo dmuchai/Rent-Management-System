@@ -2,7 +2,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import postgres from 'postgres';
-import { insertPropertySchema } from '../../shared/schema';
+import { insertPropertySchema } from '../../shared/schema.js';
 import { z } from 'zod';
 
 async function verifyAuth(req: VercelRequest) {

@@ -1,7 +1,7 @@
 // GET /api/dashboard/stats - Get dashboard statistics
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { createDbConnection } from '../_lib/db';
+import { requireAuth } from '../_lib/auth.js';
+import { createDbConnection } from '../_lib/db.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   if (req.method !== 'GET') {

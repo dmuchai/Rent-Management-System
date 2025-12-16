@@ -1,7 +1,7 @@
 // GET/POST /api/payments - List all payments or create new payment
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth';
-import { createDbConnection } from '../_lib/db';
+import { requireAuth } from '../_lib/auth.js';
+import { createDbConnection } from '../_lib/db.js';
 import { z } from 'zod';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
