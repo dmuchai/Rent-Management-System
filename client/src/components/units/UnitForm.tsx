@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -36,11 +36,37 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
     isOccupied: unit?.isOccupied || false,
   });
 
+  // Update form when unit prop changes (for editing)
+  useEffect(() => {
+    if (unit) {
+      setUnitForm({
+        propertyId: propertyId,
+        unitNumber: unit.unitNumber || "",
+        bedrooms: unit.bedrooms || "",
+        bathrooms: unit.bathrooms || "",
+        size: unit.size || "",
+        rentAmount: unit.rentAmount || "",
+        isOccupied: unit.isOccupied || false,
+      });
+    } else {
+      // Reset form for new unit
+      setUnitForm({
+        propertyId: propertyId,
+        unitNumber: "",
+        bedrooms: "",
+        bathrooms: "",
+        size: "",
+        rentAmount: "",
+        isOccupied: false,
+      });
+    }
+  }, [unit, propertyId]);
+
   const mutation = useMutation<UnitResponse, Error, UnitCreateRequest | UnitUpdateRequest>({
     mutationFn: async (data: UnitCreateRequest | UnitUpdateRequest): Promise<UnitResponse> => {
-      const url = isEdit ? `/api/units/${unit?.id}` : "/api/units";
       const method = isEdit ? "PUT" : "POST";
-      const response = await apiRequest(method, url, data);
+      const payload = isEdit ? { ...data, id: unit?.id } : data;
+      const response = await apiRequest(method, "/api/units", payload);
       
       if (!response.ok) {
         throw new Error(`Failed to ${isEdit ? 'update' : 'create'} unit: ${response.status}`);

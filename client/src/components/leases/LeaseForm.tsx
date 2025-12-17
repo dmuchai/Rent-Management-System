@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +47,32 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
     securityDeposit: lease?.securityDeposit?.toString() || "",
     isActive: lease?.isActive ?? true,
   });
+
+  // Update form when lease prop changes (for editing)
+  useEffect(() => {
+    if (lease) {
+      setLeaseForm({
+        tenantId: lease.tenantId || "",
+        unitId: lease.unitId || "",
+        startDate: lease.startDate ? new Date(lease.startDate).toISOString().split('T')[0] : "",
+        endDate: lease.endDate ? new Date(lease.endDate).toISOString().split('T')[0] : "",
+        monthlyRent: lease.monthlyRent?.toString() || "",
+        securityDeposit: lease.securityDeposit?.toString() || "",
+        isActive: lease.isActive ?? true,
+      });
+    } else {
+      // Reset form for new lease
+      setLeaseForm({
+        tenantId: "",
+        unitId: "",
+        startDate: "",
+        endDate: "",
+        monthlyRent: "",
+        securityDeposit: "",
+        isActive: true,
+      });
+    }
+  }, [lease]);
 
   // Fetch tenants and properties for dropdowns
   const { data: tenants = [], isLoading: tenantsLoading } = useQuery<Tenant[]>({
@@ -128,9 +154,9 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
 
   const mutation = useMutation({
     mutationFn: async (data: Omit<InsertLease, 'id' | 'createdAt' | 'updatedAt'>) => {
-      const url = isEdit ? `/api/leases/${lease?.id}` : "/api/leases";
       const method = isEdit ? "PUT" : "POST";
-      const response = await apiRequest(method, url, data);
+      const payload = isEdit ? { ...data, id: lease?.id } : data;
+      const response = await apiRequest(method, "/api/leases", payload);
       
       if (!response.ok) {
         const errorText = await response.text();
