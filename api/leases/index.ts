@@ -63,8 +63,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         unitId: z.string().min(1, 'Unit is required'),
         startDate: z.coerce.date(),
         endDate: z.coerce.date(),
-        rentAmount: z.coerce.number().positive('Rent amount must be positive'),
-        depositAmount: z.coerce.number().positive().optional(),
+        monthlyRent: z.coerce.number().positive('Monthly rent must be positive'),
+        securityDeposit: z.coerce.number().positive().optional(),
         isActive: z.boolean().default(true),
       }).refine((data) => data.startDate < data.endDate, {
         message: 'Start date must be before end date',
@@ -113,14 +113,14 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       }
       
       const [lease] = await sql`
-        INSERT INTO public.leases (tenant_id, unit_id, start_date, end_date, rent_amount, deposit_amount, is_active)
+        INSERT INTO public.leases (tenant_id, unit_id, start_date, end_date, monthly_rent, security_deposit, is_active)
         VALUES (
           ${leaseData.tenantId},
           ${leaseData.unitId},
           ${leaseData.startDate},
           ${leaseData.endDate},
-          ${leaseData.rentAmount},
-          ${leaseData.depositAmount || null},
+          ${leaseData.monthlyRent},
+          ${leaseData.securityDeposit || null},
           ${leaseData.isActive}
         )
         RETURNING *
