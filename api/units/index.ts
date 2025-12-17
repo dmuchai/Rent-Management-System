@@ -104,6 +104,77 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         };
         return res.status(201).json(transformedUnit);
       }
+    } else if (req.method === 'PUT') {
+      const unitUpdateSchema = z.object({
+        id: z.string().min(1, 'Unit ID is required'),
+        propertyId: z.string().min(1, 'Property is required'),
+        unitNumber: z.string().min(1, 'Unit number is required'),
+        bedrooms: z.coerce.number().int().nonnegative().optional().nullable(),
+        bathrooms: z.coerce.number().int().nonnegative().optional().nullable(),
+        size: z.coerce.number().positive().optional().nullable(),
+        rentAmount: z.coerce.number().positive('Rent amount must be positive'),
+        isOccupied: z.boolean().optional().default(false),
+      });
+
+      const unitData = unitUpdateSchema.parse(req.body);
+
+      // Verify the unit exists and belongs to the landlord's property
+      const existingUnits = await sql`
+        SELECT u.*, p.owner_id
+        FROM public.units u
+        INNER JOIN public.properties p ON u.property_id = p.id
+        WHERE u.id = ${unitData.id}
+      `;
+
+      if (existingUnits.length === 0) {
+        return res.status(404).json({ message: 'Unit not found' });
+      }
+
+      if (existingUnits[0].owner_id !== auth.userId) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      // Verify property ownership
+      const properties = await sql`
+        SELECT * FROM public.properties WHERE id = ${unitData.propertyId}
+      `;
+
+      if (properties.length === 0) {
+        return res.status(404).json({ message: 'Property not found' });
+      } else if (properties[0].owner_id !== auth.userId) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const [updatedUnit] = await sql`
+        UPDATE public.units
+        SET 
+          property_id = ${unitData.propertyId},
+          unit_number = ${unitData.unitNumber},
+          bedrooms = ${unitData.bedrooms ?? null},
+          bathrooms = ${unitData.bathrooms ?? null},
+          size = ${unitData.size ?? null},
+          rent_amount = ${unitData.rentAmount},
+          is_occupied = ${unitData.isOccupied ?? false},
+          updated_at = NOW()
+        WHERE id = ${unitData.id}
+        RETURNING *
+      `;
+
+      // Transform to camelCase for frontend
+      const transformedUnit = {
+        id: updatedUnit.id,
+        propertyId: updatedUnit.property_id,
+        unitNumber: updatedUnit.unit_number,
+        bedrooms: updatedUnit.bedrooms,
+        bathrooms: updatedUnit.bathrooms,
+        size: updatedUnit.size,
+        rentAmount: updatedUnit.rent_amount,
+        isOccupied: updatedUnit.is_occupied,
+        createdAt: updatedUnit.created_at,
+        updatedAt: updatedUnit.updated_at
+      };
+
+      return res.status(200).json(transformedUnit);
     } else {
       return res.status(405).json({ message: 'Method not allowed' });
     }

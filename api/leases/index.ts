@@ -128,6 +128,98 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
       return res.status(201).json(lease);
     }
+
+    if (req.method === 'PUT') {
+      const leaseUpdateSchema = z.object({
+        id: z.string().min(1, 'Lease ID is required'),
+        tenantId: z.string().min(1, 'Tenant is required'),
+        unitId: z.string().min(1, 'Unit is required'),
+        startDate: z.coerce.date(),
+        endDate: z.coerce.date(),
+        monthlyRent: z.coerce.number().positive('Monthly rent must be positive'),
+        securityDeposit: z.coerce.number().positive().optional(),
+        isActive: z.boolean().default(true),
+      }).refine((data) => data.startDate < data.endDate, {
+        message: 'Start date must be before end date',
+        path: ['endDate'],
+      });
+
+      const leaseData = leaseUpdateSchema.parse(req.body);
+
+      // Verify the lease exists and belongs to the landlord
+      const existingLeases = await sql`
+        SELECT l.*, u.property_id, p.owner_id
+        FROM public.leases l
+        INNER JOIN public.units u ON l.unit_id = u.id
+        INNER JOIN public.properties p ON u.property_id = p.id
+        WHERE l.id = ${leaseData.id}
+      `;
+
+      if (existingLeases.length === 0) {
+        return res.status(404).json({ message: 'Lease not found' });
+      }
+
+      if (existingLeases[0].owner_id !== auth.userId) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      // Verify unit belongs to landlord
+      const units = await sql`
+        SELECT u.*, p.owner_id
+        FROM public.units u
+        INNER JOIN public.properties p ON u.property_id = p.id
+        WHERE u.id = ${leaseData.unitId}
+      `;
+      
+      if (units.length === 0) {
+        return res.status(404).json({ message: 'Unit not found' });
+      }
+      
+      if (units[0].owner_id !== auth.userId) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      // Verify tenant exists
+      const tenants = await sql`
+        SELECT * FROM public.tenants WHERE id = ${leaseData.tenantId}
+      `;
+
+      if (tenants.length === 0) {
+        return res.status(404).json({ message: 'Tenant not found' });
+      }
+      
+      // Check for date conflicts with other leases on the same unit (excluding current lease)
+      const conflictingLeases = await sql`
+        SELECT * FROM public.leases 
+        WHERE unit_id = ${leaseData.unitId}
+        AND id != ${leaseData.id}
+        AND (start_date, end_date) OVERLAPS (${leaseData.startDate}, ${leaseData.endDate})
+      `;
+      
+      if (conflictingLeases.length > 0) {
+        return res.status(409).json({ 
+          message: 'Lease dates conflict with an existing lease for this unit',
+          error: 'LEASE_DATE_CONFLICT'
+        });
+      }
+      
+      const [updatedLease] = await sql`
+        UPDATE public.leases
+        SET 
+          tenant_id = ${leaseData.tenantId},
+          unit_id = ${leaseData.unitId},
+          start_date = ${leaseData.startDate},
+          end_date = ${leaseData.endDate},
+          monthly_rent = ${leaseData.monthlyRent},
+          security_deposit = ${leaseData.securityDeposit || null},
+          is_active = ${leaseData.isActive},
+          updated_at = NOW()
+        WHERE id = ${leaseData.id}
+        RETURNING *
+      `;
+
+      return res.status(200).json(updatedLease);
+    }
     
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
