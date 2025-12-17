@@ -80,21 +80,21 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
               </tr>
             </thead>
             <tbody>
-              {tenants.map((tenant) => (
+              {tenants.filter(t => t && t.id).map((tenant) => (
                 <tr key={tenant.id} className="border-b border-border" data-testid={`tenant-row-${tenant.id}`}>
                   <td className="py-4 px-6">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                         <span className="text-primary font-semibold text-sm">
-                          {tenant.firstName[0]}{tenant.lastName[0]}
+                          {tenant.firstName?.[0] || ''}{tenant.lastName?.[0] || ''}
                         </span>
                       </div>
                       <div>
                         <p className="font-medium" data-testid={`tenant-name-${tenant.id}`}>
-                          {tenant.firstName} {tenant.lastName}
+                          {tenant.firstName || ''} {tenant.lastName || ''}
                         </p>
                         <p className="text-sm text-muted-foreground" data-testid={`tenant-email-${tenant.id}`}>
-                          {tenant.email}
+                          {tenant.email || 'N/A'}
                         </p>
                       </div>
                     </div>
