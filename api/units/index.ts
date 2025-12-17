@@ -18,14 +18,14 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       `;
 
       if (properties.length === 0) {
-        res.status(404).json({ message: 'Property not found' });
+        return res.status(404).json({ message: 'Property not found' });
       } else if (properties[0].owner_id !== auth.userId) {
-        res.status(403).json({ message: 'Access denied' });
+        return res.status(403).json({ message: 'Access denied' });
       } else {
         const propertyUnits = await sql`
           SELECT * FROM public.units WHERE property_id = ${propertyId}
         `;
-        res.status(200).json(propertyUnits);
+        return res.status(200).json(propertyUnits);
       }
     } else if (req.method === 'GET') {
       // Get all units for all user's properties
@@ -36,7 +36,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         WHERE p.owner_id = ${auth.userId}
         ORDER BY u.created_at DESC
       `;
-      res.status(200).json(allUnits);
+      return res.status(200).json(allUnits);
     } else if (req.method === 'POST') {
       const unitData = insertUnitSchema.parse(req.body);
 
@@ -46,9 +46,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       `;
 
       if (properties.length === 0) {
-        res.status(404).json({ message: 'Property not found' });
+        return res.status(404).json({ message: 'Property not found' });
       } else if (properties[0].owner_id !== auth.userId) {
-        res.status(403).json({ message: 'Access denied' });
+        return res.status(403).json({ message: 'Access denied' });
       } else {
         const [unit] = await sql`
           INSERT INTO public.units (property_id, unit_number, bedrooms, bathrooms, rent_amount, is_occupied)
@@ -62,17 +62,17 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           )
           RETURNING *
         `;
-        res.status(201).json(unit);
+        return res.status(201).json(unit);
       }
     } else {
-      res.status(405).json({ message: 'Method not allowed' });
+      return res.status(405).json({ message: 'Method not allowed' });
     }
   } catch (error) {
     console.error('Error in units endpoint:', error);
     if (error instanceof z.ZodError) {
-      res.status(400).json({ message: 'Invalid input', errors: error.errors });
+      return res.status(400).json({ message: 'Invalid input', errors: error.errors });
     } else {
-      res.status(500).json({ message: 'Failed to process request' });
+      return res.status(500).json({ message: 'Failed to process request' });
     }
   } finally {
     await sql.end();
