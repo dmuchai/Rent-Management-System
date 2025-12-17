@@ -155,7 +155,9 @@ export default function LandlordDashboard() {
     queryKey: ["/api/tenants"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/tenants");
-      return await response.json();
+      const result = await response.json();
+      // Ensure we return an array
+      return Array.isArray(result) ? result : [];
     },
     retry: false,
   });
@@ -164,7 +166,9 @@ export default function LandlordDashboard() {
     queryKey: ["/api/leases"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/leases");
-      return await response.json();
+      const result = await response.json();
+      // Ensure we return an array
+      return Array.isArray(result) ? result : [];
     },
     retry: false,
   });
