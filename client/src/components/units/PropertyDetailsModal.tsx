@@ -63,7 +63,13 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
   if (isLoading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby="loading-description">
+          <DialogHeader>
+            <DialogTitle>Loading Property</DialogTitle>
+            <DialogDescription id="loading-description">
+              Please wait while we load the property details
+            </DialogDescription>
+          </DialogHeader>
           <div className="flex items-center justify-center py-8">
             <div className="text-gray-500">Loading property details...</div>
           </div>
@@ -75,7 +81,13 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
   if (!property) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-4xl">
+        <DialogContent className="sm:max-w-4xl" aria-describedby="error-description">
+          <DialogHeader>
+            <DialogTitle>Error Loading Property</DialogTitle>
+            <DialogDescription id="error-description">
+              Unable to load property details. Please try again.
+            </DialogDescription>
+          </DialogHeader>
           <div className="text-center py-8">
             <div className="text-red-500">Failed to load property details</div>
           </div>

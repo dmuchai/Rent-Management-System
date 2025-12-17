@@ -34,11 +34,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         `;
 
         if (propertyResult.length === 0) {
-          res.status(404).json({ message: 'Property not found' });
+          return res.status(404).json({ message: 'Property not found' });
         } else if (propertyResult[0].owner_id !== auth.userId) {
-          res.status(403).json({ message: 'Access denied' });
+          return res.status(403).json({ message: 'Access denied' });
         } else {
-          res.status(200).json({
+          return res.status(200).json({
             id: propertyResult[0].id,
             name: propertyResult[0].name,
             address: propertyResult[0].address,
@@ -59,9 +59,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         `;
 
         if (existingProperty.length === 0) {
-          res.status(404).json({ message: 'Property not found' });
+          return res.status(404).json({ message: 'Property not found' });
         } else if (existingProperty[0].owner_id !== auth.userId) {
-          res.status(403).json({ message: 'Access denied' });
+          return res.status(403).json({ message: 'Access denied' });
         } else {
           const propertyData = insertPropertySchema.partial().parse(req.body);
           
@@ -80,7 +80,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
             RETURNING *
           `;
 
-          res.status(200).json(updatedProperty);
+          return res.status(200).json(updatedProperty);
         }
       } else if (req.method === 'DELETE') {
         // First verify ownership
@@ -89,15 +89,15 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         `;
 
         if (existingProperty.length === 0) {
-          res.status(404).json({ message: 'Property not found' });
+          return res.status(404).json({ message: 'Property not found' });
         } else if (existingProperty[0].owner_id !== auth.userId) {
-          res.status(403).json({ message: 'Access denied' });
+          return res.status(403).json({ message: 'Access denied' });
         } else {
           await sql`DELETE FROM public.properties WHERE id = ${id}`;
-          res.status(204).send('');
+          return res.status(204).send('');
         }
       } else {
-        res.status(405).json({ message: 'Method not allowed' });
+        return res.status(405).json({ message: 'Method not allowed' });
       }
     } else {
       // Handle /api/properties - list all or create new
@@ -109,7 +109,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           ORDER BY created_at DESC
         `;
 
-        res.status(200).json(userProperties);
+        return res.status(200).json(userProperties);
       } else if (req.method === 'POST') {
         console.log('Request body:', JSON.stringify(req.body, null, 2));
         console.log('Auth userId:', auth.userId);
@@ -118,33 +118,53 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         
         // Validate required fields
         if (!name || !address || !propertyType || !totalUnits) {
-          res.status(400).json({ message: 'Missing required fields' });
-        } else {
-          console.log('Creating property with raw SQL');
-          
-          // Use raw SQL to insert property
-          const newProperties = await sql`
-            INSERT INTO public.properties (
-              name, address, property_type, total_units, description, image_url, owner_id, created_at, updated_at
+          return res.status(400).json({ message: 'Missing required fields' });
+        }
+        
+        console.log('Creating property with raw SQL');
+        
+        // Use raw SQL to insert property
+        const newProperties = await sql`
+          INSERT INTO public.properties (
+            name, address, property_type, total_units, description, image_url, owner_id, created_at, updated_at
+          )
+          VALUES (
+            ${name},
+            ${address},
+            ${propertyType},
+            ${parseInt(totalUnits)},
+            ${description || null},
+            ${imageUrl || null},
+            ${auth.userId},
+            NOW(),
+            NOW()
+          )
+          RETURNING *
+        `;
+
+        const createdProperty = newProperties[0];
+        console.log('Property created, now creating units...');
+
+        // Create default units for the property
+        const unitsToCreate = parseInt(totalUnits);
+        for (let i = 1; i <= unitsToCreate; i++) {
+          await sql`
+            INSERT INTO public.units (
+              property_id, unit_number, rent_amount, is_occupied
             )
             VALUES (
-              ${name},
-              ${address},
-              ${propertyType},
-              ${parseInt(totalUnits)},
-              ${description || null},
-              ${imageUrl || null},
-              ${auth.userId},
-              NOW(),
-              NOW()
+              ${createdProperty.id},
+              ${`Unit ${i}`},
+              ${0},
+              ${false}
             )
-            RETURNING *
           `;
-
-          res.status(201).json(newProperties[0]);
         }
+
+        console.log(`Created ${unitsToCreate} units for property`);
+        return res.status(201).json(createdProperty);
       } else {
-        res.status(405).json({ error: 'Method not allowed' });
+        return res.status(405).json({ error: 'Method not allowed' });
       }
     }
   } catch (error) {
@@ -153,9 +173,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     console.error('Error message:', error instanceof Error ? error.message : String(error));
     
     if (error instanceof z.ZodError) {
-      res.status(400).json({ message: 'Invalid input', errors: error.errors });
+      return res.status(400).json({ message: 'Invalid input', errors: error.errors });
     } else {
-      res.status(500).json({ 
+      return res.status(500).json({ 
         message: 'Failed to process request',
         error: error instanceof Error ? error.message : String(error)
       });
