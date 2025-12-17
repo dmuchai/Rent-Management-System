@@ -287,7 +287,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
                 ) : (
                   availableUnits.map((unit) => (
                     <SelectItem key={unit.id} value={unit.id}>
-                      {unit.propertyName} - Unit {unit.unitNumber} (KES {unit.rentAmount}/month)
+                      {unit.propertyName} - {unit.unitNumber || 'Unit'} (KES {unit.rentAmount || '0'}/month)
                     </SelectItem>
                   ))
                 )}

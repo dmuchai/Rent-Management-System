@@ -100,7 +100,8 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
       ...unitForm,
       bedrooms: unitForm.bedrooms ? parseInt(unitForm.bedrooms) : null,
       bathrooms: unitForm.bathrooms ? parseInt(unitForm.bathrooms) : null,
-      size: unitForm.size || null, // Keep as string for decimal field
+      size: unitForm.size ? unitForm.size : null, // Keep as string for decimal field
+      rentAmount: unitForm.rentAmount, // Keep as string for decimal field
     };
 
     mutation.mutate(submitData);

@@ -25,7 +25,20 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         const propertyUnits = await sql`
           SELECT * FROM public.units WHERE property_id = ${propertyId}
         `;
-        return res.status(200).json(propertyUnits);
+        // Transform to camelCase for frontend
+        const transformedUnits = propertyUnits.map(unit => ({
+          id: unit.id,
+          propertyId: unit.property_id,
+          unitNumber: unit.unit_number,
+          bedrooms: unit.bedrooms,
+          bathrooms: unit.bathrooms,
+          size: unit.size,
+          rentAmount: unit.rent_amount,
+          isOccupied: unit.is_occupied,
+          createdAt: unit.created_at,
+          updatedAt: unit.updated_at
+        }));
+        return res.status(200).json(transformedUnits);
       }
     } else if (req.method === 'GET') {
       // Get all units for all user's properties
@@ -36,7 +49,20 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         WHERE p.owner_id = ${auth.userId}
         ORDER BY u.created_at DESC
       `;
-      return res.status(200).json(allUnits);
+      // Transform to camelCase for frontend
+      const transformedUnits = allUnits.map(unit => ({
+        id: unit.id,
+        propertyId: unit.property_id,
+        unitNumber: unit.unit_number,
+        bedrooms: unit.bedrooms,
+        bathrooms: unit.bathrooms,
+        size: unit.size,
+        rentAmount: unit.rent_amount,
+        isOccupied: unit.is_occupied,
+        createdAt: unit.created_at,
+        updatedAt: unit.updated_at
+      }));
+      return res.status(200).json(transformedUnits);
     } else if (req.method === 'POST') {
       const unitData = insertUnitSchema.parse(req.body);
 
@@ -51,18 +77,32 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(403).json({ message: 'Access denied' });
       } else {
         const [unit] = await sql`
-          INSERT INTO public.units (property_id, unit_number, bedrooms, bathrooms, rent_amount, is_occupied)
+          INSERT INTO public.units (property_id, unit_number, bedrooms, bathrooms, size, rent_amount, is_occupied)
           VALUES (
             ${unitData.propertyId},
             ${unitData.unitNumber},
             ${unitData.bedrooms ?? null},
             ${unitData.bathrooms ?? null},
+            ${unitData.size ?? null},
             ${unitData.rentAmount},
             ${unitData.isOccupied ?? false}
           )
           RETURNING *
         `;
-        return res.status(201).json(unit);
+        // Transform to camelCase for frontend
+        const transformedUnit = {
+          id: unit.id,
+          propertyId: unit.property_id,
+          unitNumber: unit.unit_number,
+          bedrooms: unit.bedrooms,
+          bathrooms: unit.bathrooms,
+          size: unit.size,
+          rentAmount: unit.rent_amount,
+          isOccupied: unit.is_occupied,
+          createdAt: unit.created_at,
+          updatedAt: unit.updated_at
+        };
+        return res.status(201).json(transformedUnit);
       }
     } else {
       return res.status(405).json({ message: 'Method not allowed' });
