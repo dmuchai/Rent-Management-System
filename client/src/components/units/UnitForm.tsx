@@ -49,7 +49,7 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
       return await response.json() as UnitResponse;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/properties/${propertyId}/units`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/units`, propertyId] });
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       toast({
         title: "Success",

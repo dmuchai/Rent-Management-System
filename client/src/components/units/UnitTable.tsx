@@ -19,9 +19,9 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
 
   // Fetch units for this property
   const { data: units = [], isLoading } = useQuery<Unit[]>({
-    queryKey: [`/api/properties/${propertyId}/units`],
+    queryKey: [`/api/units`, propertyId],
     queryFn: async (): Promise<Unit[]> => {
-      const response = await apiRequest("GET", `/api/properties/${propertyId}/units`);
+      const response = await apiRequest("GET", `/api/units?propertyId=${propertyId}`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch units: ${response.status} ${response.statusText}`);
@@ -44,7 +44,7 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/properties/${propertyId}/units`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/units`, propertyId] });
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       toast({
         title: "Success",

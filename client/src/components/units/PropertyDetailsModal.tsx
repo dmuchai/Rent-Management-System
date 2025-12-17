@@ -22,9 +22,9 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
 
   // Fetch property details
   const { data: property, isLoading } = useQuery({
-    queryKey: [`/api/properties/${propertyId}`],
+    queryKey: [`/api/properties`, propertyId],
     queryFn: async () => {
-      const response = await apiRequest("GET", `/api/properties/${propertyId}`);
+      const response = await apiRequest("GET", `/api/properties?id=${propertyId}`);
       return await response.json();
     },
     enabled: !!propertyId && open,
@@ -32,9 +32,9 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
 
   // Fetch units for this property
   const { data: units = [] } = useQuery<Unit[]>({
-    queryKey: [`/api/properties/${propertyId}/units`],
+    queryKey: [`/api/units`, propertyId],
     queryFn: async (): Promise<Unit[]> => {
-      const response = await apiRequest("GET", `/api/properties/${propertyId}/units`);
+      const response = await apiRequest("GET", `/api/units?propertyId=${propertyId}`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch units: ${response.status} ${response.statusText}`);

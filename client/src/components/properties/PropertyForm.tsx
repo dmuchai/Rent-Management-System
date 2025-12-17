@@ -50,7 +50,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
 
   const mutation = useMutation({
     mutationFn: async (data: InsertProperty) => {
-      const url = isEdit ? `/api/properties/${property.id}` : "/api/properties";
+      const url = isEdit ? `/api/properties?id=${property.id}` : "/api/properties";
       const method = isEdit ? "PUT" : "POST";
       return await apiRequest(method, url, data);
     },
