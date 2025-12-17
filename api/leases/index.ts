@@ -30,8 +30,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         unitId: lease.unit_id,
         startDate: lease.start_date,
         endDate: lease.end_date,
-        rentAmount: lease.rent_amount,
-        depositAmount: lease.deposit_amount,
+        monthlyRent: lease.monthly_rent,
+        securityDeposit: lease.security_deposit,
         isActive: lease.is_active,
         createdAt: lease.created_at,
         tenant: {
@@ -218,7 +218,21 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         RETURNING *
       `;
 
-      return res.status(200).json(updatedLease);
+      // Transform response to camelCase
+      const transformedLease = {
+        id: updatedLease.id,
+        tenantId: updatedLease.tenant_id,
+        unitId: updatedLease.unit_id,
+        startDate: updatedLease.start_date,
+        endDate: updatedLease.end_date,
+        monthlyRent: updatedLease.monthly_rent,
+        securityDeposit: updatedLease.security_deposit,
+        isActive: updatedLease.is_active,
+        createdAt: updatedLease.created_at,
+        updatedAt: updatedLease.updated_at
+      };
+
+      return res.status(200).json(transformedLease);
     }
     
     return res.status(405).json({ error: 'Method not allowed' });
