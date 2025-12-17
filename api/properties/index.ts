@@ -149,25 +149,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         `;
 
         const createdProperty = newProperties[0];
-        console.log('Property created, now creating units...');
-
-        // Create default units for the property
-        const unitsToCreate = parseInt(totalUnits);
-        for (let i = 1; i <= unitsToCreate; i++) {
-          await sql`
-            INSERT INTO public.units (
-              property_id, unit_number, rent_amount, is_occupied
-            )
-            VALUES (
-              ${createdProperty.id},
-              ${`Unit ${i}`},
-              ${0},
-              ${false}
-            )
-          `;
-        }
-
-        console.log(`Created ${unitsToCreate} units for property`);
+        console.log('Property created successfully. Units can be added via property details.');
+        
+        // Don't auto-create units - let users add them with proper details (rent, bedrooms, etc.)
+        // This ensures quality data and prevents confusion with placeholder units
+        
         return res.status(201).json(createdProperty);
     } else {
       return res.status(405).json({ error: 'Method not allowed' });

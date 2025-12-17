@@ -58,7 +58,9 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       toast({
         title: "Success",
-        description: `Property ${isEdit ? "updated" : "created"} successfully`,
+        description: isEdit 
+          ? "Property updated successfully" 
+          : "Property created! Now add units with rent amounts by clicking 'View Details'",
       });
       onOpenChange(false);
       form.reset();
