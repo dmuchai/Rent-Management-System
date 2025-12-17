@@ -62,6 +62,8 @@ export default function LandlordDashboard() {
   const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
   const [isPasswordChangeOpen, setIsPasswordChangeOpen] = useState(false);
   const [isPaymentFormOpen, setIsPaymentFormOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // State for editing leases
   const [editingLease, setEditingLease] = useState<Lease | null>(null);
@@ -599,11 +601,11 @@ export default function LandlordDashboard() {
         );      case "properties":
         return (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-semibold">Properties</h2>
               <button 
                 onClick={() => setIsPropertyFormOpen(true)}
-                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors w-full sm:w-auto"
                 data-testid="button-addproperty"
               >
                 <i className="fas fa-plus mr-2"></i>Add Property
@@ -635,10 +637,10 @@ export default function LandlordDashboard() {
       case "tenants":
         return (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-semibold">Tenants</h2>
               <button 
-                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors w-full sm:w-auto"
                 data-testid="button-addtenant"
                 onClick={() => setIsTenantFormOpen(true)}
               >
@@ -657,10 +659,10 @@ export default function LandlordDashboard() {
       case "leases":
         return (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-semibold">Lease Agreements</h2>
               <button 
-                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors w-full sm:w-auto"
                 data-testid="button-addlease"
                 onClick={() => {
                   setEditingLease(null);
@@ -685,7 +687,7 @@ export default function LandlordDashboard() {
       case "payments":
         return (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-semibold">Payment Management</h2>
               <button 
                 className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
@@ -848,15 +850,21 @@ export default function LandlordDashboard() {
         <Sidebar 
           activeSection={activeSection} 
           onSectionChange={(section) => setActiveSection(section as DashboardSection)}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          isCollapsed={isSidebarCollapsed}
         />
         
         <div className="flex-1 overflow-auto">
           <Header 
             title={sectionTitles[activeSection]}
             onSectionChange={(section) => setActiveSection(section as DashboardSection)}
+            onMenuClick={() => setIsSidebarOpen(true)}
+            onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            isSidebarCollapsed={isSidebarCollapsed}
           />
           
-          <div className="p-6">
+          <div className="p-4 md:p-6">
             {renderMainContent()}
           </div>
         </div>

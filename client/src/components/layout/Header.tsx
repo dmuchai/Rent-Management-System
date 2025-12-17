@@ -4,14 +4,18 @@ import { logout } from "@/lib/auth";
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { Menu, PanelLeftClose, PanelLeft } from "lucide-react";
 
 interface HeaderProps {
   title: string;
   showSidebar?: boolean;
   onSectionChange?: (section: string) => void;
+  onMenuClick?: () => void;
+  onToggleSidebar?: () => void;
+  isSidebarCollapsed?: boolean;
 }
 
-export default function Header({ title, showSidebar = true, onSectionChange }: HeaderProps) {
+export default function Header({ title, showSidebar = true, onSectionChange, onMenuClick, onToggleSidebar, isSidebarCollapsed }: HeaderProps) {
   const { user } = useAuth();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -59,10 +63,37 @@ export default function Header({ title, showSidebar = true, onSectionChange }: H
 
   return (
     <header className="bg-card border-b border-border">
-      <div className="px-6 py-4">
+      <div className="px-4 md:px-6 py-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold" data-testid="header-title">{title}</h1>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* Mobile hamburger menu */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={onMenuClick}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+
+            {/* Desktop sidebar toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden md:flex"
+              onClick={onToggleSidebar}
+              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {isSidebarCollapsed ? (
+                <PanelLeft className="h-5 w-5" />
+              ) : (
+                <PanelLeftClose className="h-5 w-5" />
+              )}
+            </Button>
+
+            <h1 className="text-lg md:text-2xl font-semibold" data-testid="header-title">{title}</h1>
+          </div>
+          <div className="flex items-center space-x-2 md:space-x-4">
             {/* Notifications Button */}
             <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
               <PopoverTrigger asChild>
@@ -118,10 +149,10 @@ export default function Header({ title, showSidebar = true, onSectionChange }: H
                       {user?.firstName?.[0] || user?.email?.[0] || 'U'}{user?.lastName?.[0] || ''}
                     </span>
                   </div>
-                  <span className="font-medium" data-testid="user-name">
+                  <span className="font-medium hidden md:inline" data-testid="user-name">
                     {user?.firstName} {user?.lastName || user?.email?.split('@')[0]}
                   </span>
-                  <i className="fas fa-chevron-down text-xs text-muted-foreground"></i>
+                  <i className="fas fa-chevron-down text-xs text-muted-foreground hidden md:inline"></i>
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-64 p-0" align="end">
