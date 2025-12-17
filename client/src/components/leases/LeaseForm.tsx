@@ -93,16 +93,38 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
     enabled: open,
   });
 
-  // Get available units (not occupied by active leases)
-  const availableUnits: UnitWithProperty[] = properties.flatMap((property) =>
-    (property.units || [])
-      .filter((unit: Unit & { isOccupied?: boolean }) => !unit.isOccupied || (isEdit && lease?.unitId === unit.id))
-      .map((unit): UnitWithProperty => ({
+  // Fetch all units
+  const { data: units = [], isLoading: unitsLoading } = useQuery<Unit[]>({
+    queryKey: ["/api/units"],
+    queryFn: async (): Promise<Unit[]> => {
+      try {
+        const response = await apiRequest("GET", "/api/units");
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch units: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error("Error fetching units:", error);
+        return [];
+      }
+    },
+    enabled: open,
+  });
+
+  // Get available units with property information
+  const availableUnits: UnitWithProperty[] = units
+    .filter((unit: Unit & { isOccupied?: boolean }) => !unit.isOccupied || (isEdit && lease?.unitId === unit.id))
+    .map((unit): UnitWithProperty => {
+      const property = properties.find(p => p.id === unit.propertyId);
+      return {
         ...unit,
-        propertyName: property.name,
-        propertyAddress: property.address,
-      }))
-  );
+        propertyName: property?.name || 'Unknown Property',
+        propertyAddress: property?.address || ''
+      };
+    });
 
   const mutation = useMutation({
     mutationFn: async (data: Omit<InsertLease, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -258,7 +280,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
                 <SelectValue placeholder="Select a unit" />
               </SelectTrigger>
               <SelectContent>
-                {propertiesLoading ? (
+                {(propertiesLoading || unitsLoading) ? (
                   <SelectItem value="loading" disabled>Loading units...</SelectItem>
                 ) : availableUnits.length === 0 ? (
                   <SelectItem value="no-units" disabled>No available units - Add properties and units first</SelectItem>
