@@ -10,14 +10,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
   try {
     if (req.method === 'GET') {
-      // Get all unique tenants connected to landlord's properties through leases
+      // Get all tenants owned by this landlord
       const tenants = await sql`
-        SELECT DISTINCT t.*
+        SELECT t.*
         FROM public.tenants t
-        INNER JOIN public.leases l ON t.id = l.tenant_id
-        INNER JOIN public.units u ON l.unit_id = u.id
-        INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId}
+        WHERE t.user_id = ${auth.userId}
         ORDER BY t.created_at DESC
       `;
       
@@ -26,12 +23,14 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       const tenantData = insertTenantSchema.parse(req.body);
 
       const [tenant] = await sql`
-        INSERT INTO public.tenants (first_name, last_name, email, phone)
+        INSERT INTO public.tenants (user_id, first_name, last_name, email, phone, emergency_contact)
         VALUES (
+          ${auth.userId},
           ${tenantData.firstName}, 
           ${tenantData.lastName}, 
           ${tenantData.email}, 
-          ${tenantData.phone}
+          ${tenantData.phone},
+          ${tenantData.emergencyContact || null}
         )
         RETURNING *
       `;
