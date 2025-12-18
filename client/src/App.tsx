@@ -7,6 +7,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useEffect } from "react";
 import "./debug"; // Import debug config to check API configuration
 import Landing from "@/pages/landing";
+import Login from "@/pages/login";
+import Register from "@/pages/register";
 import LandlordDashboard from "@/pages/dashboard/landlord";
 import AuthCallback from "@/pages/auth-callback";
 import NotFound from "@/pages/not-found";
@@ -19,14 +21,14 @@ function Router() {
   useEffect(() => {
     if (!isLoading) {
       if (isAuthenticated) {
-        // If authenticated and on landing page, redirect to dashboard
-        if (location === "/") {
+        // If authenticated and on landing/login page, redirect to dashboard
+        if (location === "/" || location === "/login") {
           setLocation("/dashboard");
         }
       } else {
-        // If not authenticated and trying to access dashboard, redirect to landing
+        // If not authenticated and trying to access dashboard, redirect to login
         if (location === "/dashboard") {
-          setLocation("/");
+          setLocation("/login");
         }
       }
     }
@@ -43,10 +45,12 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       <Route path="/auth-callback" component={AuthCallback} />
       <Route path="/dashboard" component={() => {
         if (!isAuthenticated) {
-          return <Landing />;
+          return <Login />;
         }
         return <LandlordDashboard />;
       }} />
