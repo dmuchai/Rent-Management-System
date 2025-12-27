@@ -62,10 +62,10 @@ export function useRealtimeSubscription(
           console.log(`[Realtime] Change detected in ${tableName}:`, payload.eventType);
           console.log('[Realtime] Payload:', payload);
           
-          // Invalidate queries to trigger a refetch
-          queryClient.invalidateQueries({ queryKey });
+          // Force refetch queries immediately (not just invalidate)
+          queryClient.refetchQueries({ queryKey });
           
-          console.log(`[Realtime] Invalidated query key: [${queryKey.join(', ')}]`);
+          console.log(`[Realtime] Refetched query key: [${queryKey.join(', ')}]`);
         }
       )
       .subscribe((status) => {
