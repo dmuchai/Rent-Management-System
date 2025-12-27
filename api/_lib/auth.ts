@@ -81,7 +81,13 @@ export function setCorsHeaders(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-export function requireAuth(handler: (req: VercelRequest, res: VercelResponse, auth: { userId: string; user: User }) => Promise<void>) {
+export function requireAuth(
+  handler: (
+    req: VercelRequest, 
+    res: VercelResponse, 
+    auth: { userId: string; user: User }
+  ) => Promise<void | VercelResponse>
+) {
   return async (req: VercelRequest, res: VercelResponse) => {
     // Set CORS headers for all requests
     setCorsHeaders(req, res);

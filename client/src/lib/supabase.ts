@@ -19,13 +19,23 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Create and export the Supabase client
+// 
+// AUTH STRATEGY: This client is ONLY used for Realtime subscriptions.
+// All authentication and data operations are proxied through our backend API (/api/*).
+// - Authentication: Handled by backend (api/login.ts, api/register.ts) with JWT in httpOnly cookies
+// - Data operations: Proxied through backend API endpoints (api/properties, api/tenants, etc.)
+// - Realtime: Uses anon key for public subscription access (no auth required for listening)
+// 
+// Therefore, persistSession and autoRefreshToken are disabled since this client never
+// performs authenticated operations - it only subscribes to Realtime channels using the
+// public anon key, which doesn't require token refresh.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false, // We handle auth via cookies from our API
-    autoRefreshToken: false,
+    persistSession: false, // Not needed - all auth happens on backend
+    autoRefreshToken: false, // Not needed - client only used for Realtime subscriptions
   },
   realtime: {
-    // Enable Realtime features
+    // Enable Realtime features for database change subscriptions
     params: {
       eventsPerSecond: 10, // Rate limit to 10 events per second
     },

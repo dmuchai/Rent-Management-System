@@ -2,6 +2,8 @@
 
 This document shows exactly how to update your existing dashboard component to use Realtime updates.
 
+**Hook Implementation:** The `useRealtimeSubscription` hook is located at `client/src/hooks/useRealtimeSubscription.ts` and accepts a table name (string) and query key (array) as parameters, with an optional third parameter for configuration options like `{ enabled: boolean }`.
+
 ## 📝 Before (Current Code)
 
 ```tsx
@@ -94,13 +96,19 @@ export default function LandlordDashboard() {
 
 ## 🎯 What Changed?
 
-**Just 4 lines of code:**
-1. Import the hook at the top
-2. Add subscription for properties
-3. Add subscription for tenants  
-4. Add subscription for payments
+**1 import + one subscription call per data table:**
+1. Import the hook at the top (`useRealtimeSubscription` from `@/hooks/useRealtimeSubscription`)
+2. Add one subscription call for each table you want to monitor:
+   - `useRealtimeSubscription("properties", ["properties"])`
+   - `useRealtimeSubscription("tenants", ["tenants"])`
+   - `useRealtimeSubscription("payments", ["payments"])`
 
-**That's literally it!** Your dashboard now updates in real-time. 🎉
+**That's it!** Your dashboard now updates in real-time. 🎉
+
+> **Note:** The hook signature is `useRealtimeSubscription(tableName, queryKey, options?)` where:
+> - `tableName` (string): The database table to subscribe to
+> - `queryKey` (string[]): The TanStack Query key to invalidate when changes occur
+> - `options` (optional): Configuration object, e.g., `{ enabled: boolean }` for conditional subscriptions
 
 ## 🔄 Step-by-Step Update Guide
 

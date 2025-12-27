@@ -84,7 +84,7 @@ export function useRealtimeSubscription(
       console.log(`[Realtime] Cleaning up subscription for ${tableName}`);
       supabase.removeChannel(channel);
     };
-  }, [tableName, queryKey.join(','), queryClient, enabled]);
+  }, [tableName, JSON.stringify(queryKey), queryClient, enabled]);
 }
 
 /**
