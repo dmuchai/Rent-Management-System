@@ -197,10 +197,15 @@ export default function LandlordDashboard() {
   });
 
   // 🔄 Enable Realtime subscriptions for instant updates
-  useRealtimeSubscription("properties", ["/api/properties"]);
-  useRealtimeSubscription("tenants", ["/api/tenants"]);
-  useRealtimeSubscription("leases", ["/api/leases"]);
-  useRealtimeSubscription("payments", ["/api/payments"]);
+  // Properties changes affect both /api/properties and /api/dashboard/stats
+  useRealtimeSubscription("properties", ["/api/properties", "/api/dashboard/stats"]);
+  // Tenants changes affect both endpoints
+  useRealtimeSubscription("tenants", ["/api/tenants", "/api/dashboard/stats"]);
+  // Leases changes affect stats
+  useRealtimeSubscription("leases", ["/api/leases", "/api/dashboard/stats"]);
+  // Payments changes affect both endpoints
+  useRealtimeSubscription("payments", ["/api/payments", "/api/dashboard/stats"]);
+  // Units changes don't affect stats, just the units endpoint
   useRealtimeSubscription("units", ["/api/units"]);
 
   // Profile update mutation
