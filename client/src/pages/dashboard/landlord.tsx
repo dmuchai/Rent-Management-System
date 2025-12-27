@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import type { Lease } from "@/../../shared/schema";
 
 type DashboardSection = "overview" | "properties" | "tenants" | "leases" | "payments" | "documents" | "reports" | "profile";
@@ -194,6 +195,13 @@ export default function LandlordDashboard() {
     },
     retry: false,
   });
+
+  // 🔄 Enable Realtime subscriptions for instant updates
+  useRealtimeSubscription("properties", ["/api/properties"]);
+  useRealtimeSubscription("tenants", ["/api/tenants"]);
+  useRealtimeSubscription("leases", ["/api/leases"]);
+  useRealtimeSubscription("payments", ["/api/payments"]);
+  useRealtimeSubscription("units", ["/api/units"]);
 
   // Profile update mutation
   const profileUpdateMutation = useMutation({
