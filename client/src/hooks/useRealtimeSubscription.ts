@@ -14,7 +14,7 @@
  * ```
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -32,6 +32,9 @@ export function useRealtimeSubscription(
 ) {
   const queryClient = useQueryClient();
   const enabled = options?.enabled !== undefined ? options.enabled : true;
+
+  // Memoize the stringified queryKey to prevent unnecessary effect reruns
+  const stringifiedQueryKey = useMemo(() => JSON.stringify(queryKey), [queryKey]);
 
   useEffect(() => {
     // Skip if disabled
@@ -84,7 +87,7 @@ export function useRealtimeSubscription(
       console.log(`[Realtime] Cleaning up subscription for ${tableName}`);
       supabase.removeChannel(channel);
     };
-  }, [tableName, JSON.stringify(queryKey), queryClient, enabled]);
+  }, [tableName, stringifiedQueryKey, queryClient, enabled]);
 }
 
 /**
