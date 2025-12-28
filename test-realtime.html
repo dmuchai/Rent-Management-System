@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supabase Realtime Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .status {
+      padding: 15px;
+      border-radius: 5px;
+      margin: 10px 0;
+      font-weight: bold;
+    }
+    .status.success { background: #d4edda; color: #155724; }
+    .status.error { background: #f8d7da; color: #721c24; }
+    .status.info { background: #d1ecf1; color: #0c5460; }
+    .log {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 5px;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      margin-top: 20px;
+    }
+    .log-entry {
+      padding: 5px;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .log-entry.insert { color: #28a745; }
+    .log-entry.update { color: #ffc107; }
+    .log-entry.delete { color: #dc3545; }
+    h1 { color: #333; margin-top: 0; }
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔄 Supabase Realtime Test</h1>
+    <p>This page tests if Supabase Realtime is working correctly.</p>
+    
+    <div id="connection-status" class="status info">
+      Connecting to Supabase Realtime...
+    </div>
+
+    <div id="subscription-status" class="status info">
+      Waiting for subscription...
+    </div>
+
+    <div>
+      <h3>Actions:</h3>
+      <button onclick="testInsert()">Test INSERT</button>
+      <button onclick="testUpdate()">Test UPDATE</button>
+      <button onclick="testDelete()">Test DELETE</button>
+      <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <h3>Event Log:</h3>
+    <div id="log" class="log">
+      <div class="log-entry">Waiting for events...</div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://emdahodfztpfdjkrbnqz.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtZGFob2RmenRwZmRqa3JibnF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMzY1ODEsImV4cCI6MjA3MzcxMjU4MX0.ci6zhIbRt5DnSbtxIuvO9D0NjihAkmcbO_NexhEjIZA';
+
+    console.log('🚀 Initializing Supabase Realtime Test');
+    console.log('URL:', SUPABASE_URL);
+    console.log('Key:', SUPABASE_ANON_KEY.substring(0, 20) + '...');
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
+      },
+    });
+    
+    const logDiv = document.getElementById('log');
+    const connectionStatus = document.getElementById('connection-status');
+    const subscriptionStatus = document.getElementById('subscription-status');
+
+    function addLog(message, type = '') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      logDiv.insertBefore(entry, logDiv.firstChild);
+      console.log(message); // Also log to console
+    }
+
+    function clearLog() {
+      logDiv.innerHTML = '<div class="log-entry">Log cleared. Waiting for events...</div>';
+    }
+
+    // Subscribe to payments table changes
+    console.log('📡 Creating Realtime channel...');
+    addLog('Creating Realtime channel for payments table...');
+    
+    const channel = supabase
+      .channel('payments_changes_v2', {
+        config: {
+          broadcast: { self: true },
+        },
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'payments'
+        },
+        (payload) => {
+          console.log('🎉 Change received!', payload);
+          addLog(`Event: ${payload.eventType} - ${JSON.stringify(payload.new || payload.old)}`, payload.eventType.toLowerCase());
+        }
+      )
+      .subscribe((status, err) => {
+        console.log('📊 Subscription status:', status);
+        if (err) {
+          console.error('❌ Subscription error:', err);
+          addLog(`Error: ${err.message}`);
+        }
+        
+        if (status === 'SUBSCRIBED') {
+          subscriptionStatus.className = 'status success';
+          subscriptionStatus.textContent = '✅ Successfully subscribed to payments table!';
+          addLog('✅ Subscription active - listening for changes...');
+          console.log('✅ Ready to receive Realtime updates!');
+        } else if (status === 'CHANNEL_ERROR') {
+          subscriptionStatus.className = 'status error';
+          subscriptionStatus.textContent = '❌ Failed to subscribe. Check if Realtime is enabled.';
+          addLog('❌ Subscription failed! Check browser console for details.');
+          console.error('Channel error - Realtime might not be enabled for this table');
+        } else if (status === 'TIMED_OUT') {
+          subscriptionStatus.className = 'status error';
+          subscriptionStatus.textContent = '⏱️ Subscription timed out.';
+          addLog('⏱️ Subscription timed out - Realtime might not be enabled');
+          console.error('Timeout - check Supabase Realtime configuration');
+        } else if (status === 'CLOSED') {
+          subscriptionStatus.className = 'status error';
+          subscriptionStatus.textContent = '🔌 Connection closed.';
+          addLog('🔌 Connection closed');
+          console.warn('Channel closed');
+        } else {
+          subscriptionStatus.className = 'status info';
+          subscriptionStatus.textContent = `Status: ${status}`;
+          addLog(`Status update: ${status}`);
+        }
+      });
+
+    connectionStatus.className = 'status success';
+    connectionStatus.textContent = '✅ Connected to Supabase';
+    addLog('Connected to Supabase client');
+    console.log('✅ Supabase client initialized');
+
+    // Test functions (optional - for manual testing)
+    window.testInsert = async function() {
+      addLog('Attempting to insert test payment...');
+      try {
+        const { data, error } = await supabase
+          .from('payments')
+          .insert([
+            {
+              lease_id: 1,
+              amount: '100.00',
+              payment_method: 'test',
+              paid_date: new Date().toISOString(),
+              status: 'completed',
+              description: 'Test payment from Realtime test page'
+            }
+          ])
+          .select();
+        
+        if (error) throw error;
+        addLog('✅ Test insert successful!', 'insert');
+        console.log('Insert result:', data);
+      } catch (error) {
+        addLog(`❌ Insert failed: ${error.message}`);
+        console.error('Insert error:', error);
+      }
+    };
+
+    window.testUpdate = async function() {
+      addLog('Test update - please update a payment in your dashboard');
+    };
+
+    window.testDelete = async function() {
+      addLog('Test delete - please delete a payment in your dashboard');
+    };
+
+    window.clearLog = clearLog;
+
+    addLog('Realtime test page loaded. Waiting for database changes...');
+    console.log('🎯 Test page ready. Check subscription status above.');
+  </script>
+</body>
+</html>

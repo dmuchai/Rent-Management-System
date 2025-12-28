@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supabase Realtime Diagnostic</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 { color: #333; margin-top: 0; }
+    .check {
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+      border-left: 4px solid #ccc;
+    }
+    .check.pass { background: #d4edda; border-color: #28a745; }
+    .check.fail { background: #f8d7da; border-color: #dc3545; }
+    .check.warn { background: #fff3cd; border-color: #ffc107; }
+    .check-title { font-weight: bold; margin-bottom: 5px; }
+    .check-detail { font-size: 14px; color: #666; }
+    .code { background: #f8f9fa; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px 10px 0;
+    }
+    button:hover { background: #0056b3; }
+    .loading { color: #666; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Supabase Realtime Diagnostic</h1>
+    <p>This tool checks if Realtime is properly configured for your project.</p>
+    
+    <button onclick="runDiagnostics()">Run Diagnostics</button>
+    <button onclick="location.reload()">Refresh</button>
+    
+    <div id="results"></div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://emdahodfztpfdjkrbnqz.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtZGFob2RmenRwZmRqa3JibnF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMzY1ODEsImV4cCI6MjA3MzcxMjU4MX0.ci6zhIbRt5DnSbtxIuvO9D0NjihAkmcbO_NexhEjIZA';
+
+    function addCheck(title, detail, status) {
+      const results = document.getElementById('results');
+      const check = document.createElement('div');
+      check.className = `check ${status}`;
+      check.innerHTML = `
+        <div class="check-title">${getIcon(status)} ${title}</div>
+        <div class="check-detail">${detail}</div>
+      `;
+      results.appendChild(check);
+    }
+
+    function getIcon(status) {
+      switch(status) {
+        case 'pass': return '✅';
+        case 'fail': return '❌';
+        case 'warn': return '⚠️';
+        default: return 'ℹ️';
+      }
+    }
+
+    async function runDiagnostics() {
+      const results = document.getElementById('results');
+      results.innerHTML = '<p class="loading">Running diagnostics...</p>';
+
+      // Check 1: Environment Variables
+      const hasUrl = !!SUPABASE_URL && SUPABASE_URL !== 'https://your-project-id.supabase.co';
+      const hasKey = !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.length > 50;
+      
+      if (hasUrl && hasKey) {
+        addCheck('Environment Variables', 
+          `URL: ${SUPABASE_URL}<br>Key: ${SUPABASE_ANON_KEY.substring(0, 20)}...`, 
+          'pass');
+      } else {
+        addCheck('Environment Variables', 
+          'Missing or invalid Supabase credentials', 
+          'fail');
+        return;
+      }
+
+      // Check 2: Realtime Endpoint Accessibility
+      try {
+        const realtimeUrl = SUPABASE_URL.replace('https://', 'wss://') + '/realtime/v1/websocket';
+        addCheck('Realtime WebSocket Endpoint', 
+          `Endpoint: <span class="code">${realtimeUrl}</span><br>Testing connection...`, 
+          'warn');
+        
+        // Try to connect via REST API
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+          }
+        });
+        
+        if (response.ok || response.status === 404) {
+          addCheck('Supabase API Connection', 
+            `Status: ${response.status} - API is accessible`, 
+            'pass');
+        } else {
+          addCheck('Supabase API Connection', 
+            `Status: ${response.status} - API returned unexpected response`, 
+            'warn');
+        }
+      } catch (error) {
+        addCheck('Supabase API Connection', 
+          `Error: ${error.message}`, 
+          'fail');
+      }
+
+      // Check 3: Check Realtime Capability via Actual Subscription
+      addCheck('Testing Realtime Subscription', 
+        'Attempting to subscribe to test channel...', 
+        'warn');
+
+      // Load Supabase client dynamically
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+      script.onload = async () => {
+        try {
+          const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+          
+          let subscribed = false;
+          let timedOut = false;
+          let channelError = false;
+
+          const timeout = setTimeout(() => {
+            if (!subscribed) {
+              timedOut = true;
+              addCheck('Realtime Subscription Test', 
+                'Subscription attempt timed out after 10 seconds. <b>Realtime is likely NOT enabled for your project.</b><br><br>' +
+                '<b>Solution:</b><br>' +
+                '1. Go to Project Settings → API in Supabase Dashboard<br>' +
+                '2. Look for Realtime section and enable it<br>' +
+                '3. Or contact Supabase support if you don\'t see the option', 
+                'fail');
+            }
+          }, 10000);
+
+          const channel = supabase
+            .channel('diagnostic_test')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => {})
+            .subscribe((status, err) => {
+              clearTimeout(timeout);
+              
+              if (status === 'SUBSCRIBED') {
+                subscribed = true;
+                addCheck('Realtime Subscription Test', 
+                  '<b>SUCCESS!</b> Realtime is working correctly. ✅<br>' +
+                  'Your project can receive real-time updates.', 
+                  'pass');
+                supabase.removeChannel(channel);
+              } else if (status === 'CHANNEL_ERROR') {
+                channelError = true;
+                addCheck('Realtime Subscription Test', 
+                  '<b>Channel Error:</b> Failed to subscribe. Possible causes:<br>' +
+                  '1. Realtime not enabled for your project<br>' +
+                  '2. Network/firewall blocking WebSocket connections<br>' +
+                  '3. Invalid credentials<br><br>' +
+                  (err ? `Error: ${err.message}` : ''), 
+                  'fail');
+              } else if (status === 'TIMED_OUT' && !timedOut) {
+                addCheck('Realtime Subscription Test', 
+                  'Subscription timed out. Realtime might not be enabled.', 
+                  'fail');
+              } else if (status === 'CLOSED') {
+                if (!subscribed && !channelError && !timedOut) {
+                  addCheck('Realtime Subscription Test', 
+                    'Connection closed before subscribing. Realtime likely disabled.', 
+                    'fail');
+                }
+              }
+            });
+
+        } catch (error) {
+          addCheck('Realtime Client Test', 
+            `Error initializing Realtime client: ${error.message}`, 
+            'fail');
+        }
+      };
+      document.head.appendChild(script);
+
+      // Check 4: Provide Next Steps
+      setTimeout(() => {
+        addCheck('Next Steps', 
+          'If Realtime subscription failed:<br><br>' +
+          '<b>1. Check Project Plan:</b> Go to Settings → Billing in Supabase<br>' +
+          '<b>2. Enable Realtime:</b> Settings → API → Look for Realtime toggle<br>' +
+          '<b>3. Check Publications:</b> Run SQL to verify tables are in publication<br>' +
+          '<b>4. Contact Support:</b> If issue persists, contact Supabase support<br><br>' +
+          'If subscription succeeded, you can now use Realtime in your app!', 
+          'warn');
+      }, 12000);
+    }
+  </script>
+</body>
+</html>

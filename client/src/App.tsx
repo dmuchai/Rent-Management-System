@@ -11,6 +11,8 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import LandlordDashboard from "@/pages/dashboard/landlord";
 import AuthCallback from "@/pages/auth-callback";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -47,6 +49,8 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/auth-callback" component={AuthCallback} />
       <Route path="/dashboard" component={() => {
         if (!isAuthenticated) {
