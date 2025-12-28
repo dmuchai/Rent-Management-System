@@ -111,7 +111,7 @@ export default function LandlordDashboard() {
   // Logout handler
   const handleLogout = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth?action=logout`, {
         method: "POST",
         credentials: "include",
       });
@@ -215,7 +215,7 @@ export default function LandlordDashboard() {
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth?action=user"] });
       toast({
         title: "Success",
         description: "Profile updated successfully!",

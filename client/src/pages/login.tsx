@@ -24,7 +24,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const response = await apiRequest("POST", "/api/login", {
+      const response = await apiRequest("POST", "/api/auth?action=login", {
         email: formData.email,
         password: formData.password,
       });
@@ -56,7 +56,7 @@ export default function Login() {
 
   const handleGoogleLogin = () => {
     // Redirect to Google OAuth endpoint
-    window.location.href = `${API_BASE_URL}/api/login?provider=google`;
+    window.location.href = `${API_BASE_URL}/api/auth?action=google`;
   };
 
   const handleRegister = () => {

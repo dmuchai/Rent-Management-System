@@ -53,15 +53,15 @@ export function useAuth() {
       window.history.replaceState({}, '', url.toString());
       
       // Force refetch of auth status
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth?action=user"] });
     }
   }, [queryClient]);
 
   const { data: user, isLoading, error } = useQuery<User>({
-    queryKey: ["/api/auth/user"],
+    queryKey: ["/api/auth?action=user"],
     queryFn: async (): Promise<User> => {
       // Using httpOnly cookies for authentication - no need to check localStorage
-      const response = await fetch(`${API_BASE_URL}/api/auth/user`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth?action=user`, {
         headers: {
           'Content-Type': 'application/json',
         },

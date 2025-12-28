@@ -40,7 +40,7 @@ export default function Register() {
     setIsLoading(true);
 
     try {
-      const response = await apiRequest("POST", "/api/register", {
+      const response = await apiRequest("POST", "/api/auth?action=register", {
         email: formData.email,
         password: formData.password,
         firstName: formData.firstName,
@@ -75,7 +75,7 @@ export default function Register() {
 
   const handleGoogleSignup = () => {
     // Redirect to Google OAuth endpoint
-    window.location.href = `${API_BASE_URL}/api/login?provider=google`;
+    window.location.href = `${API_BASE_URL}/api/auth?action=google`;
   };
 
   return (

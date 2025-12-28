@@ -67,7 +67,7 @@ export default function AuthCallback() {
         setStatus("Setting up session...");
 
         // Send tokens to backend to set httpOnly cookies
-        const setSessionResponse = await fetch(`${API_BASE_URL}/api/auth/set-session`, {
+        const setSessionResponse = await fetch(`${API_BASE_URL}/api/auth?action=set-session`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -89,7 +89,7 @@ export default function AuthCallback() {
         setStatus("Syncing user profile...");
 
         // Call sync-user to ensure user exists in public.users table
-        const syncResponse = await fetch(`${API_BASE_URL}/api/auth/sync-user`, {
+        const syncResponse = await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -105,7 +105,7 @@ export default function AuthCallback() {
         setStatus("Redirecting to dashboard...");
 
         // Clear the auth query cache to force a refresh
-        await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/auth?action=user"] });
 
         // Clean up URL and redirect to dashboard
         window.history.replaceState({}, '', '/dashboard');
