@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       console.log('Login redirect - origin:', origin);
 
-      // Initiate OAuth flow with Google
+      // Initiate OAuth flow with Google (using implicit flow for hash-based tokens)
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -39,7 +39,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
-          }
+          },
+          skipBrowserRedirect: false,
+          // Use implicit flow to get tokens in URL hash instead of PKCE code
+          flowType: 'implicit'
         }
       });
 

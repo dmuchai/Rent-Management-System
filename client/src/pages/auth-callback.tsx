@@ -13,22 +13,53 @@ export default function AuthCallback() {
       try {
         setStatus("Processing authentication...");
 
-        // Extract the hash fragment from URL (Supabase OAuth callback format)
-        // URL format: /auth-callback#access_token=xxx&refresh_token=yyy&...
+        // Extract tokens from either hash fragment (implicit flow) or query params (PKCE flow)
+        // Hash format: /auth-callback#access_token=xxx&refresh_token=yyy&...
+        // Query format: /auth-callback?code=xxx (requires exchange)
+        
+        console.log('[AuthCallback] Full URL:', window.location.href);
+        console.log('[AuthCallback] Hash:', window.location.hash);
+        console.log('[AuthCallback] Search:', window.location.search);
+        
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
-        const error = hashParams.get('error');
-        const errorDescription = hashParams.get('error_description');
+        const queryParams = new URLSearchParams(window.location.search);
+        
+        console.log('[AuthCallback] Hash params:', Object.fromEntries(hashParams.entries()));
+        console.log('[AuthCallback] Query params:', Object.fromEntries(queryParams.entries()));
+        
+        // Try hash first (implicit flow)
+        let accessToken = hashParams.get('access_token');
+        let refreshToken = hashParams.get('refresh_token');
+        let error = hashParams.get('error') || queryParams.get('error');
+        let errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
 
         if (error) {
           console.error('OAuth error:', error, errorDescription);
-          setLocation(`/?error=${error}`);
+          setLocation(`/?error=${encodeURIComponent(error)}`);
+          return;
+        }
+
+        // If no hash tokens, check for PKCE code in query params
+        const code = queryParams.get('code');
+        
+        if (!accessToken && !code) {
+          console.error('No access token or code in callback');
+          console.log('Hash params:', window.location.hash);
+          console.log('Query params:', window.location.search);
+          setLocation('/?error=no_token');
+          return;
+        }
+
+        // If we have a code, we need to exchange it for tokens on the backend
+        if (code && !accessToken) {
+          console.error('PKCE flow not supported yet - received code instead of access_token');
+          console.log('Please configure Supabase for implicit flow or implement PKCE exchange');
+          setLocation('/?error=pkce_not_supported');
           return;
         }
 
         if (!accessToken) {
-          console.error('No access token in callback');
+          console.error('No access token available');
           setLocation('/?error=no_token');
           return;
         }
