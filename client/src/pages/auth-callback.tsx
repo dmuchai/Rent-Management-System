@@ -86,7 +86,7 @@ export default function AuthCallback() {
             credentials: 'include'
           });
 
-          queryClient.invalidateQueries({ queryKey: ['/api/auth?action=user'] });
+          if (!syncResponse.ok) {
             console.error('[AuthCallback] Failed to sync user:', await syncResponse.text());
             // Continue anyway - user might already exist
           }
