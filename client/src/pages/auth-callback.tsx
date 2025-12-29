@@ -59,8 +59,9 @@ export default function AuthCallback() {
         setStatus("Redirecting to dashboard...");
         await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
         
-        window.history.replaceState({}, '', '/dashboard');
-        setLocation('/dashboard');
+        // Use hard redirect to ensure navigation happens
+        console.log('[AuthCallback] ✅ Session complete, redirecting to dashboard');
+        window.location.href = '/dashboard';
       } catch (error) {
         console.error('[AuthCallback] Error during session setup:', error);
         setStatus("Authentication failed");
