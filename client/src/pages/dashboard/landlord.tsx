@@ -1121,7 +1121,7 @@ export default function LandlordDashboard() {
                     ) : (
                       tenants.map((tenant: any) => (
                         <SelectItem key={tenant.id} value={tenant.id}>
-                          {tenant.firstName} {tenant.lastName}
+                          {tenant.first_name || tenant.firstName} {tenant.last_name || tenant.lastName}
                         </SelectItem>
                       ))
                     )}
