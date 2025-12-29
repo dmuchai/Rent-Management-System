@@ -111,30 +111,56 @@ export default function LandlordDashboard() {
 
   // Logout handler
   const handleLogout = async () => {
-    try {
-      // Clear Supabase local session state first to prevent stale sessions
-      await supabase.auth.signOut();
-      
-      const response = await fetch(`${API_BASE_URL}/api/auth?action=logout`, {
+    // Run both logout operations concurrently, handling each independently
+    const results = await Promise.allSettled([
+      // Supabase signOut - clears local session state
+      supabase.auth.signOut(),
+      // Backend logout - clears httpOnly cookies
+      fetch(`${API_BASE_URL}/api/auth?action=logout`, {
         method: "POST",
         credentials: "include",
-      });
+      }),
+    ]);
 
-      if (response.ok) {
-        toast({
-          title: "Logged out successfully",
-          description: "You have been logged out. Redirecting to login...",
-        });
-        
-        // Clear any client-side auth state and redirect
-        window.location.href = "/";
-      } else {
-        throw new Error("Logout failed");
-      }
-    } catch (error) {
+    const [supabaseResult, apiResult] = results;
+    
+    // Log individual failures for debugging
+    if (supabaseResult.status === 'rejected') {
+      console.error('Supabase signOut failed:', supabaseResult.reason);
+    }
+    
+    let apiSuccess = false;
+    if (apiResult.status === 'rejected') {
+      console.error('API logout failed:', apiResult.reason);
+    } else if (!apiResult.value.ok) {
+      console.error('API logout failed: Server returned status', apiResult.value.status);
+    } else {
+      apiSuccess = true;
+    }
+
+    // Determine overall success - we consider it successful if at least API logout worked
+    // (Supabase signOut is just for local cleanup, not critical)
+    if (apiSuccess) {
+      toast({
+        title: "Logged out successfully",
+        description: supabaseResult.status === 'rejected' 
+          ? "Logged out (local cleanup had issues, but you're signed out)."
+          : "You have been logged out. Redirecting to login...",
+      });
+      window.location.href = "/";
+    } else if (supabaseResult.status === 'fulfilled') {
+      // API failed but Supabase succeeded - partial logout
+      toast({
+        title: "Partial Logout",
+        description: "Local session cleared, but server logout failed. Redirecting...",
+        variant: "destructive",
+      });
+      window.location.href = "/";
+    } else {
+      // Both failed
       toast({
         title: "Logout Error",
-        description: "Failed to logout. Please try again.",
+        description: "Failed to logout. Please try again or clear your browser data.",
         variant: "destructive",
       });
     }
