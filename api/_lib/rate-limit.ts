@@ -33,11 +33,11 @@ try {
  * Rate limit configuration for different actions
  */
 export const RATE_LIMITS = {
-  login: { limit: 5, window: 60 },           // 5 attempts per minute
-  register: { limit: 2, window: 60 },        // 2 registrations per minute
-  'forgot-password': { limit: 3, window: 60 }, // 3 requests per minute
-  'change-password': { limit: 5, window: 60 }, // 5 changes per minute
-  'profile-update': { limit: 10, window: 60 }, // 10 updates per minute
+  login: { limit: 20, window: 60 },           // 20 attempts per minute (increased for development)
+  register: { limit: 10, window: 60 },        // 10 registrations per minute
+  'forgot-password': { limit: 10, window: 60 }, // 10 requests per minute
+  'change-password': { limit: 10, window: 60 }, // 10 changes per minute
+  'profile-update': { limit: 20, window: 60 }, // 20 updates per minute
 } as const;
 
 /**
