@@ -1,8 +1,27 @@
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
+import { useEffect, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Landing() {
   const [, setLocation] = useLocation();
+  const [error, setError] = useState<string | null>(null);
+  
+  useEffect(() => {
+    // Check for error in URL
+    const params = new URLSearchParams(window.location.search);
+    const errorParam = params.get('error');
+    
+    if (errorParam) {
+      if (errorParam === 'no_token') {
+        setError('Google Sign-In configuration incomplete. Please contact support or use email/password login.');
+      } else if (errorParam === 'pkce_not_supported') {
+        setError('OAuth flow not supported. Please use email/password login.');
+      } else {
+        setError('Authentication failed. Please try again or use email/password login.');
+      }
+    }
+  }, []);
   
   const redirectToLogin = () => {
     setLocation("/login");
@@ -41,6 +60,16 @@ export default function Landing() {
           </div>
         </div>
       </header>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+          <Alert variant="destructive">
+            <AlertTitle>Authentication Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       {/* Hero Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8">

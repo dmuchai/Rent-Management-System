@@ -20,12 +20,15 @@ export default function AuthCallback() {
         console.log('[AuthCallback] Full URL:', window.location.href);
         console.log('[AuthCallback] Hash:', window.location.hash);
         console.log('[AuthCallback] Search:', window.location.search);
+        console.log('[AuthCallback] Pathname:', window.location.pathname);
         
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const queryParams = new URLSearchParams(window.location.search);
         
         console.log('[AuthCallback] Hash params:', Object.fromEntries(hashParams.entries()));
         console.log('[AuthCallback] Query params:', Object.fromEntries(queryParams.entries()));
+        console.log('[AuthCallback] All hash keys:', Array.from(hashParams.keys()));
+        console.log('[AuthCallback] All query keys:', Array.from(queryParams.keys()));
         
         // Try hash first (implicit flow)
         let accessToken = hashParams.get('access_token');
@@ -48,8 +51,8 @@ export default function AuthCallback() {
           console.error('[AuthCallback] Query string:', window.location.search);
           console.error('[AuthCallback] This usually means:');
           console.error('  1. Google OAuth redirect URL not configured in Google Cloud Console');
-          console.error('  2. Add this URL: https://emdahodfztpfdjkrbnqz.supabase.co/auth/v1/callback');
-          console.error('  3. Supabase redirect URL not configured (check Supabase Dashboard)');
+          console.error('  2. OAuth redirect URL not configured correctly');
+          console.error('  3. Check your authentication provider dashboard for redirect URL configuration');
           setLocation('/?error=no_token');
           return;
         }
@@ -78,10 +81,15 @@ export default function AuthCallback() {
           setStatus("Syncing user data...");
           
           // Sync user to public.users table
-          await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
+          const syncResponse = await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
             method: 'POST',
             credentials: 'include'
           });
+
+          queryClient.invalidateQueries({ queryKey: ['/api/auth?action=user'] });
+            console.error('[AuthCallback] Failed to sync user:', await syncResponse.text());
+            // Continue anyway - user might already exist
+          }
 
           queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
           setLocation('/dashboard');

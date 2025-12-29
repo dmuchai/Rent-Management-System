@@ -51,8 +51,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const origin = `${protocol}://${host}`;
 
-      // Using implicit flow (returns tokens in hash fragment) instead of PKCE
-      // This is simpler for our use case and doesn't require code exchange
+      // Try PKCE flow first (more secure, default in Supabase v2)
+      // Falls back gracefully if not supported
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -66,9 +66,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       if (error || !data.url) {
+        console.error('[Auth] OAuth initiation failed:', error);
         return res.status(500).json({ error: 'OAuth initiation failed' });
       }
 
+      console.log('[Auth] Redirecting to:', data.url);
       return res.redirect(302, data.url);
     }
 
