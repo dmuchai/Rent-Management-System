@@ -288,7 +288,15 @@ export default function LandlordDashboard() {
 
   // Payment recording mutation
   const recordPaymentMutation = useMutation({
-    mutationFn: async (data: { tenantId: string; amount: number; description?: string; paymentMethod: string; paidDate?: string; paymentType?: string }) => {
+    mutationFn: async (data: { 
+      leaseId: string; 
+      amount: string; 
+      dueDate: string;
+      paidDate?: string;
+      paymentMethod: string; 
+      status?: string;
+      description?: string;
+    }) => {
       const response = await apiRequest("POST", "/api/payments", data);
       return await response.json();
     },
@@ -1310,12 +1318,13 @@ export default function LandlordDashboard() {
                   // Submit payment
                   const description = paymentForm.notes || `${paymentForm.paymentType || 'Payment'} - Reference: ${paymentForm.reference || 'N/A'}`;
                   recordPaymentMutation.mutate({
-                    tenantId: paymentForm.tenantId,
-                    amount: parseFloat(paymentForm.amount),
-                    description: description,
-                    paymentMethod: paymentForm.paymentMethod,
+                    leaseId: paymentForm.tenantId, // This actually stores the lease ID
+                    amount: paymentForm.amount, // Keep as string
+                    dueDate: paymentForm.paymentDate, // Use payment date as due date
                     paidDate: paymentForm.paymentDate,
-                    paymentType: paymentForm.paymentType || 'rent'
+                    paymentMethod: paymentForm.paymentMethod,
+                    status: 'completed',
+                    description: description
                   });
                 }}
                 disabled={recordPaymentMutation.isPending}
