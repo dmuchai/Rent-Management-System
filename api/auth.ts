@@ -51,11 +51,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const origin = `${protocol}://${host}`;
 
+      // Using implicit flow (returns tokens in hash fragment) instead of PKCE
+      // This is simpler for our use case and doesn't require code exchange
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${origin}/auth-callback`,
-          queryParams: { access_type: 'offline', prompt: 'consent' }
+          queryParams: { 
+            access_type: 'offline', 
+            prompt: 'consent'
+          },
+          skipBrowserRedirect: false,
         }
       });
 
@@ -192,6 +198,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'logout' && req.method === 'POST') {
       res.setHeader('Set-Cookie', 'supabase-auth-token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
       return res.status(200).json({ message: 'Logged out successfully' });
+    }
+
+    // POST /api/auth?action=exchange-code - Exchange PKCE code for session
+    if (action === 'exchange-code' && req.method === 'POST') {
+      const { code } = req.body;
+      
+      if (!code) {
+        return res.status(400).json({ error: 'Authorization code required' });
+      }
+
+      console.log('[Auth] Exchanging PKCE code for tokens');
+
+      // Exchange code for session using Supabase
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+      if (error || !data.session) {
+        console.error('[Auth] Code exchange failed:', error);
+        return res.status(400).json({ error: error?.message || 'Code exchange failed' });
+      }
+
+      console.log('[Auth] ✅ Code exchanged successfully');
+
+      // Set httpOnly cookie with access token
+      res.setHeader('Set-Cookie', [
+        `supabase-auth-token=${data.session.access_token}; HttpOnly; Path=/; Max-Age=604800; ${process.env.NODE_ENV === 'production' ? 'Secure;' : ''} SameSite=Lax`
+      ]);
+
+      return res.status(200).json({ 
+        message: 'Session created successfully',
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+        }
+      });
     }
 
     // POST /api/auth?action=set-session - Set session from OAuth

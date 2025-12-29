@@ -43,18 +43,48 @@ export default function AuthCallback() {
         const code = queryParams.get('code');
         
         if (!accessToken && !code) {
-          console.error('No access token or code in callback');
-          console.log('Hash params:', window.location.hash);
-          console.log('Query params:', window.location.search);
+          console.error('[AuthCallback] ❌ No access token or code in callback');
+          console.error('[AuthCallback] Hash fragment:', window.location.hash);
+          console.error('[AuthCallback] Query string:', window.location.search);
+          console.error('[AuthCallback] This usually means:');
+          console.error('  1. Google OAuth redirect URL not configured in Google Cloud Console');
+          console.error('  2. Add this URL: https://emdahodfztpfdjkrbnqz.supabase.co/auth/v1/callback');
+          console.error('  3. Supabase redirect URL not configured (check Supabase Dashboard)');
           setLocation('/?error=no_token');
           return;
         }
 
         // If we have a code, we need to exchange it for tokens on the backend
         if (code && !accessToken) {
-          console.error('PKCE flow not supported yet - received code instead of access_token');
-          console.log('Please configure Supabase for implicit flow or implement PKCE exchange');
-          setLocation('/?error=pkce_not_supported');
+          console.log('[AuthCallback] PKCE flow detected - exchanging code for tokens');
+          setStatus("Exchanging authorization code...");
+          
+          // Exchange code for tokens via backend
+          const exchangeResponse = await fetch(`${API_BASE_URL}/api/auth?action=exchange-code`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ code })
+          });
+
+          if (!exchangeResponse.ok) {
+            console.error('Code exchange failed:', await exchangeResponse.text());
+            setLocation('/?error=code_exchange_failed');
+            return;
+          }
+
+          // Backend sets the session cookie, we can redirect
+          console.log('[AuthCallback] ✅ PKCE code exchanged successfully');
+          setStatus("Syncing user data...");
+          
+          // Sync user to public.users table
+          await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
+            method: 'POST',
+            credentials: 'include'
+          });
+
+          queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+          setLocation('/dashboard');
           return;
         }
 
