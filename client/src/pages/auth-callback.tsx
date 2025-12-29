@@ -33,6 +33,14 @@ export default function AuthCallback() {
         // Try hash first (implicit flow)
         let accessToken = hashParams.get('access_token');
         let refreshToken = hashParams.get('refresh_token');
+        
+        // Also check query params (some OAuth flows return tokens in query string)
+        if (!accessToken) {
+          accessToken = queryParams.get('access_token');
+          refreshToken = queryParams.get('refresh_token');
+          console.log('[AuthCallback] Tokens found in query params instead of hash');
+        }
+        
         let error = hashParams.get('error') || queryParams.get('error');
         let errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
 
