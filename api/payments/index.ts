@@ -56,6 +56,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         dueDate: payment.due_date,
         paidDate: payment.paid_date,
         paymentMethod: payment.payment_method,
+        paymentType: payment.payment_type,
         status: payment.status,
         description: payment.description,
         createdAt: payment.created_at,
@@ -90,6 +91,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         amount: z.string().min(1, 'Amount is required'),
         dueDate: z.string().or(z.date()),
         paymentMethod: z.enum(['cash', 'bank_transfer', 'mobile_money', 'check']).default('cash'),
+        paymentType: z.enum(['rent', 'deposit', 'utility', 'maintenance', 'late_fee', 'other']).default('rent'),
         status: z.enum(['pending', 'completed', 'failed', 'cancelled']).default('completed'),
         description: z.string().optional(),
         paidDate: z.string().or(z.date()).optional(),
@@ -112,13 +114,14 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       }
       
       const [payment] = await sql`
-        INSERT INTO public.payments (lease_id, amount, due_date, paid_date, payment_method, status, description)
+        INSERT INTO public.payments (lease_id, amount, due_date, paid_date, payment_method, payment_type, status, description)
         VALUES (
           ${paymentData.leaseId},
           ${paymentData.amount},
           ${new Date(paymentData.dueDate)},
           ${paymentData.paidDate ? new Date(paymentData.paidDate) : null},
           ${paymentData.paymentMethod},
+          ${paymentData.paymentType},
           ${paymentData.status},
           ${paymentData.description || null}
         )

@@ -102,6 +102,15 @@ export const paymentStatusEnum = pgEnum("payment_status", [
   "cancelled",
 ]);
 
+export const paymentTypeEnum = pgEnum("payment_type", [
+  "rent",
+  "deposit",
+  "utility",
+  "maintenance",
+  "late_fee",
+  "other",
+]);
+
 // Payments table
 export const payments = pgTable("payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -110,6 +119,7 @@ export const payments = pgTable("payments", {
   dueDate: timestamp("due_date").notNull(),
   paidDate: timestamp("paid_date"),
   paymentMethod: varchar("payment_method"), // mpesa, card, bank_transfer
+  paymentType: paymentTypeEnum("payment_type").default("rent"),
   pesapalTransactionId: varchar("pesapal_transaction_id"),
   pesapalOrderTrackingId: varchar("pesapal_order_tracking_id"),
   status: paymentStatusEnum("status").default("pending"),

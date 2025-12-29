@@ -294,6 +294,7 @@ export default function LandlordDashboard() {
       dueDate: string;
       paidDate?: string;
       paymentMethod: string; 
+      paymentType?: string;
       status?: string;
       description?: string;
     }) => {
@@ -1323,6 +1324,7 @@ export default function LandlordDashboard() {
                     dueDate: paymentForm.paymentDate, // Use payment date as due date
                     paidDate: paymentForm.paymentDate,
                     paymentMethod: paymentForm.paymentMethod,
+                    paymentType: paymentForm.paymentType || 'rent',
                     status: 'completed',
                     description: description
                   });
