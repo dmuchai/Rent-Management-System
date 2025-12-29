@@ -18,73 +18,70 @@ export default function AuthCallback() {
         console.log('[AuthCallback] Hash:', window.location.hash);
         console.log('[AuthCallback] Search:', window.location.search);
         
-        // Use Supabase's built-in session exchange
-        // This handles both PKCE code exchange and implicit flow tokens
-        const { data, error } = await supabase.auth.getSession();
+        // Check if we have hash params (Supabase redirects with hash fragments)
+        if (!window.location.hash) {
+          console.error('[AuthCallback] No hash fragment in URL - OAuth may have failed');
+          setLocation('/?error=no_hash');
+          return;
+        }
+
+        // Listen for Supabase auth state change (this handles token parsing automatically)
+        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+          console.log('[AuthCallback] Auth state changed:', event, session ? 'Has session' : 'No session');
+          
+          if (event === 'SIGNED_IN' && session) {
+            console.log('[AuthCallback] ✅ Sign in detected, processing session');
+            
+            const accessToken = session.access_token;
+            const refreshToken = session.refresh_token;
+
+            setStatus("Setting up your account...");
+
+            // Send tokens to backend to set httpOnly cookies
+            const setSessionResponse = await fetch(`${API_BASE_URL}/api/auth?action=set-session`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                access_token: accessToken,
+                refresh_token: refreshToken || '',
+              }),
+            });
+
+            if (!setSessionResponse.ok) {
+              console.error('Failed to set session');
+              setLocation('/?error=session_failed');
+              return;
+            }
+
+            setStatus("Syncing user data...");
+
+            // Sync user to public.users table
+            const syncResponse = await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
+              method: 'POST',
+              credentials: 'include',
+            });
+
+            if (!syncResponse.ok) {
+              console.error('Failed to sync user');
+              // Continue anyway
+            }
+
+            setStatus("Redirecting to dashboard...");
+            await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+            
+            window.history.replaceState({}, '', '/dashboard');
+            setLocation('/dashboard');
+            
+            // Cleanup listener
+            authListener.subscription.unsubscribe();
+          }
+        });
+
+        // Trigger session exchange from hash
+        // Supabase will parse the hash and emit SIGNED_IN event
+        await supabase.auth.getSession();
         
-        console.log('[AuthCallback] Supabase getSession result:', { 
-          hasSession: !!data.session, 
-          error: error?.message 
-        });
-
-        if (error) {
-          console.error('[AuthCallback] Session error:', error);
-          setLocation(`/?error=${encodeURIComponent(error.message)}`);
-          return;
-        }
-
-        if (!data.session) {
-          console.error('[AuthCallback] No session found after OAuth redirect');
-          setLocation('/?error=no_session');
-          return;
-        }
-
-        const accessToken = data.session.access_token;
-        const refreshToken = data.session.refresh_token;
-
-        console.log('[AuthCallback] ✅ Session retrieved successfully');
-        setStatus("Setting up your account...");
-
-        // Send tokens to backend to set httpOnly cookies
-        const setSessionResponse = await fetch(`${API_BASE_URL}/api/auth?action=set-session`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            access_token: accessToken,
-            refresh_token: refreshToken || '',
-          }),
-        });
-
-        if (!setSessionResponse.ok) {
-          console.error('Failed to set session');
-          setLocation('/?error=session_failed');
-          return;
-        }
-
-        setStatus("Syncing user data...");
-
-        // Sync user to public.users table
-        const syncResponse = await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
-          method: 'POST',
-          credentials: 'include',
-        });
-
-        if (!syncResponse.ok) {
-          console.error('Failed to sync user');
-          // Continue anyway - user might already exist
-        }
-
-        setStatus("Redirecting to dashboard...");
-
-        // Clear the auth query cache to force a refresh
-        await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-
-        // Clean up URL and redirect to dashboard
-        window.history.replaceState({}, '', '/dashboard');
-        setLocation('/dashboard');
       } catch (error) {
         console.error('Auth callback error:', error);
         setLocation('/?error=auth_callback_failed');
