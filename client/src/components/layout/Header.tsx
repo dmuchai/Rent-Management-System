@@ -1,10 +1,14 @@
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { logout } from "@/lib/auth";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Menu, PanelLeftClose, PanelLeft } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { API_BASE_URL } from "@/lib/config";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface HeaderProps {
   title: string;
@@ -17,11 +21,55 @@ interface HeaderProps {
 
 export default function Header({ title, showSidebar = true, onSectionChange, onMenuClick, onToggleSidebar, isSidebarCollapsed }: HeaderProps) {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    // Run both logout operations concurrently, handling each independently
+    const results = await Promise.allSettled([
+      supabase.auth.signOut(),
+      fetch(`${API_BASE_URL}/api/auth?action=logout`, {
+        method: "POST",
+        credentials: "include",
+      }),
+    ]);
+
+    const [supabaseResult, apiResult] = results;
+    
+    if (supabaseResult.status === 'rejected') {
+      console.error('Supabase signOut failed:', supabaseResult.reason);
+    }
+    
+    let apiSuccess = false;
+    if (apiResult.status === 'rejected') {
+      console.error('API logout failed:', apiResult.reason);
+    } else if (!apiResult.value.ok) {
+      console.error('API logout failed: Server returned status', apiResult.value.status);
+    } else {
+      apiSuccess = true;
+    }
+
+    if (apiSuccess) {
+      toast({
+        title: "Logged out successfully",
+        description: "You have been logged out. Redirecting to login...",
+      });
+      window.location.href = "/";
+    } else if (supabaseResult.status === 'fulfilled') {
+      toast({
+        title: "Partial Logout",
+        description: "Local session cleared, but server logout failed. Redirecting...",
+        variant: "destructive",
+      });
+      window.location.href = "/";
+    } else {
+      toast({
+        title: "Logout Error",
+        description: "Failed to logout. Please try again or clear your browser data.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleViewProfile = () => {
@@ -31,35 +79,121 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
     }
   };
 
-  // Mock notifications data
-  const notifications = [
-    {
-      id: 1,
-      title: "Rent Payment Received",
-      message: "John Doe has paid rent for Unit 2A",
-      time: "2 hours ago",
-      type: "payment",
-      unread: true
+  // Fetch recent payments
+  const { data: recentPayments = [] } = useQuery({
+    queryKey: ["/api/payments"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/payments");
+      const result = await response.json();
+      return (result.data || result || []).slice(0, 5);
     },
-    {
-      id: 2,
-      title: "Maintenance Request",
-      message: "Kitchen sink repair needed - Unit 3B",
-      time: "5 hours ago", 
-      type: "maintenance",
-      unread: true
+    retry: false,
+  });
+
+  // Fetch maintenance requests
+  const { data: maintenanceRequests = [] } = useQuery({
+    queryKey: ["/api/maintenance-requests"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/maintenance-requests");
+      return await response.json();
     },
-    {
-      id: 3,
-      title: "Lease Expiring Soon",
-      message: "Jane Smith's lease expires in 30 days",
-      time: "1 day ago",
-      type: "lease",
-      unread: false
-    }
-  ];
+    retry: false,
+  });
+
+  // Fetch leases
+  const { data: leases = [] } = useQuery({
+    queryKey: ["/api/leases"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/leases");
+      const result = await response.json();
+      return Array.isArray(result) ? result : [];
+    },
+    retry: false,
+  });
+
+  // Generate real notifications from actual data
+  const notifications = useMemo(() => {
+    const notifs: any[] = [];
+    
+    // Recent payments (last 3 days)
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    
+    recentPayments.forEach((payment: any) => {
+      const paymentDate = new Date(payment.paidDate || payment.createdAt);
+      if (paymentDate > threeDaysAgo) {
+        const tenantName = payment.tenant ? `${payment.tenant.firstName} ${payment.tenant.lastName}` : 'Tenant';
+        const unitInfo = payment.unit?.unitNumber ? `Unit ${payment.unit.unitNumber}` : 'unit';
+        const timeAgo = getTimeAgo(paymentDate);
+        
+        notifs.push({
+          id: `payment-${payment.id}`,
+          title: "Payment Received",
+          message: `${tenantName} paid KES ${parseFloat(payment.amount).toLocaleString()} for ${unitInfo}`,
+          time: timeAgo,
+          type: "payment",
+          unread: paymentDate > new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+          timestamp: paymentDate
+        });
+      }
+    });
+
+    // Pending maintenance requests
+    maintenanceRequests.forEach((req: any) => {
+      if (req.status === 'pending' || req.status === 'in_progress') {
+        const reqDate = new Date(req.createdAt);
+        const timeAgo = getTimeAgo(reqDate);
+        
+        notifs.push({
+          id: `maintenance-${req.id}`,
+          title: "Maintenance Request",
+          message: `${req.title || 'Repair needed'} - ${req.status || 'pending'}`,
+          time: timeAgo,
+          type: "maintenance",
+          unread: req.status === 'pending',
+          timestamp: reqDate
+        });
+      }
+    });
+
+    // Leases expiring in 30 days
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    
+    leases.forEach((lease: any) => {
+      const endDate = new Date(lease.endDate);
+      if (endDate <= thirtyDaysFromNow && endDate > new Date() && lease.isActive) {
+        const tenantName = lease.tenant ? `${lease.tenant.firstName} ${lease.tenant.lastName}` : 'Tenant';
+        const daysUntilExpiry = Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        
+        notifs.push({
+          id: `lease-${lease.id}`,
+          title: "Lease Expiring Soon",
+          message: `${tenantName}'s lease expires in ${daysUntilExpiry} days`,
+          time: `${daysUntilExpiry} days remaining`,
+          type: "lease",
+          unread: daysUntilExpiry <= 7, // Mark as unread if within a week
+          timestamp: endDate
+        });
+      }
+    });
+
+    // Sort by timestamp (most recent first)
+    return notifs.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 10);
+  }, [recentPayments, maintenanceRequests, leases]);
 
   const unreadCount = notifications.filter(n => n.unread).length;
+
+  // Helper function to get relative time
+  function getTimeAgo(date: Date): string {
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
+    return date.toLocaleDateString();
+  }
 
   return (
     <header className="bg-card border-b border-border">
@@ -112,7 +246,14 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
                   <p className="text-sm text-muted-foreground">{unreadCount} unread notifications</p>
                 </div>
                 <div className="max-h-96 overflow-y-auto">
-                  {notifications.map((notification) => (
+                  {notifications.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <i className="fas fa-bell-slash text-gray-300 text-3xl mb-3"></i>
+                      <p className="text-muted-foreground">No notifications</p>
+                      <p className="text-sm text-gray-500">You're all caught up! 🎉</p>
+                    </div>
+                  ) : (
+                    notifications.map((notification) => (
                     <div key={notification.id} className={`p-4 border-b hover:bg-accent cursor-pointer ${notification.unread ? 'bg-accent/50' : ''}`}>
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -130,7 +271,8 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ))
+                  )}
                 </div>
                 <div className="p-4 border-t">
                   <button className="w-full text-sm text-primary hover:underline">
