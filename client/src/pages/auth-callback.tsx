@@ -11,6 +11,7 @@ export default function AuthCallback() {
 
   useEffect(() => {
     let authListenerUnsubscribe: (() => void) | null = null;
+    let isProcessing = false; // Prevent duplicate processing
 
     const handleAuthCallback = async () => {
       try {
@@ -20,10 +21,14 @@ export default function AuthCallback() {
         console.log('[AuthCallback] Hash:', window.location.hash);
         console.log('[AuthCallback] Search:', window.location.search);
         
-        // Check if we have hash params (Supabase redirects with hash fragments)
-        if (!window.location.hash) {
-          console.error('[AuthCallback] No hash fragment in URL - OAuth may have failed');
-          setLocation('/?error=no_hash');
+        // Check if we have hash params OR query params (Supabase can use either)
+        const hasHashParams = window.location.hash.includes('access_token') || window.location.hash.includes('error');
+        const hasQueryParams = window.location.search.includes('code') || window.location.search.includes('error');
+        
+        if (!hasHashParams && !hasQueryParams) {
+          console.error('[AuthCallback] No OAuth parameters in URL');
+          console.error('[AuthCallback] This might be a page reload - redirecting to login');
+          setLocation('/');
           return;
         }
 
@@ -31,7 +36,9 @@ export default function AuthCallback() {
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
           console.log('[AuthCallback] Auth state changed:', event, session ? 'Has session' : 'No session');
           
-          if (event === 'SIGNED_IN' && session) {
+          if (event === 'SIGNED_IN' && session && !isProcessing) {
+            isProcessing = true; // Prevent duplicate execution
+            
             try {
               console.log('[AuthCallback] ✅ Sign in detected, processing session');
               
