@@ -159,7 +159,7 @@ export default function LandlordDashboard() {
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/tenants");
       const result = await response.json();
-      console.log("[Dashboard] Tenants loaded:", result);
+
       // Ensure we return an array
       return Array.isArray(result) ? result : [];
     },
@@ -1096,61 +1096,52 @@ export default function LandlordDashboard() {
       <Dialog open={isPaymentFormOpen} onOpenChange={setIsPaymentFormOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Record Payment</DialogTitle>
+            <DialogTitle>Record Payment (Manual Entry)</DialogTitle>
+            <p className="text-sm text-muted-foreground mt-2">
+              This is for manually recording offline payments. For automated online payments, tenants should use the tenant portal.
+            </p>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="tenant">Select Tenant *</Label>
-                <Select 
-                  value={paymentForm.tenantId} 
-                  onValueChange={(value) => setPaymentForm(prev => ({ ...prev, tenantId: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a tenant" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tenantsLoading ? (
-                      <SelectItem value="loading" disabled>
-                        Loading tenants...
+            <div>
+              <Label htmlFor="lease">Select Lease (Tenant + Property) *</Label>
+              <Select 
+                value={paymentForm.tenantId} 
+                onValueChange={(value) => {
+                  const selectedLease = leases.find((l: any) => l.id === value);
+                  if (selectedLease) {
+                    setPaymentForm(prev => ({ 
+                      ...prev, 
+                      tenantId: value, // Store lease ID here for now
+                      amount: selectedLease.monthlyRent || prev.amount,
+                      propertyId: selectedLease.unitId || prev.propertyId
+                    }));
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a lease" />
+                </SelectTrigger>
+                <SelectContent>
+                  {leasesLoading ? (
+                    <SelectItem value="loading" disabled>
+                      Loading leases...
+                    </SelectItem>
+                  ) : leases.length === 0 ? (
+                    <SelectItem value="no-leases" disabled>
+                      No active leases - Add leases first
+                    </SelectItem>
+                  ) : (
+                    leases.map((lease: any) => (
+                      <SelectItem key={lease.id} value={lease.id}>
+                        {lease.tenantName || 'Unknown Tenant'} - {lease.propertyName || 'Property'} (Unit: {lease.unitNumber || 'N/A'}) - KES {parseFloat(lease.monthlyRent || 0).toLocaleString()}/month
                       </SelectItem>
-                    ) : tenants.length === 0 ? (
-                      <SelectItem value="no-tenants" disabled>
-                        No tenants available - Add tenants first
-                      </SelectItem>
-                    ) : (
-                      tenants.map((tenant: any) => (
-                        <SelectItem key={tenant.id} value={tenant.id}>
-                          {tenant.first_name || tenant.firstName} {tenant.last_name || tenant.lastName}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="property">Property/Unit</Label>
-                <Select 
-                  value={paymentForm.propertyId} 
-                  onValueChange={(value) => setPaymentForm(prev => ({ ...prev, propertyId: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select property (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {properties.map((property: any) => (
-                      <SelectItem key={property.id} value={property.id}>
-                        {property.name} - {property.address}
-                      </SelectItem>
-                    ))}
-                    {properties.length === 0 && (
-                      <SelectItem value="no-properties" disabled>
-                        No properties available
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Lease automatically includes tenant, property, and unit details
+              </p>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
@@ -1237,12 +1228,12 @@ export default function LandlordDashboard() {
             </div>
             
             <div className="bg-blue-50 p-4 rounded-lg">
-              <h4 className="font-medium text-blue-900 mb-2">Payment Logic Explanation:</h4>
+              <h4 className="font-medium text-blue-900 mb-2">💡 Payment Flow Explained:</h4>
               <ul className="text-sm text-blue-800 space-y-1">
-                <li>• <strong>Tenant Selection:</strong> Choose which tenant made the payment</li>
-                <li>• <strong>Property Link:</strong> Optionally link to a specific property/unit</li>
-                <li>• <strong>Payment Types:</strong> Categorize payments (rent, deposits, utilities, etc.)</li>
-                <li>• <strong>Tracking:</strong> All payments are tracked per tenant for history and reporting</li>
+                <li>• <strong>Automated (Recommended):</strong> Tenants pay via tenant portal → Pesapal processes → Payment auto-recorded</li>
+                <li>• <strong>Manual (This Form):</strong> For offline payments (cash, bank transfers received outside the system)</li>
+                <li>• <strong>Lease-Based:</strong> Payments linked to lease = automatic tenant/property/unit tracking</li>
+                <li>• <strong>Real-Time Updates:</strong> Landlord dashboard updates instantly when payment is recorded</li>
               </ul>
             </div>
             
