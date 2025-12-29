@@ -81,16 +81,10 @@ export default function AuthCallback() {
         const hasQueryParams = window.location.search.includes('code') || window.location.search.includes('error');
         
         if (!hasHashParams && !hasQueryParams) {
-          console.log('[AuthCallback] No OAuth parameters - checking for existing session');
-          // Maybe we already have a session from a previous attempt
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            console.log('[AuthCallback] Found existing session, processing...');
-            await processSession(session);
-            return;
-          }
-          console.error('[AuthCallback] No OAuth params and no session - redirecting to login');
-          setLocation('/');
+          // No OAuth parameters means user navigated here directly without OAuth flow
+          // Don't check for existing session - it may be stale from before logout
+          console.log('[AuthCallback] No OAuth parameters - redirecting to login');
+          setLocation('/login');
           return;
         }
 

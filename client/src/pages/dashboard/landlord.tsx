@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { supabase } from "@/lib/supabase";
 import type { Lease } from "@/../../shared/schema";
 
 type DashboardSection = "overview" | "properties" | "tenants" | "leases" | "payments" | "documents" | "reports" | "profile";
@@ -111,6 +112,9 @@ export default function LandlordDashboard() {
   // Logout handler
   const handleLogout = async () => {
     try {
+      // Clear Supabase local session state first to prevent stale sessions
+      await supabase.auth.signOut();
+      
       const response = await fetch(`${API_BASE_URL}/api/auth?action=logout`, {
         method: "POST",
         credentials: "include",
