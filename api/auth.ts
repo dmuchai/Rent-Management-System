@@ -11,6 +11,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { rateLimit, getClientIp, RATE_LIMITS } from './_lib/rate-limit.js';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
@@ -54,8 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         provider: 'google',
         options: {
           redirectTo: `${origin}/auth-callback`,
-          queryParams: { access_type: 'offline', prompt: 'consent' },
-          flowType: 'implicit'
+          queryParams: { access_type: 'offline', prompt: 'consent' }
         }
       });
 
@@ -68,6 +68,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // POST /api/auth?action=login - Email/Password login
     if (action === 'login' && req.method === 'POST') {
+      // Rate limiting: 5 attempts per minute
+      const clientIp = getClientIp(req);
+      const rateLimitResult = await rateLimit({
+        action: 'login',
+        ip: clientIp,
+        limit: RATE_LIMITS.login.limit,
+        windowMs: RATE_LIMITS.login.window * 1000,
+      });
+
+      if (!rateLimitResult.allowed) {
+        console.warn(`Rate limit exceeded for login from IP: ${clientIp}`);
+        return res.status(429).json({ 
+          error: 'Too many login attempts. Please try again later.',
+          retryAfter: rateLimitResult.retryAfter,
+        });
+      }
+
       const { email, password } = loginSchema.parse(req.body);
 
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -92,6 +109,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // POST /api/auth?action=register - Register
     if (action === 'register' && req.method === 'POST') {
+      // Rate limiting: 2 registrations per minute
+      const clientIp = getClientIp(req);
+      const rateLimitResult = await rateLimit({
+        action: 'register',
+        ip: clientIp,
+        limit: RATE_LIMITS.register.limit,
+        windowMs: RATE_LIMITS.register.window * 1000,
+      });
+
+      if (!rateLimitResult.allowed) {
+        console.warn(`Rate limit exceeded for registration from IP: ${clientIp}`);
+        return res.status(429).json({ 
+          error: 'Too many registration attempts. Please try again later.',
+          retryAfter: rateLimitResult.retryAfter,
+        });
+      }
+
       const userData = registerSchema.parse(req.body);
       const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -121,8 +155,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json({ message: 'Registration successful' });
     }
 
-    // POST /api/auth?action=forgot-password - Password reset
+    // POST /api/auth?action=forgot-password - Forgot password
     if (action === 'forgot-password' && req.method === 'POST') {
+      // Rate limiting: 3 requests per minute
+      const clientIp = getClientIp(req);
+      const rateLimitResult = await rateLimit({
+        action: 'forgot-password',
+        ip: clientIp,
+        limit: RATE_LIMITS['forgot-password'].limit,
+        windowMs: RATE_LIMITS['forgot-password'].window * 1000,
+      });
+
+      if (!rateLimitResult.allowed) {
+        console.warn(`Rate limit exceeded for password reset from IP: ${clientIp}`);
+        return res.status(429).json({ 
+          error: 'Too many password reset attempts. Please try again later.',
+          retryAfter: rateLimitResult.retryAfter,
+        });
+      }
+
       const { email } = forgotPasswordSchema.parse(req.body);
       const protocol = req.headers['x-forwarded-proto'] || 'https';
       const host = req.headers['x-forwarded-host'] || req.headers.host;

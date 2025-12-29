@@ -43,7 +43,7 @@ export const RATE_LIMITS = {
 /**
  * Extract client IP address from request
  */
-function getClientIp(req: VercelRequest): string {
+export function getClientIp(req: VercelRequest): string {
   // Vercel provides the real IP in x-forwarded-for or x-real-ip
   const forwarded = req.headers['x-forwarded-for'];
   const realIp = req.headers['x-real-ip'];
@@ -158,8 +158,8 @@ export async function rateLimit(config: RateLimitConfig): Promise<RateLimitResul
       // Increment counter
       pipeline.incr(key);
       
-      // Set expiry if key is new (NX = only if doesn't exist)
-      pipeline.expire(key, windowSeconds, { nx: true });
+      // Set expiry (will update TTL on existing keys)
+      pipeline.expire(key, windowSeconds);
       
       // Get TTL to calculate reset time
       pipeline.ttl(key);
