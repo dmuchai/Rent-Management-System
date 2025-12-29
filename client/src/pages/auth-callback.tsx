@@ -34,11 +34,14 @@ export default function AuthCallback() {
         let accessToken = hashParams.get('access_token');
         let refreshToken = hashParams.get('refresh_token');
         
+        console.log('[AuthCallback] Hash access_token:', accessToken ? `${accessToken.substring(0, 20)}...` : 'null');
+        
         // Also check query params (some OAuth flows return tokens in query string)
         if (!accessToken) {
           accessToken = queryParams.get('access_token');
           refreshToken = queryParams.get('refresh_token');
           console.log('[AuthCallback] Tokens found in query params instead of hash');
+          console.log('[AuthCallback] Query access_token:', accessToken ? `${accessToken.substring(0, 20)}...` : 'null');
         }
         
         let error = hashParams.get('error') || queryParams.get('error');
@@ -52,6 +55,9 @@ export default function AuthCallback() {
 
         // If no hash tokens, check for PKCE code in query params
         const code = queryParams.get('code');
+        
+        console.log('[AuthCallback] Final accessToken:', accessToken ? 'EXISTS' : 'MISSING');
+        console.log('[AuthCallback] Final code:', code ? 'EXISTS' : 'MISSING');
         
         if (!accessToken && !code) {
           console.error('[AuthCallback] ❌ No access token or code in callback');
