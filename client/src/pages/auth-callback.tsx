@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { API_BASE_URL } from "@/lib/config";
+import { supabase } from "@/lib/supabase";
 
 export default function AuthCallback() {
   const [, setLocation] = useLocation();
@@ -13,110 +14,36 @@ export default function AuthCallback() {
       try {
         setStatus("Processing authentication...");
 
-        // Extract tokens from either hash fragment (implicit flow) or query params (PKCE flow)
-        // Hash format: /auth-callback#access_token=xxx&refresh_token=yyy&...
-        // Query format: /auth-callback?code=xxx (requires exchange)
-        
         console.log('[AuthCallback] Full URL:', window.location.href);
         console.log('[AuthCallback] Hash:', window.location.hash);
         console.log('[AuthCallback] Search:', window.location.search);
-        console.log('[AuthCallback] Pathname:', window.location.pathname);
         
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const queryParams = new URLSearchParams(window.location.search);
+        // Use Supabase's built-in session exchange
+        // This handles both PKCE code exchange and implicit flow tokens
+        const { data, error } = await supabase.auth.getSession();
         
-        console.log('[AuthCallback] Hash params:', Object.fromEntries(hashParams.entries()));
-        console.log('[AuthCallback] Query params:', Object.fromEntries(queryParams.entries()));
-        console.log('[AuthCallback] All hash keys:', Array.from(hashParams.keys()));
-        console.log('[AuthCallback] All query keys:', Array.from(queryParams.keys()));
-        
-        // Try hash first (implicit flow)
-        let accessToken = hashParams.get('access_token');
-        let refreshToken = hashParams.get('refresh_token');
-        
-        console.log('[AuthCallback] Hash access_token:', accessToken ? `${accessToken.substring(0, 20)}...` : 'null');
-        
-        // Also check query params (some OAuth flows return tokens in query string)
-        if (!accessToken) {
-          accessToken = queryParams.get('access_token');
-          refreshToken = queryParams.get('refresh_token');
-          console.log('[AuthCallback] Tokens found in query params instead of hash');
-          console.log('[AuthCallback] Query access_token:', accessToken ? `${accessToken.substring(0, 20)}...` : 'null');
-        }
-        
-        let error = hashParams.get('error') || queryParams.get('error');
-        let errorDescription = hashParams.get('error_description') || queryParams.get('error_description');
+        console.log('[AuthCallback] Supabase getSession result:', { 
+          hasSession: !!data.session, 
+          error: error?.message 
+        });
 
         if (error) {
-          console.error('OAuth error:', error, errorDescription);
-          setLocation(`/?error=${encodeURIComponent(error)}`);
+          console.error('[AuthCallback] Session error:', error);
+          setLocation(`/?error=${encodeURIComponent(error.message)}`);
           return;
         }
 
-        // If no hash tokens, check for PKCE code in query params
-        const code = queryParams.get('code');
-        
-        console.log('[AuthCallback] Final accessToken:', accessToken ? 'EXISTS' : 'MISSING');
-        console.log('[AuthCallback] Final code:', code ? 'EXISTS' : 'MISSING');
-        
-        if (!accessToken && !code) {
-          console.error('[AuthCallback] ❌ No access token or code in callback');
-          console.error('[AuthCallback] Hash fragment:', window.location.hash);
-          console.error('[AuthCallback] Query string:', window.location.search);
-          console.error('[AuthCallback] This usually means:');
-          console.error('  1. Google OAuth redirect URL not configured in Google Cloud Console');
-          console.error('  2. OAuth redirect URL not configured correctly');
-          console.error('  3. Check your authentication provider dashboard for redirect URL configuration');
-          setLocation('/?error=no_token');
+        if (!data.session) {
+          console.error('[AuthCallback] No session found after OAuth redirect');
+          setLocation('/?error=no_session');
           return;
         }
 
-        // If we have a code, we need to exchange it for tokens on the backend
-        if (code && !accessToken) {
-          console.log('[AuthCallback] PKCE flow detected - exchanging code for tokens');
-          setStatus("Exchanging authorization code...");
-          
-          // Exchange code for tokens via backend
-          const exchangeResponse = await fetch(`${API_BASE_URL}/api/auth?action=exchange-code`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ code })
-          });
+        const accessToken = data.session.access_token;
+        const refreshToken = data.session.refresh_token;
 
-          if (!exchangeResponse.ok) {
-            console.error('Code exchange failed:', await exchangeResponse.text());
-            setLocation('/?error=code_exchange_failed');
-            return;
-          }
-
-          // Backend sets the session cookie, we can redirect
-          console.log('[AuthCallback] ✅ PKCE code exchanged successfully');
-          setStatus("Syncing user data...");
-          
-          // Sync user to public.users table
-          const syncResponse = await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
-            method: 'POST',
-            credentials: 'include'
-          });
-
-          if (!syncResponse.ok) {
-            console.error('[AuthCallback] Failed to sync user:', await syncResponse.text());
-            // Continue anyway - user might already exist
-          }
-
-          queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-          setLocation('/dashboard');
-          return;
-        }
-
-        if (!accessToken) {
-          console.error('No access token available');
-          setLocation('/?error=no_token');
-          return;
-        }
-
-        setStatus("Setting up session...");
+        console.log('[AuthCallback] ✅ Session retrieved successfully');
+        setStatus("Setting up your account...");
 
         // Send tokens to backend to set httpOnly cookies
         const setSessionResponse = await fetch(`${API_BASE_URL}/api/auth?action=set-session`, {
@@ -124,40 +51,36 @@ export default function AuthCallback() {
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify({
             access_token: accessToken,
-            refresh_token: refreshToken,
+            refresh_token: refreshToken || '',
           }),
-          credentials: 'include',
         });
 
         if (!setSessionResponse.ok) {
-          const errorText = await setSessionResponse.text();
-          console.error('Failed to set session:', errorText);
-          setLocation('/?error=session_setup_failed');
+          console.error('Failed to set session');
+          setLocation('/?error=session_failed');
           return;
         }
 
-        setStatus("Syncing user profile...");
+        setStatus("Syncing user data...");
 
-        // Call sync-user to ensure user exists in public.users table
+        // Sync user to public.users table
         const syncResponse = await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           credentials: 'include',
         });
 
         if (!syncResponse.ok) {
-          console.error('Failed to sync user:', await syncResponse.text());
+          console.error('Failed to sync user');
           // Continue anyway - user might already exist
         }
 
         setStatus("Redirecting to dashboard...");
 
         // Clear the auth query cache to force a refresh
-        await queryClient.invalidateQueries({ queryKey: ["/api/auth?action=user"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
 
         // Clean up URL and redirect to dashboard
         window.history.replaceState({}, '', '/dashboard');
