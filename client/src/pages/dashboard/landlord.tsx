@@ -1163,7 +1163,7 @@ export default function LandlordDashboard() {
                   ) : (
                     leases.map((lease: any) => (
                       <SelectItem key={lease.id} value={lease.id}>
-                        {lease.tenantName || 'Unknown Tenant'} - {lease.propertyName || 'Property'} (Unit: {lease.unitNumber || 'N/A'}) - KES {parseFloat(lease.monthlyRent || 0).toLocaleString()}/month
+                        {lease.tenant ? `${lease.tenant.firstName} ${lease.tenant.lastName}` : 'Unknown Tenant'} - {lease.property?.name || 'Property'} (Unit: {lease.unit?.unitNumber || 'N/A'}) - KES {parseFloat(lease.monthlyRent || 0).toLocaleString()}/month
                       </SelectItem>
                     ))
                   )}
