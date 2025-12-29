@@ -10,6 +10,8 @@ export default function AuthCallback() {
   const [status, setStatus] = useState("Completing sign in...");
 
   useEffect(() => {
+    let authListenerUnsubscribe: (() => void) | null = null;
+
     const handleAuthCallback = async () => {
       try {
         setStatus("Processing authentication...");
@@ -30,53 +32,65 @@ export default function AuthCallback() {
           console.log('[AuthCallback] Auth state changed:', event, session ? 'Has session' : 'No session');
           
           if (event === 'SIGNED_IN' && session) {
-            console.log('[AuthCallback] ✅ Sign in detected, processing session');
-            
-            const accessToken = session.access_token;
-            const refreshToken = session.refresh_token;
+            try {
+              console.log('[AuthCallback] ✅ Sign in detected, processing session');
+              
+              const accessToken = session.access_token;
+              const refreshToken = session.refresh_token;
 
-            setStatus("Setting up your account...");
+              setStatus("Setting up your account...");
 
-            // Send tokens to backend to set httpOnly cookies
-            const setSessionResponse = await fetch(`${API_BASE_URL}/api/auth?action=set-session`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({
-                access_token: accessToken,
-                refresh_token: refreshToken || '',
-              }),
-            });
+              // Send tokens to backend to set httpOnly cookies
+              const setSessionResponse = await fetch(`${API_BASE_URL}/api/auth?action=set-session`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  access_token: accessToken,
+                  refresh_token: refreshToken || '',
+                }),
+              });
 
-            if (!setSessionResponse.ok) {
-              console.error('Failed to set session');
-              setLocation('/?error=session_failed');
-              return;
+              if (!setSessionResponse.ok) {
+                console.error('Failed to set session');
+                setStatus("Session setup failed");
+                setLocation('/?error=session_failed');
+                return;
+              }
+
+              setStatus("Syncing user data...");
+
+              // Sync user to public.users table
+              const syncResponse = await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
+                method: 'POST',
+                credentials: 'include',
+              });
+
+              if (!syncResponse.ok) {
+                console.error('Failed to sync user');
+                // Continue anyway
+              }
+
+              setStatus("Redirecting to dashboard...");
+              await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+              
+              window.history.replaceState({}, '', '/dashboard');
+              setLocation('/dashboard');
+            } catch (error) {
+              console.error('[AuthCallback] Error during session setup:', error);
+              setStatus("Authentication failed");
+              setLocation('/?error=session_setup_failed');
+            } finally {
+              // Clean up auth listener after successful or failed processing
+              if (authListenerUnsubscribe) {
+                authListenerUnsubscribe();
+              }
             }
-
-            setStatus("Syncing user data...");
-
-            // Sync user to public.users table
-            const syncResponse = await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
-              method: 'POST',
-              credentials: 'include',
-            });
-
-            if (!syncResponse.ok) {
-              console.error('Failed to sync user');
-              // Continue anyway
-            }
-
-            setStatus("Redirecting to dashboard...");
-            await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-            
-            window.history.replaceState({}, '', '/dashboard');
-            setLocation('/dashboard');
-            
-            // Cleanup listener
-            authListener.subscription.unsubscribe();
           }
         });
+
+        // Store unsubscribe function for cleanup
+        authListenerUnsubscribe = authListener.subscription.unsubscribe;
 
         // Trigger session exchange from hash
         // Supabase will parse the hash and emit SIGNED_IN event
@@ -89,6 +103,13 @@ export default function AuthCallback() {
     };
 
     handleAuthCallback();
+
+    // Cleanup function to unsubscribe listener on unmount
+    return () => {
+      if (authListenerUnsubscribe) {
+        authListenerUnsubscribe();
+      }
+    };
   }, [setLocation, queryClient]);
 
   return (
