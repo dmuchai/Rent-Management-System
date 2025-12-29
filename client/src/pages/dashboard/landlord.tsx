@@ -159,6 +159,7 @@ export default function LandlordDashboard() {
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/tenants");
       const result = await response.json();
+      console.log("[Dashboard] Tenants loaded:", result);
       // Ensure we return an array
       return Array.isArray(result) ? result : [];
     },
@@ -1109,15 +1110,20 @@ export default function LandlordDashboard() {
                     <SelectValue placeholder="Choose a tenant" />
                   </SelectTrigger>
                   <SelectContent>
-                    {tenants.map((tenant: any) => (
-                      <SelectItem key={tenant.id} value={tenant.id}>
-                        {tenant.firstName} {tenant.lastName}
+                    {tenantsLoading ? (
+                      <SelectItem value="loading" disabled>
+                        Loading tenants...
                       </SelectItem>
-                    ))}
-                    {tenants.length === 0 && (
+                    ) : tenants.length === 0 ? (
                       <SelectItem value="no-tenants" disabled>
                         No tenants available - Add tenants first
                       </SelectItem>
+                    ) : (
+                      tenants.map((tenant: any) => (
+                        <SelectItem key={tenant.id} value={tenant.id}>
+                          {tenant.firstName} {tenant.lastName}
+                        </SelectItem>
+                      ))
                     )}
                   </SelectContent>
                 </Select>
