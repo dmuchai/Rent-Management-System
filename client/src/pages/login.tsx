@@ -8,10 +8,12 @@ import { useToast } from "@/hooks/use-toast";
 import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
 import { Eye, EyeOff } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -40,6 +42,12 @@ export default function Login() {
         title: "Success",
         description: "Logged in successfully!",
       });
+
+      // Invalidate the auth query to force refetch of user data
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth?action=user"] });
+      
+      // Small delay to ensure query refetch completes before redirect
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Redirect to dashboard
       setLocation("/dashboard");

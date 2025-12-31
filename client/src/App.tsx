@@ -10,6 +10,7 @@ import Landing from "@/pages/landing";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import LandlordDashboard from "@/pages/dashboard/landlord";
+import TenantDashboard from "@/pages/dashboard/tenant";
 import AuthCallback from "@/pages/auth-callback";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
@@ -55,6 +56,10 @@ function Router() {
       <Route path="/dashboard" component={() => {
         if (!isAuthenticated) {
           return <Login />;
+        }
+        // Route to appropriate dashboard based on user role
+        if (user?.role === 'tenant') {
+          return <TenantDashboard />;
         }
         return <LandlordDashboard />;
       }} />
