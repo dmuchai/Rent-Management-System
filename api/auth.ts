@@ -316,6 +316,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // GET /api/auth?action=identities - Get user's linked identities
+    if (action === 'identities' && req.method === 'GET') {
+      const token = req.cookies['supabase-auth-token'];
+      if (!token) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (error || !user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      // Return user's identities (email, google, etc.)
+      const identities = user.identities || [];
+      const linkedProviders = identities.map(identity => ({
+        provider: identity.provider,
+        created_at: identity.created_at,
+      }));
+
+      return res.status(200).json({
+        identities: linkedProviders,
+        hasEmailProvider: linkedProviders.some(p => p.provider === 'email'),
+        hasGoogleProvider: linkedProviders.some(p => p.provider === 'google'),
+      });
+    }
+
+    // POST /api/auth?action=link-google - Initiate Google linking for logged-in user
+    if (action === 'link-google' && req.method === 'POST') {
+      const token = req.cookies['supabase-auth-token'];
+      if (!token) {
+        return res.status(401).json({ error: 'Unauthorized - must be logged in to link account' });
+      }
+
+      // Verify user is authenticated
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const protocol = req.headers['x-forwarded-proto'] || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const origin = `${protocol}://${host}`;
+
+      // Store user's current session info for linking after OAuth
+      // We'll use the linking callback to complete the process
+      const linkingUrl = `${origin}/auth/link-callback`;
+
+      // Note: The actual linking happens on the client side using supabase.auth.linkIdentity()
+      // This endpoint just returns the necessary configuration
+      return res.status(200).json({
+        message: 'Use client-side linkIdentity() method',
+        redirectUrl: linkingUrl,
+        provider: 'google',
+      });
+    }
+
     return res.status(400).json({ error: 'Invalid action or method' });
 
   } catch (error) {

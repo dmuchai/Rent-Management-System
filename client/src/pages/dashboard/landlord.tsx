@@ -15,6 +15,7 @@ import LeaseTable from "@/components/leases/LeaseTable";
 import PaymentHistory from "@/components/payments/PaymentHistory";
 import DocumentManager from "@/components/documents/DocumentManager";
 import ReportGenerator from "@/components/reports/ReportGenerator";
+import { LinkedAccountsSection } from "@/components/LinkedAccountsSection";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -852,6 +853,21 @@ export default function LandlordDashboard() {
                     </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <i className="fas fa-link mr-3 text-green-600"></i>
+                  Linked Accounts
+                </CardTitle>
+                <CardDescription>
+                  Manage how you sign in to your account
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <LinkedAccountsSection />
               </CardContent>
             </Card>
 

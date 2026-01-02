@@ -88,8 +88,17 @@ export default function AuthCallback() {
         if (hashError || queryError) {
           const errorMsg = hashErrorDesc || queryErrorDesc || hashError || queryError || 'Unknown error';
           console.error('[AuthCallback] OAuth error:', errorMsg);
-          setStatus(`Authentication failed: ${errorMsg}`);
-          setLocation(`/login?error=${encodeURIComponent(errorMsg)}`);
+          
+          // Check for specific error types
+          let userFriendlyMessage = errorMsg;
+          if (errorMsg.toLowerCase().includes('email') && errorMsg.toLowerCase().includes('already')) {
+            userFriendlyMessage = 'This email is already registered. Please sign in with your email and password instead.';
+          } else if (errorMsg.toLowerCase().includes('access_denied')) {
+            userFriendlyMessage = 'You cancelled the Google sign-in. Please try again or use email/password login.';
+          }
+          
+          setStatus(`Authentication failed: ${userFriendlyMessage}`);
+          setLocation(`/login?error=${encodeURIComponent(userFriendlyMessage)}`);
           return;
         }
         
