@@ -51,8 +51,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const origin = `${protocol}://${host}`;
 
-      // Try PKCE flow first (more secure, default in Supabase v2)
-      // Falls back gracefully if not supported
+      // PKCE flow (RFC 7636) - more secure than implicit flow
+      // Returns authorization code (?code=) instead of access token (#access_token=)
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -62,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             prompt: 'consent'
           },
           skipBrowserRedirect: false,
+          flowType: 'pkce', // Explicit PKCE flow (matches frontend client config)
         }
       });
 
