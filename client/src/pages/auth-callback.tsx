@@ -120,9 +120,9 @@ export default function AuthCallback() {
           console.log('[AuthCallback] PKCE flow detected - exchanging authorization code');
           setStatus("Exchanging authorization code...");
           
-          // Supabase automatically handles PKCE code exchange when we call getSession
-          // It reads the code from the URL and exchanges it for tokens
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+          // Exchange authorization code for session tokens
+          // This is the explicit PKCE flow method that exchanges the code for tokens
+          const { data: { session }, error: sessionError } = await supabase.auth.exchangeCodeForSession(authCode);
           
           if (sessionError || !session) {
             console.error('[AuthCallback] PKCE code exchange failed:', sessionError);

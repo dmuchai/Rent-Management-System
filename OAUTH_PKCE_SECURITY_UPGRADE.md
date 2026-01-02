@@ -102,8 +102,8 @@ flowType: 'implicit'  // ❌ DEPRECATED & INSECURE
 const authCode = queryParams.get('code');
 
 if (authCode) {
-  // Supabase automatically exchanges code for tokens
-  const { data: { session } } = await supabase.auth.getSession();
+  // Explicitly exchange authorization code for session tokens
+  const { data: { session } } = await supabase.auth.exchangeCodeForSession(authCode);
   await processSession(session);
 }
 ```
