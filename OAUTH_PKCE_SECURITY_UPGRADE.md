@@ -12,20 +12,21 @@
 ## 🔒 **Security Issue Fixed**
 
 ### **Vulnerability: OAuth Implicit Flow**
-**Severity:** HIGH - CVE-2019-8564 (OAuth 2.0 Implicit Grant Deprecation)
+**Severity:** HIGH - OAuth 2.1 Deprecation ([RFC Draft](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-09#section-2.1.2)) + IETF Security BCP ([draft-ietf-oauth-security-topics](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics-25#section-2.1.2))
 
 **Previous Implementation:**
 ```typescript
 flowType: 'implicit'  // ❌ DEPRECATED & INSECURE
 ```
 
-**Issue:**
+**Security Issues:**
 - Access tokens returned directly in URL fragment: `#access_token=secret123`
-- Tokens exposed in browser history
+- Tokens exposed in browser history (XSS vector)
 - Vulnerable to token theft via browser extensions
 - Logged in analytics and error tracking tools
 - Visible in screenshots and screen recordings
-- Violates OAuth 2.1 security best practices
+- Violates OAuth 2.1 security best practices (implicit flow removed)
+- Non-compliant with IETF OAuth Security BCP recommendations
 
 ---
 
@@ -849,17 +850,19 @@ Watch for:
 ## 📚 **References**
 
 ### **Security Standards:**
-- [OAuth 2.1 Draft](https://oauth.net/2.1/) - Requires PKCE for public clients
-- [RFC 7636](https://datatracker.ietf.org/doc/html/rfc7636) - PKCE specification
-- [CVE-2019-8564](https://nvd.nist.gov/vuln/detail/CVE-2019-8564) - Implicit flow vulnerability
+- [OAuth 2.1 Draft (draft-ietf-oauth-v2-1-09)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-09) - Removes implicit grant, requires PKCE for public clients
+- [RFC 7636 - PKCE Specification](https://datatracker.ietf.org/doc/html/rfc7636) - Proof Key for Code Exchange
+- [OAuth 2.0 Security BCP (draft-ietf-oauth-security-topics-25)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics-25) - Section 2.1.2: Implicit Grant deprecation
+- [RFC 6749 - OAuth 2.0 Framework](https://datatracker.ietf.org/doc/html/rfc6749) - Original OAuth 2.0 specification
 
 ### **Supabase Documentation:**
-- [Supabase Auth with PKCE](https://supabase.com/docs/guides/auth/server-side/pkce-flow)
-- [OAuth Flow Types](https://supabase.com/docs/guides/auth/social-login)
+- [Supabase Auth with PKCE](https://supabase.com/docs/guides/auth/server-side/pkce-flow) - Implementation guide
+- [OAuth Flow Types](https://supabase.com/docs/guides/auth/social-login) - Social login configuration
 
 ### **Industry Best Practices:**
-- [OAuth 2.0 Security Best Current Practice](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics)
-- [OWASP OAuth Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/OAuth2_Cheat_Sheet.html)
+- [OAuth 2.0 Security Best Current Practice (BCP)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics) - IETF security guidance
+- [OWASP OAuth 2.0 Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/OAuth2_Cheat_Sheet.html) - Security recommendations
+- [OAuth 2.1 Summary (oauth.net)](https://oauth.net/2.1/) - Overview of OAuth 2.1 changes
 
 ---
 
