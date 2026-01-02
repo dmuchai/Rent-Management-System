@@ -102,52 +102,80 @@ export default function AuthCallback() {
           return;
         }
         
-        // Check if we have hash params OR query params (Supabase can use either)
-        const hasHashParams = window.location.hash.includes('access_token');
-        const hasQueryParams = window.location.search.includes('code');
+        // PKCE Flow: Check for authorization code in query params
+        const authCode = queryParams.get('code');
         
-        if (!hasHashParams && !hasQueryParams) {
+        // Legacy Implicit Flow: Check for access token in hash (for password reset)
+        const hasHashParams = window.location.hash.includes('access_token');
+        
+        if (!authCode && !hasHashParams) {
           // No OAuth parameters means user navigated here directly without OAuth flow
           console.log('[AuthCallback] No OAuth parameters - redirecting to login');
           setLocation('/login');
           return;
         }
 
-        // Set up auth listener FIRST before calling getSession
-        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-          console.log('[AuthCallback] Auth state changed:', event, session ? 'Has session' : 'No session');
+        // Handle PKCE flow (authorization code)
+        if (authCode) {
+          console.log('[AuthCallback] PKCE flow detected - exchanging authorization code');
+          setStatus("Exchanging authorization code...");
           
-          if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
-            await processSession(session);
-            // Clean up listener after processing
-            if (authListenerUnsubscribe) {
-              authListenerUnsubscribe();
-            }
+          // Supabase automatically handles PKCE code exchange when we call getSession
+          // It reads the code from the URL and exchanges it for tokens
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+          
+          if (sessionError || !session) {
+            console.error('[AuthCallback] PKCE code exchange failed:', sessionError);
+            setStatus("Authentication failed");
+            setLocation(`/login?error=${encodeURIComponent(sessionError?.message || 'Failed to exchange authorization code')}`);
+            return;
           }
-        });
-
-        authListenerUnsubscribe = authListener.subscription.unsubscribe;
-
-        // Now trigger session exchange from hash
-        // Supabase will parse the hash and emit SIGNED_IN or INITIAL_SESSION event
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        console.log('[AuthCallback] getSession result:', session ? 'Has session' : 'No session', error?.message || '');
-
-        // If getSession returns a session directly and we haven't processed yet, do it now
-        // This handles the case where listener doesn't fire
-        if (session && !isProcessingRef.current) {
-          console.log('[AuthCallback] Session available from getSession, processing directly');
+          
+          console.log('[AuthCallback] ✅ PKCE code exchange successful');
           await processSession(session);
+          return;
         }
 
-        // Set a timeout to handle cases where neither listener nor getSession works
-        timeoutId = setTimeout(() => {
-          if (!isProcessingRef.current) {
-            console.error('[AuthCallback] Timeout waiting for session');
-            setLocation('/?error=auth_timeout');
+        // Handle legacy implicit flow (for password reset tokens)
+        if (hasHashParams) {
+          console.log('[AuthCallback] Implicit flow detected (likely password reset)');
+          
+          // Set up auth listener FIRST before calling getSession
+          const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('[AuthCallback] Auth state changed:', event, session ? 'Has session' : 'No session');
+            
+            if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+              await processSession(session);
+              // Clean up listener after processing
+              if (authListenerUnsubscribe) {
+                authListenerUnsubscribe();
+              }
+            }
+          });
+
+          authListenerUnsubscribe = authListener.subscription.unsubscribe;
+
+          // Now trigger session exchange from hash
+          // Supabase will parse the hash and emit SIGNED_IN or INITIAL_SESSION event
+          const { data: { session }, error } = await supabase.auth.getSession();
+          
+          console.log('[AuthCallback] getSession result:', session ? 'Has session' : 'No session', error?.message || '');
+
+          // If getSession returns a session directly and we haven't processed yet, do it now
+          // This handles the case where listener doesn't fire
+          if (session && !isProcessingRef.current) {
+            console.log('[AuthCallback] Session available from getSession, processing directly');
+            await processSession(session);
           }
-        }, 10000); // 10 second timeout
+
+          // Set a timeout to handle cases where neither listener nor getSession works
+          timeoutId = setTimeout(() => {
+            if (!isProcessingRef.current) {
+              console.error('[AuthCallback] Timeout waiting for session');
+              setLocation('/?error=auth_timeout');
+            }
+          }, 10000); // 10 second timeout
+        }
         
       } catch (error) {
         console.error('[AuthCallback] Auth callback error:', error);

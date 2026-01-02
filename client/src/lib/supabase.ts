@@ -22,13 +22,18 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // 
 // AUTH STRATEGY: Hybrid approach for different auth flows
 // - Regular login/register: Handled by backend with httpOnly cookies
-// - OAuth (Google): Uses client for OAuth flow, then syncs with backend
-// - Password reset: Uses client to handle recovery tokens from email links
+// - OAuth (Google): Uses PKCE flow for maximum security (no tokens in URL)
+// - Password reset: Uses recovery tokens from email links
 // - Realtime: Uses anon key for public subscription access
 // 
-// Session handling is enabled ONLY for:
-// 1. OAuth callback processing (temporary session during redirect)
+// Session handling is enabled for:
+// 1. OAuth PKCE flow (authorization code exchange)
 // 2. Password reset token validation (recovery flow)
+// 
+// SECURITY: PKCE (Proof Key for Code Exchange) prevents:
+// - Token leakage via URL/browser history
+// - Interception by malicious browser extensions
+// - Logging of sensitive tokens in analytics
 // 
 // Sessions are NOT persisted long-term - backend httpOnly cookies remain the source of truth
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -50,10 +55,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         sessionStorage.removeItem(key);
       },
     },
-    // Detect session from URL hash (OAuth & password reset)
+    // Detect session from URL (OAuth & password reset)
     detectSessionInUrl: true,
-    // Flow type for OAuth - use implicit for better compatibility
-    flowType: 'implicit',
+    // Flow type for OAuth - use PKCE (Proof Key for Code Exchange) for security
+    // PKCE prevents token leakage via URL, browser history, and logs
+    flowType: 'pkce',
   },
   realtime: {
     // Enable Realtime features for database change subscriptions
