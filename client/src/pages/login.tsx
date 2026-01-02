@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,34 @@ export default function Login() {
     email: "",
     password: "",
   });
+
+  // Check for OAuth errors and success messages in URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
+    const success = params.get('success');
+    
+    if (error) {
+      const decodedError = decodeURIComponent(error);
+      console.error('[Login] OAuth error:', decodedError);
+      toast({
+        title: "Authentication Failed",
+        description: decodedError,
+        variant: "destructive",
+      });
+      // Clean up URL
+      window.history.replaceState({}, '', '/login');
+    }
+    
+    if (success === 'password-reset') {
+      toast({
+        title: "Password Reset Complete",
+        description: "Your password has been updated. Please sign in with your new password.",
+      });
+      // Clean up URL
+      window.history.replaceState({}, '', '/login');
+    }
+  }, [toast]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();

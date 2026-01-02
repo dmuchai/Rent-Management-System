@@ -20,19 +20,40 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 // Create and export the Supabase client
 // 
-// AUTH STRATEGY: This client is ONLY used for Realtime subscriptions.
-// All authentication and data operations are proxied through our backend API (/api/*).
-// - Authentication: Handled by backend (api/login.ts, api/register.ts) with JWT in httpOnly cookies
-// - Data operations: Proxied through backend API endpoints (api/properties, api/tenants, etc.)
-// - Realtime: Uses anon key for public subscription access (no auth required for listening)
+// AUTH STRATEGY: Hybrid approach for different auth flows
+// - Regular login/register: Handled by backend with httpOnly cookies
+// - OAuth (Google): Uses client for OAuth flow, then syncs with backend
+// - Password reset: Uses client to handle recovery tokens from email links
+// - Realtime: Uses anon key for public subscription access
 // 
-// Therefore, persistSession and autoRefreshToken are disabled since this client never
-// performs authenticated operations - it only subscribes to Realtime channels using the
-// public anon key, which doesn't require token refresh.
+// Session handling is enabled ONLY for:
+// 1. OAuth callback processing (temporary session during redirect)
+// 2. Password reset token validation (recovery flow)
+// 
+// Sessions are NOT persisted long-term - backend httpOnly cookies remain the source of truth
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false, // Not needed - all auth happens on backend
-    autoRefreshToken: false, // Not needed - client only used for Realtime subscriptions
+    // Enable session handling for OAuth and password reset flows
+    // Session is temporary and only used during auth callback/reset processing
+    persistSession: true,
+    autoRefreshToken: true,
+    // Store in memory only to avoid conflicts with backend cookies
+    storage: {
+      getItem: (key: string) => {
+        // Only persist auth-related items temporarily in sessionStorage (cleared on tab close)
+        return sessionStorage.getItem(key);
+      },
+      setItem: (key: string, value: string) => {
+        sessionStorage.setItem(key, value);
+      },
+      removeItem: (key: string) => {
+        sessionStorage.removeItem(key);
+      },
+    },
+    // Detect session from URL hash (OAuth & password reset)
+    detectSessionInUrl: true,
+    // Flow type for OAuth - use implicit for better compatibility
+    flowType: 'implicit',
   },
   realtime: {
     // Enable Realtime features for database change subscriptions

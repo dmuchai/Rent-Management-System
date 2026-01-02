@@ -43,15 +43,53 @@ export default function ResetPassword() {
     const accessToken = hashParams.get('access_token');
     
     console.log('[ResetPassword] Hash params:', Object.fromEntries(hashParams.entries()));
+    console.log('[ResetPassword] Type:', type);
+    console.log('[ResetPassword] Has access token:', !!accessToken);
     
-    if (type !== 'recovery' || !accessToken) {
+    // Validate we have the required recovery parameters
+    if (type !== 'recovery') {
+      console.error('[ResetPassword] Invalid type:', type, '(expected "recovery")');
       toast({
         title: "Invalid Reset Link",
         description: "This link is invalid or has expired. Please request a new password reset.",
         variant: "destructive",
       });
       setTimeout(() => setLocation("/forgot-password"), 3000);
+      return;
     }
+    
+    if (!accessToken) {
+      console.error('[ResetPassword] Missing access token in URL');
+      toast({
+        title: "Invalid Reset Link",
+        description: "The reset token is missing. Please request a new password reset.",
+        variant: "destructive",
+      });
+      setTimeout(() => setLocation("/forgot-password"), 3000);
+      return;
+    }
+    
+    // Validate the session is active with Supabase
+    const validateSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session) {
+          console.error('[ResetPassword] Session validation failed:', error);
+          toast({
+            title: "Session Expired",
+            description: "Your reset link has expired. Please request a new one.",
+            variant: "destructive",
+          });
+          setTimeout(() => setLocation("/forgot-password"), 3000);
+        } else {
+          console.log('[ResetPassword] ✅ Valid recovery session');
+        }
+      } catch (err) {
+        console.error('[ResetPassword] Session check error:', err);
+      }
+    };
+    
+    validateSession();
   }, [toast, setLocation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -91,13 +129,21 @@ export default function ResetPassword() {
           variant: "destructive",
         });
       } else {
+        console.log('[ResetPassword] ✅ Password updated successfully');
+        
         toast({
           title: "Password Updated!",
-          description: "Your password has been successfully reset. Redirecting to login...",
+          description: "Your password has been successfully reset. Please sign in with your new password.",
         });
-        // Clear the hash from URL
-        window.history.replaceState({}, '', '/');
-        setTimeout(() => setLocation("/"), 2000);
+        
+        // Sign out the recovery session to prevent auto-login
+        await supabase.auth.signOut();
+        
+        // Clear the hash from URL and redirect to login with success param
+        window.history.replaceState({}, '', '/login?success=password-reset');
+        
+        // Redirect to login page after a short delay
+        setTimeout(() => setLocation("/login?success=password-reset"), 2000);
       }
     } catch (error) {
       console.error('Password reset error:', error);

@@ -77,13 +77,28 @@ export default function AuthCallback() {
         console.log('[AuthCallback] Hash:', window.location.hash);
         console.log('[AuthCallback] Search:', window.location.search);
         
+        // Check for OAuth errors in URL
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const queryParams = new URLSearchParams(window.location.search);
+        const hashError = hashParams.get('error');
+        const hashErrorDesc = hashParams.get('error_description');
+        const queryError = queryParams.get('error');
+        const queryErrorDesc = queryParams.get('error_description');
+        
+        if (hashError || queryError) {
+          const errorMsg = hashErrorDesc || queryErrorDesc || hashError || queryError || 'Unknown error';
+          console.error('[AuthCallback] OAuth error:', errorMsg);
+          setStatus(`Authentication failed: ${errorMsg}`);
+          setLocation(`/login?error=${encodeURIComponent(errorMsg)}`);
+          return;
+        }
+        
         // Check if we have hash params OR query params (Supabase can use either)
-        const hasHashParams = window.location.hash.includes('access_token') || window.location.hash.includes('error');
-        const hasQueryParams = window.location.search.includes('code') || window.location.search.includes('error');
+        const hasHashParams = window.location.hash.includes('access_token');
+        const hasQueryParams = window.location.search.includes('code');
         
         if (!hasHashParams && !hasQueryParams) {
           // No OAuth parameters means user navigated here directly without OAuth flow
-          // Don't check for existing session - it may be stale from before logout
           console.log('[AuthCallback] No OAuth parameters - redirecting to login');
           setLocation('/login');
           return;
