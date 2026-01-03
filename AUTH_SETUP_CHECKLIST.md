@@ -76,7 +76,7 @@ Go to [Google Cloud Console](https://console.cloud.google.com)
 2. Navigate to **APIs & Services** → **Credentials**
 3. If you don't have OAuth credentials, click **+ CREATE CREDENTIALS** → **OAuth client ID**
    - Application type: **Web application**
-   - Name: `PropertyFlow Production`
+   - Name: `Landee Production`
 
 ---
 

@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 export default function Landing() {
-  usePageTitle('PropertyFlow', false);
+  usePageTitle('Landee', false);
   const [, setLocation] = useLocation();
   const [error, setError] = useState<string | null>(null);
   
@@ -37,7 +37,7 @@ export default function Landing() {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
               <i className="fas fa-building text-primary text-2xl mr-3"></i>
-              <h1 className="text-2xl font-bold text-foreground">PropertyFlow</h1>
+              <h1 className="text-2xl font-bold text-foreground">Landee</h1>
             </div>
             <nav className="hidden md:flex space-x-8">
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Features</a>

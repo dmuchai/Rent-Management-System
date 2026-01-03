@@ -54,7 +54,7 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
           <div className="p-6 flex items-center justify-between">
             <div className="flex items-center">
               <i className="fas fa-building text-primary text-xl mr-3"></i>
-              {!isCollapsed && <h1 className="text-xl font-bold">PropertyFlow</h1>}
+              {!isCollapsed && <h1 className="text-xl font-bold">Landee</h1>}
             </div>
             <Button
               variant="ghost"

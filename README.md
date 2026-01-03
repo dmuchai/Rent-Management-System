@@ -1,4 +1,4 @@
-# 🏠 PropertyFlow - Rent Management System
+# 🏠 Landee - Rent Management System
 
 A modern, full-stack property management platform built with **React**, **TypeScript**, **Vercel Serverless Functions**, and **Supabase**.
 

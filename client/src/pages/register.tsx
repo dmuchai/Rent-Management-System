@@ -124,7 +124,7 @@ export default function Register() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <i className="fas fa-building text-primary text-4xl mr-3"></i>
-            <h1 className="text-3xl font-bold">PropertyFlow</h1>
+            <h1 className="text-3xl font-bold">Landee</h1>
           </div>
           <p className="text-muted-foreground">Create your account to get started</p>
         </div>
