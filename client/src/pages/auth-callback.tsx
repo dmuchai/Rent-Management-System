@@ -61,6 +61,13 @@ export default function AuthCallback() {
         
         // Use hard redirect to ensure navigation happens
         console.log('[AuthCallback] ✅ Session complete, redirecting to dashboard');
+        
+        // Clear timeout since authentication succeeded
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        
         window.location.href = '/dashboard';
       } catch (error) {
         console.error('[AuthCallback] Error during session setup:', error);
@@ -143,9 +150,14 @@ export default function AuthCallback() {
           
           // Set a timeout in case the automatic exchange doesn't complete
           timeoutId = setTimeout(() => {
-            console.error('[AuthCallback] PKCE exchange timeout');
-            setStatus("Authentication timed out");
-            setLocation('/login?error=' + encodeURIComponent('Authentication timed out. Please try again.'));
+            // Only redirect if processing hasn't completed
+            if (!isProcessingRef.current) {
+              console.error('[AuthCallback] PKCE exchange timeout');
+              setStatus("Authentication timed out");
+              setLocation('/login?error=' + encodeURIComponent('Authentication timed out. Please try again.'));
+            } else {
+              console.log('[AuthCallback] Timeout fired but authentication already succeeded');
+            }
           }, 10000); // 10 second timeout
           
           return;
