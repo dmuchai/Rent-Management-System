@@ -378,6 +378,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // POST /api/auth?action=change-password - Change user password
+    if (action === 'change-password' && req.method === 'POST') {
+      const token = req.cookies['supabase-auth-token'];
+      if (!token) {
+        return res.status(401).json({ error: 'Unauthorized - please log in' });
+      }
+
+      // Verify user is authenticated
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: 'Current password and new password are required' });
+      }
+
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: 'New password must be at least 8 characters' });
+      }
+
+      // Verify current password by attempting to sign in
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user.email!,
+        password: currentPassword,
+      });
+
+      if (verifyError) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      // Update password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        console.error('Password update error:', updateError);
+        return res.status(500).json({ error: 'Failed to update password' });
+      }
+
+      return res.status(200).json({ message: 'Password changed successfully' });
+    }
+
     return res.status(400).json({ error: 'Invalid action or method' });
 
   } catch (error) {

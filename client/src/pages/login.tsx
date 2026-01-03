@@ -98,6 +98,14 @@ export default function Login() {
     setIsLoading(true);
 
     try {
+      // Clear any existing session before initiating new OAuth flow
+      // This prevents issues when logging out and logging back in
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        console.log('[Login] Clearing existing session before OAuth');
+        await supabase.auth.signOut({ scope: 'local' }); // Local signout only, don't revoke tokens
+      }
+      
       // Initiate Google OAuth with PKCE flow directly from client
       // This ensures the code_verifier is properly stored in sessionStorage
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -106,7 +114,7 @@ export default function Login() {
           redirectTo: `${window.location.origin}/auth-callback`,
           queryParams: {
             access_type: 'offline',
-            prompt: 'consent',
+            prompt: 'select_account', // Changed from 'consent' to 'select_account' for better UX
           },
         },
       });

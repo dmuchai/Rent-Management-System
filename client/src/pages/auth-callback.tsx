@@ -115,10 +115,20 @@ export default function AuthCallback() {
         // Legacy Implicit Flow: Check for access token in hash (for password reset)
         const hasHashParams = window.location.hash.includes('access_token');
         
-        if (!authCode && !hasHashParams) {
-          // No OAuth parameters means user navigated here directly without OAuth flow
-          console.log('[AuthCallback] No OAuth parameters - redirecting to login');
+        // Check if Supabase already has a session (might happen on cached OAuth redirects)
+        const { data: { session: existingSession } } = await supabase.auth.getSession();
+        
+        if (!authCode && !hasHashParams && !existingSession) {
+          // No OAuth parameters and no existing session means user navigated here directly
+          console.log('[AuthCallback] No OAuth parameters and no session - redirecting to login');
           setLocation('/login');
+          return;
+        }
+        
+        // If we have an existing session but no OAuth params, process it
+        if (!authCode && !hasHashParams && existingSession) {
+          console.log('[AuthCallback] Found existing session without OAuth params - processing cached session');
+          await processSession(existingSession);
           return;
         }
 
