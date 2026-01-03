@@ -35,8 +35,12 @@ export default function Landing() {
       <header className="bg-card border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <img src="/logo-full.png" alt="Landee Property Management System" className="h-16 md:h-20 lg:h-24 w-auto" />
+            <div className="flex items-center gap-3">
+              <img src="/favicon.png" alt="Landee" className="h-10 w-10 md:h-12 md:w-12" />
+              <div className="flex flex-col">
+                <h1 className="text-xl md:text-2xl font-bold text-foreground">Landee</h1>
+                <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Property Management System</p>
+              </div>
             </div>
             <nav className="hidden md:flex space-x-8">
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Features</a>
