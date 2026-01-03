@@ -123,7 +123,7 @@ export default function Register() {
         {/* Logo/Brand */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <i className="fas fa-building text-primary text-4xl mr-3"></i>
+            <img src="/favicon.png" alt="Landee" className="h-12 w-12 mr-3" />
             <h1 className="text-3xl font-bold">Landee</h1>
           </div>
           <p className="text-muted-foreground">Create your account to get started</p>

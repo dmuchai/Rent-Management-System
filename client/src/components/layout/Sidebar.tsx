@@ -53,8 +53,11 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
           {/* Header */}
           <div className="p-6 flex items-center justify-between">
             <div className="flex items-center">
-              <i className="fas fa-building text-primary text-xl mr-3"></i>
-              {!isCollapsed && <h1 className="text-xl font-bold">Landee</h1>}
+              {isCollapsed ? (
+                <img src="/favicon.png" alt="Landee" className="h-8 w-8" />
+              ) : (
+                <img src="/logo-full.png" alt="Landee" className="h-8" />
+              )}
             </div>
             <Button
               variant="ghost"
