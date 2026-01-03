@@ -2,8 +2,10 @@ import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 export default function Landing() {
+  usePageTitle('PropertyFlow', false);
   const [, setLocation] = useLocation();
   const [error, setError] = useState<string | null>(null);
   

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 // Password validation helper
 function validatePassword(password: string): { isValid: boolean; failedRequirements: string[] } {
@@ -29,6 +30,7 @@ function validatePassword(password: string): { isValid: boolean; failedRequireme
 }
 
 export default function ResetPassword() {
+  usePageTitle('Reset Password');
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);

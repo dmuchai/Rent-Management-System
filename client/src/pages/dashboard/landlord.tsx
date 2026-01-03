@@ -29,6 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/lib/supabase";
 import { AUTH_QUERY_KEYS, clearAuthQueries } from "@/lib/auth-keys";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Lease } from "@/../../shared/schema";
 
 type DashboardSection = "overview" | "properties" | "tenants" | "leases" | "payments" | "documents" | "reports" | "profile";
@@ -55,11 +56,25 @@ function validatePassword(password: string): { isValid: boolean; failedRequireme
 }
 
 export default function LandlordDashboard() {
+  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
+  
+  // Dynamic page title based on active section
+  const sectionTitles: Record<DashboardSection, string> = {
+    overview: 'Dashboard',
+    properties: 'Properties',
+    tenants: 'Tenants',
+    leases: 'Leases',
+    payments: 'Payments',
+    documents: 'Documents',
+    reports: 'Reports',
+    profile: 'Profile'
+  };
+  usePageTitle(sectionTitles[activeSection]);
+  
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [isPropertyFormOpen, setIsPropertyFormOpen] = useState(false);
   const [isTenantFormOpen, setIsTenantFormOpen] = useState(false);
   const [isLeaseFormOpen, setIsLeaseFormOpen] = useState(false);
@@ -365,7 +380,7 @@ export default function LandlordDashboard() {
     );
   }
 
-  const sectionTitles = {
+  const sectionHeaders = {
     overview: "Dashboard Overview",
     properties: "Properties",
     tenants: "Tenants", 
@@ -930,7 +945,7 @@ export default function LandlordDashboard() {
         
         <div className="flex-1 overflow-auto">
           <Header 
-            title={sectionTitles[activeSection]}
+            title={sectionHeaders[activeSection]}
             onSectionChange={(section) => setActiveSection(section as DashboardSection)}
             onMenuClick={() => setIsSidebarOpen(true)}
             onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
