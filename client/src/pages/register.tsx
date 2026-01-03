@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
 import { Eye, EyeOff } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export default function Register() {
   const [, setLocation] = useLocation();
@@ -73,9 +74,29 @@ export default function Register() {
     }
   };
 
-  const handleGoogleSignup = () => {
-    // Redirect to Google OAuth endpoint
-    window.location.href = `${API_BASE_URL}/api/auth?action=google`;
+  const handleGoogleSignup = async () => {
+    // Initiate Google OAuth with PKCE flow directly from client
+    // This ensures the code_verifier is properly stored in sessionStorage
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth-callback`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+
+    if (error) {
+      console.error('[Register] Google OAuth initiation failed:', error);
+      toast({
+        title: "Authentication Failed",
+        description: error.message || "Failed to initiate Google sign-in",
+        variant: "destructive",
+      });
+    }
+    // If successful, user will be redirected to Google
   };
 
   return (

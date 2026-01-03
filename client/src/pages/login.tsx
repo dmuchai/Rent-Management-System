@@ -9,6 +9,7 @@ import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
 import { Eye, EyeOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -90,9 +91,29 @@ export default function Login() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    // Redirect to Google OAuth endpoint
-    window.location.href = `${API_BASE_URL}/api/auth?action=google`;
+  const handleGoogleLogin = async () => {
+    // Initiate Google OAuth with PKCE flow directly from client
+    // This ensures the code_verifier is properly stored in sessionStorage
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth-callback`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+
+    if (error) {
+      console.error('[Login] Google OAuth initiation failed:', error);
+      toast({
+        title: "Authentication Failed",
+        description: error.message || "Failed to initiate Google sign-in",
+        variant: "destructive",
+      });
+    }
+    // If successful, user will be redirected to Google
   };
 
   const handleRegister = () => {

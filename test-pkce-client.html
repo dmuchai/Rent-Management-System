@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PKCE OAuth Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+    }
+    .status {
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+      background: #f0f0f0;
+    }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .info { background: #d1ecf1; color: #0c5460; }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 10px 5px;
+      cursor: pointer;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 10px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔐 PKCE OAuth Flow Test</h1>
+  
+  <div id="status" class="status info">
+    Ready to test PKCE flow
+  </div>
+
+  <button onclick="testPKCEFlow()">Test Google OAuth (PKCE)</button>
+  <button onclick="checkSessionStorage()">Check SessionStorage</button>
+  <button onclick="clearStorage()">Clear Storage</button>
+
+  <div id="output"></div>
+
+  <script>
+    // Your Supabase configuration
+    const SUPABASE_URL = 'https://emdahodfztpfdjkrbnqz.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtZGFob2RmenRwZmRqa3JibnF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMzY1ODEsImV4cCI6MjA3MzcxMjU4MX0.ci6zhIbRt5DnSbtxIuvO9D0NjihAkmcbO_NexhEjIZA';
+
+    // Create Supabase client with PKCE
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        flowType: 'pkce',
+        persistSession: true,
+        storage: window.sessionStorage,
+        detectSessionInUrl: true,
+      }
+    });
+
+    function log(message, type = 'info') {
+      const statusDiv = document.getElementById('status');
+      statusDiv.className = `status ${type}`;
+      statusDiv.textContent = message;
+      console.log(`[${type.toUpperCase()}]`, message);
+    }
+
+    function displayOutput(title, data) {
+      const output = document.getElementById('output');
+      output.innerHTML = `
+        <h3>${title}</h3>
+        <pre>${JSON.stringify(data, null, 2)}</pre>
+      `;
+    }
+
+    async function testPKCEFlow() {
+      try {
+        log('Initiating Google OAuth with PKCE...', 'info');
+        
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin + '/test-pkce-client.html',
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'consent',
+            },
+          },
+        });
+
+        if (error) {
+          log(`Error: ${error.message}`, 'error');
+          displayOutput('Error Details', error);
+          return;
+        }
+
+        log('Redirecting to Google... Check Network tab for code_challenge parameter', 'success');
+        displayOutput('OAuth Data', data);
+        
+        // The user will be redirected, so this won't execute
+      } catch (error) {
+        log(`Exception: ${error.message}`, 'error');
+        displayOutput('Exception Details', error);
+      }
+    }
+
+    function checkSessionStorage() {
+      const storage = {};
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && (key.includes('supabase') || key.includes('pkce') || key.includes('auth'))) {
+          try {
+            storage[key] = JSON.parse(sessionStorage.getItem(key));
+          } catch {
+            storage[key] = sessionStorage.getItem(key);
+          }
+        }
+      }
+
+      if (Object.keys(storage).length === 0) {
+        log('No auth-related items in sessionStorage', 'info');
+        displayOutput('SessionStorage', { message: 'Empty or no auth items' });
+      } else {
+        log(`Found ${Object.keys(storage).length} auth-related items in sessionStorage`, 'success');
+        displayOutput('SessionStorage Contents', storage);
+      }
+    }
+
+    function clearStorage() {
+      sessionStorage.clear();
+      log('SessionStorage cleared', 'success');
+      document.getElementById('output').innerHTML = '';
+    }
+
+    // Handle OAuth callback
+    window.addEventListener('load', async () => {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const queryParams = new URLSearchParams(window.location.search);
+      
+      const code = queryParams.get('code');
+      const accessToken = hashParams.get('access_token');
+
+      if (code) {
+        log('✅ PKCE FLOW DETECTED! Authorization code received: ' + code.substring(0, 20) + '...', 'success');
+        displayOutput('OAuth Callback (PKCE)', {
+          flow: 'PKCE',
+          code: code,
+          message: 'This is correct! You are using PKCE flow.'
+        });
+        
+        // Exchange code for session
+        try {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            log('Code exchange failed: ' + error.message, 'error');
+          } else {
+            log('Code exchange successful!', 'success');
+            displayOutput('Session Data', data);
+          }
+        } catch (e) {
+          log('Code exchange error: ' + e.message, 'error');
+        }
+      } else if (accessToken) {
+        log('❌ IMPLICIT FLOW DETECTED! Access token in URL hash', 'error');
+        displayOutput('OAuth Callback (Implicit)', {
+          flow: 'Implicit',
+          accessToken: accessToken.substring(0, 20) + '...',
+          message: 'This is NOT correct for PKCE. You are using implicit flow.'
+        });
+      }
+    });
+  </script>
+</body>
+</html>

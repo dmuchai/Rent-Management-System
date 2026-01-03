@@ -42,7 +42,13 @@ const setSessionSchema = z.object({
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { action } = req.query;
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  
+  // Create Supabase client with PKCE flow for OAuth
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      flowType: 'pkce', // PKCE flow must be set at client level, not per-request
+    }
+  });
 
   try {
     // GET /api/auth?action=google - Google OAuth
@@ -51,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const origin = `${protocol}://${host}`;
 
-      // PKCE flow (RFC 7636) - more secure than implicit flow
+      // PKCE flow (RFC 7636) - configured at client level above
       // Returns authorization code (?code=) instead of access token (#access_token=)
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -62,7 +68,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             prompt: 'consent'
           },
           skipBrowserRedirect: false,
-          flowType: 'pkce', // Explicit PKCE flow (matches frontend client config)
         }
       });
 
