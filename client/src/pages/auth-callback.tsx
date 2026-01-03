@@ -137,7 +137,14 @@ export default function AuthCallback() {
             
             if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
               console.log('[AuthCallback] ✅ PKCE flow completed - session detected');
-              authListenerUnsubscribe = authListener.subscription.unsubscribe;
+              
+              // Clean up listener and timeout immediately to prevent duplicate handling
+              authListener.subscription.unsubscribe();
+              if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+              }
+              
               await processSession(session);
             } else if (event === 'SIGNED_OUT') {
               console.error('[AuthCallback] PKCE flow failed - user signed out');
@@ -145,8 +152,6 @@ export default function AuthCallback() {
               setLocation('/login?error=' + encodeURIComponent('Failed to complete sign in'));
             }
           });
-          
-          authListenerUnsubscribe = authListener.subscription.unsubscribe;
           
           // Set a timeout in case the automatic exchange doesn't complete
           timeoutId = setTimeout(() => {
