@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/lib/supabase";
+import { AUTH_QUERY_KEYS, clearAuthQueries } from "@/lib/auth-keys";
 import type { Lease } from "@/../../shared/schema";
 
 type DashboardSection = "overview" | "properties" | "tenants" | "leases" | "payments" | "documents" | "reports" | "profile";
@@ -139,9 +140,8 @@ export default function LandlordDashboard() {
       apiSuccess = true;
     }
 
-    // Clear auth-related queries from cache
-    queryClient.removeQueries({ queryKey: ['/api/auth/user'] });
-    queryClient.removeQueries({ queryKey: ['/api/auth'] });
+    // Clear auth-related queries from cache using consistent keys
+    clearAuthQueries(queryClient);
 
     // Determine overall success - we consider it successful if at least API logout worked
     // (Supabase signOut is just for local cleanup, not critical)
@@ -251,7 +251,7 @@ export default function LandlordDashboard() {
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth?action=user"] });
+      queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
       toast({
         title: "Success",
         description: "Profile updated successfully!",

@@ -1,4 +1,5 @@
 import { queryClient } from "./queryClient";
+import { clearAuthQueries } from "./auth-keys";
 
 /**
  * Clear authentication-related keys from localStorage and sessionStorage
@@ -80,9 +81,8 @@ export async function logout() {
   try {
     console.log('Starting client-side logout...');
     
-    // Clear only auth-related queries from cache (not entire cache)
-    queryClient.removeQueries({ queryKey: ['/api/auth/user'] });
-    queryClient.removeQueries({ queryKey: ['/api/auth'] });
+    // Clear only auth-related queries from cache using consistent keys
+    clearAuthQueries(queryClient);
     
     // Clear only authentication-related browser storage
     clearAuthStorage();

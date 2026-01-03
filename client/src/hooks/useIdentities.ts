@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { AUTH_QUERY_KEYS } from "@/lib/auth-keys";
 
 interface Identity {
   provider: string;
@@ -14,7 +15,7 @@ interface IdentitiesResponse {
 
 export function useIdentities() {
   return useQuery<IdentitiesResponse>({
-    queryKey: ["/api/auth?action=identities"],
+    queryKey: AUTH_QUERY_KEYS.identities,
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/auth?action=identities");
       if (!response.ok) {

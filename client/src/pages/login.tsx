@@ -10,6 +10,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Eye, EyeOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { AUTH_QUERY_KEYS } from "@/lib/auth-keys";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -85,7 +86,7 @@ export default function Login() {
       });
 
       // Invalidate the auth query to force refetch of user data
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth?action=user"] });
+      await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
       
       // Small delay to ensure query refetch completes before redirect
       await new Promise(resolve => setTimeout(resolve, 100));

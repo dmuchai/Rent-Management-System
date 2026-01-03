@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { User } from "@shared/schema";
 import { API_BASE_URL } from "@/lib/config";
+import { AUTH_QUERY_KEYS } from "@/lib/auth-keys";
 
 // Import auth utility to access the same clearing functions
 import "../lib/auth";
@@ -53,12 +54,12 @@ export function useAuth() {
       window.history.replaceState({}, '', url.toString());
       
       // Force refetch of auth status
-      queryClient.invalidateQueries({ queryKey: ["/api/auth?action=user"] });
+      queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
     }
   }, [queryClient]);
 
   const { data: user, isLoading, error } = useQuery<User>({
-    queryKey: ["/api/auth?action=user"],
+    queryKey: AUTH_QUERY_KEYS.user,
     queryFn: async (): Promise<User> => {
       // Using httpOnly cookies for authentication - no need to check localStorage
       const response = await fetch(`${API_BASE_URL}/api/auth?action=user`, {

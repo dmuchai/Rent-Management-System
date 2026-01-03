@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { API_BASE_URL } from "@/lib/config";
 import { supabase } from "@/lib/supabase";
+import { AUTH_QUERY_KEYS } from "@/lib/auth-keys";
 
 export default function AuthCallback() {
   const [, setLocation] = useLocation();
@@ -57,7 +58,7 @@ export default function AuthCallback() {
         });
 
         setStatus("Redirecting to dashboard...");
-        await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
         
         // Use hard redirect to ensure navigation happens
         console.log('[AuthCallback] ✅ Session complete, redirecting to dashboard');

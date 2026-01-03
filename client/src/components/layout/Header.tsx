@@ -9,6 +9,7 @@ import { API_BASE_URL } from "@/lib/config";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { clearAuthQueries } from "@/lib/auth-keys";
 
 interface HeaderProps {
   title: string;
@@ -51,9 +52,8 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
       apiSuccess = true;
     }
 
-    // Clear auth-related queries from cache
-    queryClient.removeQueries({ queryKey: ['/api/auth/user'] });
-    queryClient.removeQueries({ queryKey: ['/api/auth'] });
+    // Clear auth-related queries from cache using consistent keys
+    clearAuthQueries(queryClient);
 
     if (apiSuccess) {
       toast({
