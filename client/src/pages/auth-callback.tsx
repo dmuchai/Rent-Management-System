@@ -153,10 +153,23 @@ export default function AuthCallback() {
             }
           });
           
+          // Store unsubscribe function for cleanup
+          authListenerUnsubscribe = authListener.subscription.unsubscribe;
+          
           // Set a timeout in case the automatic exchange doesn't complete
           timeoutId = setTimeout(() => {
             // Only redirect if processing hasn't completed
             if (!isProcessingRef.current) {
+              // Clean up listener before redirecting to prevent callbacks after unmount
+              if (authListenerUnsubscribe) {
+                authListenerUnsubscribe();
+                authListenerUnsubscribe = null;
+              }
+              if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+              }
+              
               console.error('[AuthCallback] PKCE exchange timeout');
               setStatus("Authentication timed out");
               setLocation('/login?error=' + encodeURIComponent('Authentication timed out. Please try again.'));
