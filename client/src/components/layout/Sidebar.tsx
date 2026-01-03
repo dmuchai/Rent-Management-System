@@ -54,9 +54,23 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
           <div className="p-6 flex items-center justify-between">
             <div className="flex items-center">
               {isCollapsed ? (
-                <img src="/favicon.png" alt="Landee" className="h-8 w-8" />
+                <img 
+                  src="/favicon.png" 
+                  alt="Landee" 
+                  className="h-8 w-8"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
               ) : (
-                <img src="/logo-full.png" alt="Landee" className="h-8" />
+                <img 
+                  src="/logo-full.png" 
+                  alt="Landee" 
+                  className="h-8"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
               )}
             </div>
             <Button
