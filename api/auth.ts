@@ -391,6 +391,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
+      // Rate limiting: 10 password change attempts per minute per user
+      // Use user ID as the rate limit key to prevent brute force attacks on specific accounts
+      const clientIp = getClientIp(req);
+      const rateLimitKey = user.id || clientIp; // Fallback to IP if no user ID
+      const rateLimitResult = await rateLimit({
+        action: 'change-password',
+        ip: rateLimitKey,
+        limit: RATE_LIMITS['change-password'].limit,
+        windowMs: RATE_LIMITS['change-password'].window * 1000,
+      });
+
+      if (!rateLimitResult.allowed) {
+        console.warn(`Rate limit exceeded for password change from user: ${user.id} (IP: ${clientIp})`);
+        return res.status(429).json({ 
+          error: 'Too many password change attempts. Please try again later.',
+          retryAfter: rateLimitResult.retryAfter,
+        });
+      }
+
       const { currentPassword, newPassword } = req.body;
 
       if (!currentPassword || !newPassword) {
