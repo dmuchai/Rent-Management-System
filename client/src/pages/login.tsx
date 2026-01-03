@@ -22,14 +22,18 @@ export default function Login() {
     email: "",
     password: "",
   });
-
   // Auth guard: redirect authenticated users to dashboard
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        console.log('[Login] User already authenticated, redirecting to dashboard');
-        setLocation("/dashboard");
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          console.log('[Login] User already authenticated, redirecting to dashboard');
+          setLocation("/dashboard");
+        }
+      } catch (error) {
+        console.error('[Login] Failed to check session:', error);
+        // User stays on login page if session check fails
       }
     };
     checkSession();
