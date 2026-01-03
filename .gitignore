@@ -12,6 +12,9 @@ vite.config.ts.*
 .env.test.local
 .env.production.local
 
+# Test configuration with credentials (keep example file only)
+test-pkce-config.js
+
 # Platform-specific files (Replit, etc.)
 .replit
 replit.md

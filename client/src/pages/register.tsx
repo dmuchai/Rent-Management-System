@@ -75,28 +75,44 @@ export default function Register() {
   };
 
   const handleGoogleSignup = async () => {
-    // Initiate Google OAuth with PKCE flow directly from client
-    // This ensures the code_verifier is properly stored in sessionStorage
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth-callback`,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      },
-    });
+    // Prevent multiple simultaneous OAuth flows
+    if (isLoading) return;
 
-    if (error) {
-      console.error('[Register] Google OAuth initiation failed:', error);
+    setIsLoading(true);
+
+    try {
+      // Initiate Google OAuth with PKCE flow directly from client
+      // This ensures the code_verifier is properly stored in sessionStorage
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth-callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        console.error('[Register] Google OAuth initiation failed:', error);
+        toast({
+          title: "Authentication Failed",
+          description: error.message || "Failed to initiate Google sign-in",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+      }
+      // If successful, user will be redirected to Google (no need to reset loading state)
+    } catch (err) {
+      console.error('[Register] Google OAuth initiation error:', err);
       toast({
         title: "Authentication Failed",
-        description: error.message || "Failed to initiate Google sign-in",
+        description: (err instanceof Error ? err.message : null) || "Failed to initiate Google sign-in",
         variant: "destructive",
       });
+      setIsLoading(false);
     }
-    // If successful, user will be redirected to Google
   };
 
   return (
@@ -254,8 +270,17 @@ export default function Register() {
               onClick={handleGoogleSignup}
               disabled={isLoading}
             >
-              <i className="fab fa-google mr-2 text-red-500"></i>
-              Sign up with Google
+              {isLoading ? (
+                <>
+                  <i className="fas fa-spinner fa-spin mr-2"></i>
+                  Connecting to Google...
+                </>
+              ) : (
+                <>
+                  <i className="fab fa-google mr-2 text-red-500"></i>
+                  Sign up with Google
+                </>
+              )}
             </Button>
 
             {/* Login Link */}

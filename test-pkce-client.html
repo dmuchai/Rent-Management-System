@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PKCE OAuth Test</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Load configuration from external file (not committed to git) -->
+  <script src="./test-pkce-config.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -37,6 +39,14 @@
 <body>
   <h1>🔐 PKCE OAuth Flow Test</h1>
   
+  <!-- Configuration Notice -->
+  <div class="status info" style="margin-bottom: 20px;">
+    <strong>⚠️ Configuration Required:</strong><br>
+    Before testing, copy <code>test-pkce-config.example.js</code> to <code>test-pkce-config.js</code> 
+    and replace the placeholder values with your actual Supabase credentials.
+    See the example file for instructions.
+  </div>
+  
   <div id="status" class="status info">
     Ready to test PKCE flow
   </div>
@@ -48,9 +58,41 @@
   <div id="output"></div>
 
   <script>
-    // Your Supabase configuration
-    const SUPABASE_URL = 'https://emdahodfztpfdjkrbnqz.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtZGFob2RmenRwZmRqa3JibnF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMzY1ODEsImV4cCI6MjA3MzcxMjU4MX0.ci6zhIbRt5DnSbtxIuvO9D0NjihAkmcbO_NexhEjIZA';
+    // Load Supabase configuration from external config file
+    // Configuration is loaded from test-pkce-config.js (not committed to git)
+    // If config is not found, show error with instructions
+    if (typeof TEST_SUPABASE_CONFIG === 'undefined') {
+      document.getElementById('status').innerHTML = `
+        <div class="status error">
+          <strong>❌ Configuration Missing!</strong><br>
+          Please create <code>test-pkce-config.js</code> by copying <code>test-pkce-config.example.js</code> 
+          and adding your Supabase credentials.
+        </div>
+      `;
+      document.querySelectorAll('button').forEach(btn => btn.disabled = true);
+      throw new Error('TEST_SUPABASE_CONFIG not found. Please create test-pkce-config.js');
+    }
+
+    const SUPABASE_URL = TEST_SUPABASE_CONFIG.url;
+    const SUPABASE_ANON_KEY = TEST_SUPABASE_CONFIG.anonKey;
+
+    // Debug/Verbose Logging Configuration
+    // ⚠️ WARNING: Set to false in production to prevent logging sensitive data (tokens, codes, etc.)
+    // When true: Logs full authorization codes, tokens, and detailed OAuth data
+    // When false: Only logs success/failure without sensitive values
+    const VERBOSE_LOGGING = false;
+
+    // Validate configuration
+    if (SUPABASE_URL === 'YOUR_SUPABASE_PROJECT_URL' || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
+      document.getElementById('status').innerHTML = `
+        <div class="status error">
+          <strong>❌ Invalid Configuration!</strong><br>
+          Please update <code>test-pkce-config.js</code> with your actual Supabase credentials.
+        </div>
+      `;
+      document.querySelectorAll('button').forEach(btn => btn.disabled = true);
+      throw new Error('Invalid credentials. Please update test-pkce-config.js');
+    }
 
     // Create Supabase client with PKCE
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -71,9 +113,36 @@
 
     function displayOutput(title, data) {
       const output = document.getElementById('output');
+      
+      // Sanitize sensitive data if verbose logging is disabled
+      let displayData = data;
+      if (!VERBOSE_LOGGING && data) {
+        displayData = JSON.parse(JSON.stringify(data)); // Deep clone
+        
+        // Redact sensitive fields
+        if (displayData.code) {
+          displayData.code = '[REDACTED - Enable VERBOSE_LOGGING to view]';
+        }
+        if (displayData.accessToken) {
+          displayData.accessToken = '[REDACTED - Enable VERBOSE_LOGGING to view]';
+        }
+        if (displayData.access_token) {
+          displayData.access_token = '[REDACTED - Enable VERBOSE_LOGGING to view]';
+        }
+        if (displayData.refresh_token) {
+          displayData.refresh_token = '[REDACTED - Enable VERBOSE_LOGGING to view]';
+        }
+        if (displayData.session?.access_token) {
+          displayData.session.access_token = '[REDACTED - Enable VERBOSE_LOGGING to view]';
+        }
+        if (displayData.session?.refresh_token) {
+          displayData.session.refresh_token = '[REDACTED - Enable VERBOSE_LOGGING to view]';
+        }
+      }
+      
       output.innerHTML = `
         <h3>${title}</h3>
-        <pre>${JSON.stringify(data, null, 2)}</pre>
+        <pre>${JSON.stringify(displayData, null, 2)}</pre>
       `;
     }
 
@@ -114,7 +183,26 @@
         const key = sessionStorage.key(i);
         if (key && (key.includes('supabase') || key.includes('pkce') || key.includes('auth'))) {
           try {
-            storage[key] = JSON.parse(sessionStorage.getItem(key));
+            const value = JSON.parse(sessionStorage.getItem(key));
+            // Redact sensitive values unless verbose logging is enabled
+            if (!VERBOSE_LOGGING && value) {
+              if (typeof value === 'object') {
+                const sanitized = JSON.parse(JSON.stringify(value));
+                if (sanitized.access_token) sanitized.access_token = '[REDACTED]';
+                if (sanitized.refresh_token) sanitized.refresh_token = '[REDACTED]';
+                if (sanitized.currentSession?.access_token) {
+                  sanitized.currentSession.access_token = '[REDACTED]';
+                }
+                if (sanitized.currentSession?.refresh_token) {
+                  sanitized.currentSession.refresh_token = '[REDACTED]';
+                }
+                storage[key] = sanitized;
+              } else {
+                storage[key] = value;
+              }
+            } else {
+              storage[key] = value;
+            }
           } catch {
             storage[key] = sessionStorage.getItem(key);
           }
@@ -125,7 +213,9 @@
         log('No auth-related items in sessionStorage', 'info');
         displayOutput('SessionStorage', { message: 'Empty or no auth items' });
       } else {
-        log(`Found ${Object.keys(storage).length} auth-related items in sessionStorage`, 'success');
+        const itemCount = Object.keys(storage).length;
+        const verboseNote = VERBOSE_LOGGING ? '' : ' (sensitive values redacted - set VERBOSE_LOGGING=true to view)';
+        log(`Found ${itemCount} auth-related items in sessionStorage${verboseNote}`, 'success');
         displayOutput('SessionStorage Contents', storage);
       }
     }
@@ -145,7 +235,14 @@
       const accessToken = hashParams.get('access_token');
 
       if (code) {
-        log('✅ PKCE FLOW DETECTED! Authorization code received: ' + code.substring(0, 20) + '...', 'success');
+        // Log authorization code reception without exposing the actual code (unless verbose logging is enabled)
+        if (VERBOSE_LOGGING) {
+          log('✅ PKCE FLOW DETECTED! Authorization code received: ' + code.substring(0, 20) + '...', 'success');
+          console.log('[DEBUG] Full authorization code:', code);
+        } else {
+          log('✅ PKCE FLOW DETECTED! Authorization code received successfully.', 'success');
+        }
+        
         displayOutput('OAuth Callback (PKCE)', {
           flow: 'PKCE',
           code: code,
@@ -165,7 +262,14 @@
           log('Code exchange error: ' + e.message, 'error');
         }
       } else if (accessToken) {
-        log('❌ IMPLICIT FLOW DETECTED! Access token in URL hash', 'error');
+        // Log implicit flow detection without exposing the token (unless verbose logging is enabled)
+        if (VERBOSE_LOGGING) {
+          log('❌ IMPLICIT FLOW DETECTED! Access token in URL hash: ' + accessToken.substring(0, 20) + '...', 'error');
+          console.log('[DEBUG] Access token detected:', accessToken.substring(0, 20) + '...');
+        } else {
+          log('❌ IMPLICIT FLOW DETECTED! Access token found in URL hash.', 'error');
+        }
+        
         displayOutput('OAuth Callback (Implicit)', {
           flow: 'Implicit',
           accessToken: accessToken.substring(0, 20) + '...',
