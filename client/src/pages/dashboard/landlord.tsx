@@ -139,6 +139,10 @@ export default function LandlordDashboard() {
       apiSuccess = true;
     }
 
+    // Clear auth-related queries from cache
+    queryClient.removeQueries({ queryKey: ['/api/auth/user'] });
+    queryClient.removeQueries({ queryKey: ['/api/auth'] });
+
     // Determine overall success - we consider it successful if at least API logout worked
     // (Supabase signOut is just for local cleanup, not critical)
     if (apiSuccess) {

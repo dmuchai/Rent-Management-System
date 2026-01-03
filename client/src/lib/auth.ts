@@ -1,5 +1,4 @@
 import { queryClient } from "./queryClient";
-import { buildPath } from "./config";
 
 /**
  * Clear authentication-related keys from localStorage and sessionStorage
@@ -81,8 +80,9 @@ export async function logout() {
   try {
     console.log('Starting client-side logout...');
     
-    // Clear React Query cache
-    queryClient.clear();
+    // Clear only auth-related queries from cache (not entire cache)
+    queryClient.removeQueries({ queryKey: ['/api/auth/user'] });
+    queryClient.removeQueries({ queryKey: ['/api/auth'] });
     
     // Clear only authentication-related browser storage
     clearAuthStorage();
@@ -97,11 +97,10 @@ export async function logout() {
     });
     
     // Redirect to home with logout parameter
-    // Use buildPath to support subdirectory deployments
-    window.location.href = buildPath('?logout=true&t=' + Date.now());
+    window.location.href = '/?logout=true&t=' + Date.now();
   } catch (error) {
     console.error('Logout error:', error);
     // Force redirect even if error
-    window.location.href = buildPath('?logout=true&t=' + Date.now());
+    window.location.href = '/?logout=true&t=' + Date.now();
   }
 }

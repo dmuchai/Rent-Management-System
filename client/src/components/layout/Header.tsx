@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Menu, PanelLeftClose, PanelLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { API_BASE_URL } from "@/lib/config";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -22,6 +22,7 @@ interface HeaderProps {
 export default function Header({ title, showSidebar = true, onSectionChange, onMenuClick, onToggleSidebar, isSidebarCollapsed }: HeaderProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -49,6 +50,10 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
     } else {
       apiSuccess = true;
     }
+
+    // Clear auth-related queries from cache
+    queryClient.removeQueries({ queryKey: ['/api/auth/user'] });
+    queryClient.removeQueries({ queryKey: ['/api/auth'] });
 
     if (apiSuccess) {
       toast({
