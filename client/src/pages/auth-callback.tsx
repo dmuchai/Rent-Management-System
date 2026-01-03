@@ -117,22 +117,37 @@ export default function AuthCallback() {
 
         // Handle PKCE flow (authorization code)
         if (authCode) {
-          console.log('[AuthCallback] PKCE flow detected - exchanging authorization code');
+          console.log('[AuthCallback] PKCE flow detected - waiting for automatic session detection');
           setStatus("Exchanging authorization code...");
           
-          // Exchange authorization code for session tokens
-          // This is the explicit PKCE flow method that exchanges the code for tokens
-          const { data: { session }, error: sessionError } = await supabase.auth.exchangeCodeForSession(authCode);
+          // Supabase automatically handles PKCE code exchange when detectSessionInUrl is enabled
+          // The session will be available through the auth state change listener
+          // We just need to wait for it to process
           
-          if (sessionError || !session) {
-            console.error('[AuthCallback] PKCE code exchange failed:', sessionError);
-            setStatus("Authentication failed");
-            setLocation(`/login?error=${encodeURIComponent(sessionError?.message || 'Failed to exchange authorization code')}`);
-            return;
-          }
+          // Set up listener to catch the session once Supabase finishes the exchange
+          const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('[AuthCallback] PKCE auth event:', event, session ? 'Has session' : 'No session');
+            
+            if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+              console.log('[AuthCallback] ✅ PKCE flow completed - session detected');
+              authListenerUnsubscribe = authListener.subscription.unsubscribe;
+              await processSession(session);
+            } else if (event === 'SIGNED_OUT') {
+              console.error('[AuthCallback] PKCE flow failed - user signed out');
+              setStatus("Authentication failed");
+              setLocation('/login?error=' + encodeURIComponent('Failed to complete sign in'));
+            }
+          });
           
-          console.log('[AuthCallback] ✅ PKCE code exchange successful');
-          await processSession(session);
+          authListenerUnsubscribe = authListener.subscription.unsubscribe;
+          
+          // Set a timeout in case the automatic exchange doesn't complete
+          timeoutId = setTimeout(() => {
+            console.error('[AuthCallback] PKCE exchange timeout');
+            setStatus("Authentication timed out");
+            setLocation('/login?error=' + encodeURIComponent('Authentication timed out. Please try again.'));
+          }, 10000); // 10 second timeout
+          
           return;
         }
 

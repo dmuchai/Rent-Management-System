@@ -73,6 +73,18 @@
       throw new Error('TEST_SUPABASE_CONFIG not found. Please create test-pkce-config.js');
     }
 
+    // Validate required properties exist
+    if (!TEST_SUPABASE_CONFIG.url || !TEST_SUPABASE_CONFIG.anonKey) {
+      document.getElementById('status').innerHTML = `
+        <div class="status error">
+          <strong>❌ Invalid Configuration!</strong><br>
+          Please ensure <code>test-pkce-config.js</code> includes both 'url' and 'anonKey' properties.
+        </div>
+      `;
+      document.querySelectorAll('button').forEach(btn => btn.disabled = true);
+      throw new Error('Missing required config properties: url and/or anonKey');
+    }
+
     const SUPABASE_URL = TEST_SUPABASE_CONFIG.url;
     const SUPABASE_ANON_KEY = TEST_SUPABASE_CONFIG.anonKey;
 
