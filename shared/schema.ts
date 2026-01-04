@@ -66,6 +66,13 @@ export const units = pgTable("units", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Account status enum for tenants
+export const accountStatusEnum = pgEnum("account_status", [
+  "pending_invitation",
+  "invited",
+  "active",
+]);
+
 // Tenants table
 export const tenants = pgTable("tenants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -75,6 +82,10 @@ export const tenants = pgTable("tenants", {
   email: varchar("email").notNull(),
   phone: varchar("phone").notNull(),
   emergencyContact: varchar("emergency_contact"),
+  invitationToken: varchar("invitation_token").unique(),
+  invitationSentAt: timestamp("invitation_sent_at"),
+  invitationAcceptedAt: timestamp("invitation_accepted_at"),
+  accountStatus: accountStatusEnum("account_status").default("pending_invitation"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -251,12 +262,21 @@ export const insertTenantSchema = createInsertSchema(tenants).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  invitationToken: true,
+  invitationSentAt: true,
+  invitationAcceptedAt: true,
+  accountStatus: true,
 });
 
 export const updateTenantSchema = createInsertSchema(tenants).omit({
   id: true,
   userId: true,
   createdAt: true,
+  invitationToken: true,
+  invitationSentAt: true,
+  invitationAcceptedAt: true,
+  accountStatus: true,
+});
   updatedAt: true,
 }).partial();
 

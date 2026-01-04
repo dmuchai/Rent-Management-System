@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tenant } from "@shared/schema";
 import TenantForm from "./TenantForm";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Mail, MailCheck, CheckCircle2, Clock, Loader2 } from "lucide-react";
 
 interface TenantTableProps {
   tenants: Tenant[];
@@ -12,17 +17,74 @@ interface TenantTableProps {
 export default function TenantTable({ tenants, loading, onAddTenant }: TenantTableProps) {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const resendInvitationMutation = useMutation({
+    mutationFn: async (tenantId: string) => {
+      return await apiRequest("POST", "/api/invitations/resend", { tenantId });
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Invitation Resent! 📧",
+        description: `Invitation email sent to ${data.email}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to resend invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const getStatusBadge = (tenant: Tenant) => {
+    const status = tenant.accountStatus || 'pending_invitation';
+    
+    switch (status) {
+      case 'active':
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Active
+          </Badge>
+        );
+      case 'invited':
+        return (
+          <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+            <MailCheck className="h-3 w-3 mr-1" />
+            Invited
+          </Badge>
+        );
+      case 'pending_invitation':
+        return (
+          <Badge variant="outline" className="text-muted-foreground">
+            <Clock className="h-3 w-3 mr-1" />
+            Pending
+          </Badge>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const handleResendInvitation = (tenant: Tenant) => {
+    resendInvitationMutation.mutate(tenant.id);
+  };
 
   const handleEdit = (tenant: Tenant) => {
     setSelectedTenant(tenant);
-    setFormOpen(true);
-  };
-
-  const handleAdd = () => {
-    if (onAddTenant) {
-      onAddTenant();
-    } else {
-      setSelectedTenant(null);
+            <thead className="bg-muted/50 border-b border-border">
+              <tr>
+                <th className="text-left py-3 px-6 font-medium">Tenant</th>
+                <th className="text-left py-3 px-6 font-medium">Contact</th>
+                <th className="text-left py-3 px-6 font-medium">Status</th>
+                <th className="text-left py-3 px-6 font-medium">Emergency Contact</th>
+                <th className="text-left py-3 px-6 font-medium">Actions</th>
+              </tr>
+            </thead>ant(null);
       setFormOpen(true);
     }
   };
@@ -102,11 +164,30 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                   <td className="py-4 px-6" data-testid={`tenant-phone-${tenant.id}`}>
                     {tenant.phone}
                   </td>
+                  <td className="py-4 px-6" data-testid={`tenant-status-${tenant.id}`}>
+                    {getStatusBadge(tenant)}
+                  </td>
                   <td className="py-4 px-6" data-testid={`tenant-emergency-${tenant.id}`}>
                     {tenant.emergencyContact || "N/A"}
                   </td>
                   <td className="py-4 px-6">
                     <div className="flex space-x-2">
+                      {(tenant.accountStatus === 'invited' || tenant.accountStatus === 'pending_invitation') && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleResendInvitation(tenant)}
+                          disabled={resendInvitationMutation.isPending}
+                          title="Resend invitation email"
+                          data-testid={`button-resend-invitation-${tenant.id}`}
+                        >
+                          {resendInvitationMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Mail className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"

@@ -51,12 +51,23 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
       const method = isEdit ? "PUT" : "POST";
       return await apiRequest(method, url, data);
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
-      toast({
-        title: "Success",
-        description: `Tenant ${isEdit ? "updated" : "created"} successfully`,
-      });
+      
+      if (isEdit) {
+        toast({
+          title: "Success",
+          description: "Tenant updated successfully",
+        });
+      } else {
+        // Show invitation sent message for new tenant
+        toast({
+          title: "Tenant Created! 📧",
+          description: `Invitation email sent to ${data.email}`,
+          duration: 5000,
+        });
+      }
+      
       onOpenChange(false);
       form.reset();
     },

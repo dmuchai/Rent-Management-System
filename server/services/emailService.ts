@@ -1,5 +1,3 @@
-import * as nodemailer from 'nodemailer';
-
 interface EmailOptions {
   to: string;
   subject: string;
@@ -8,40 +6,163 @@ interface EmailOptions {
 }
 
 export class EmailService {
-  private transporter: nodemailer.Transporter;
+  private brevoApiKey: string | undefined;
+  private brevoApiUrl = 'https://api.brevo.com/v3/smtp/email';
 
   constructor() {
-    // Configure transporter based on environment
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false, // true for 465, false for other ports
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
-      },
-    });
+    this.brevoApiKey = process.env.BREVO_API_KEY;
   }
 
   async sendEmail(options: EmailOptions): Promise<void> {
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
-      console.warn('Email service not configured. Email not sent.');
+    if (!this.brevoApiKey) {
+      console.warn('Brevo API key not configured. Email not sent.');
+      console.log('Would have sent email to:', options.to, 'Subject:', options.subject);
       return;
     }
 
     try {
-      await this.transporter.sendMail({
-        from: `"RentFlow" <${process.env.SMTP_USER}>`,
-        to: options.to,
-        subject: options.subject,
-        text: options.text,
-        html: options.html,
+      const response = await fetch(this.brevoApiUrl, {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'api-key': this.brevoApiKey,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: {
+            name: 'Landee & Moony',
+            email: process.env.BREVO_SENDER_EMAIL || 'noreply@landeeandmoony.com',
+          },
+          to: [
+            {
+              email: options.to,
+            },
+          ],
+          subject: options.subject,
+          htmlContent: options.html,
+          textContent: options.text,
+        }),
       });
-      console.log('Email sent successfully to:', options.to);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Brevo API error:', errorData);
+        throw new Error(`Failed to send email via Brevo: ${response.statusText}`);
+      }
+
+      console.log('✅ Email sent successfully to:', options.to);
     } catch (error) {
       console.error('Failed to send email:', error);
       throw new Error('Failed to send email');
     }
+  }
+
+  async sendTenantInvitation(
+    tenantEmail: string,
+    tenantName: string,
+    invitationToken: string,
+    propertyName?: string,
+    unitNumber?: string,
+    landlordName?: string
+  ): Promise<void> {
+    const invitationLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/accept-invitation?token=${invitationToken}`;
+    
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
+        </div>
+        
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; color: white; text-align: center; margin-bottom: 30px;">
+          <h2 style="margin: 0 0 10px 0; font-size: 28px;">Welcome to Your New Home! 🏠</h2>
+          <p style="margin: 0; font-size: 16px; opacity: 0.9;">You've been invited to join Landee & Moony</p>
+        </div>
+        
+        <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
+          <h3 style="color: #1F2937; margin-top: 0;">Hello ${tenantName},</h3>
+          <p style="color: #4B5563; line-height: 1.6;">
+            ${landlordName || 'Your landlord'} has invited you to create your tenant account on Landee & Moony, 
+            Kenya's leading property management platform.
+          </p>
+          ${propertyName ? `
+            <div style="margin-top: 20px; padding: 15px; background-color: white; border-radius: 6px; border-left: 4px solid #3B82F6;">
+              <p style="margin: 0; color: #6B7280; font-size: 14px;">Property Details</p>
+              <p style="margin: 8px 0 0 0; color: #1F2937; font-weight: 600;">${propertyName}${unitNumber ? ` - Unit ${unitNumber}` : ''}</p>
+            </div>
+          ` : ''}
+        </div>
+        
+        <div style="background-color: #EFF6FF; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+          <h4 style="color: #1F2937; margin-top: 0;">With your account, you can:</h4>
+          <ul style="color: #4B5563; line-height: 1.8; padding-left: 20px;">
+            <li>💳 Pay rent easily with M-Pesa, Card, or Bank Transfer</li>
+            <li>📊 View your payment history and receipts</li>
+            <li>🔧 Submit maintenance requests</li>
+            <li>📄 Access your lease documents anytime</li>
+            <li>📧 Receive important property updates</li>
+          </ul>
+        </div>
+        
+        <div style="text-align: center; margin: 35px 0;">
+          <a href="${invitationLink}" 
+             style="background-color: #3B82F6; color: white; padding: 16px 40px; 
+                    text-decoration: none; border-radius: 8px; display: inline-block;
+                    font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
+            Create My Account
+          </a>
+          <p style="color: #6B7280; font-size: 14px; margin-top: 15px;">
+            This invitation link expires in 7 days
+          </p>
+        </div>
+        
+        <div style="border-top: 2px solid #E5E7EB; padding-top: 20px; margin-top: 30px;">
+          <p style="color: #6B7280; font-size: 14px; line-height: 1.6;">
+            <strong>Need help?</strong><br>
+            If you didn't expect this invitation or have any questions, please contact your landlord 
+            or reach out to our support team at <a href="mailto:support@landeeandmoony.com" style="color: #3B82F6;">support@landeeandmoony.com</a>
+          </p>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+          <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
+            © 2026 Landee & Moony. All rights reserved.<br>
+            The #1 Property Management System in Kenya
+          </p>
+        </div>
+      </div>
+    `;
+
+    const text = `
+Welcome to Landee & Moony, ${tenantName}!
+
+${landlordName || 'Your landlord'} has invited you to create your tenant account.
+
+${propertyName ? `Property: ${propertyName}${unitNumber ? ` - Unit ${unitNumber}` : ''}` : ''}
+
+With your account, you can:
+- Pay rent easily with M-Pesa, Card, or Bank Transfer
+- View your payment history and receipts
+- Submit maintenance requests
+- Access your lease documents anytime
+- Receive important property updates
+
+Create your account by clicking this link:
+${invitationLink}
+
+This invitation link expires in 7 days.
+
+Need help? Contact us at support@landeeandmoony.com
+
+© 2026 Landee & Moony - The #1 Property Management System in Kenya
+    `;
+
+    await this.sendEmail({
+      to: tenantEmail,
+      subject: `🏠 Welcome to Landee & Moony - Create Your Account`,
+      html,
+      text,
+    });
   }
 
   async sendRentReminder(
