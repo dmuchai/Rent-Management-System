@@ -4,7 +4,7 @@ import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { emailService } from '../../server/services/emailService.js';
+import { emailService } from '../_lib/emailService.js';
 
 const resendSchema = z.object({
   tenantId: z.string().min(1, 'Tenant ID is required'),

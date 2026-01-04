@@ -5,7 +5,7 @@ import { createDbConnection } from '../_lib/db.js';
 import { insertTenantSchema } from '../../shared/schema.js';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { emailService } from '../../server/services/emailService.js';
+import { emailService } from '../_lib/emailService.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   const sql = createDbConnection();
