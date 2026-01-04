@@ -56,7 +56,7 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
               {isCollapsed ? (
                 <img 
                   src="/favicon.png" 
-                  alt="Landee" 
+                  alt="Landee & Moony" 
                   className="h-8 w-8"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
@@ -65,7 +65,7 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
               ) : (
                 <img 
                   src="/logo-full.png" 
-                  alt="Landee" 
+                  alt="Landee & Moony" 
                   className="h-8"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';

@@ -1,4 +1,4 @@
-# 🏠 Landee - Rent Management System
+# 🏠 Landee & Moony - Rent Management System
 
 A modern, full-stack property management platform built with **React**, **TypeScript**, **Vercel Serverless Functions**, and **Supabase**.
 

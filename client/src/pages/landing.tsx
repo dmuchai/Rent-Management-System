@@ -7,7 +7,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 export default function Landing() {
   // Set custom title for landing page
   useEffect(() => {
-    document.title = 'Landee | The #1 Property Management System in Kenya';
+    document.title = 'Landee & Moony | The #1 Property Management System in Kenya';
     
     // Add smooth scrolling behavior
     document.documentElement.style.scrollBehavior = 'smooth';
@@ -50,9 +50,9 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center gap-3">
-              <img src="/favicon.png" alt="Landee" className="h-10 w-10 md:h-12 md:w-12" />
+              <img src="/favicon.png" alt="Landee & Moony" className="h-10 w-10 md:h-12 md:w-12" />
               <div className="flex flex-col">
-                <span className="text-xl md:text-2xl font-bold text-foreground">Landee</span>
+                <span className="text-xl md:text-2xl font-bold text-foreground">Landee & Moony</span>
                 <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Property Management System</p>
               </div>
             </div>
@@ -536,7 +536,7 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-5xl font-bold mb-6">Ready to Transform Your Property Management?</h2>
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Join hundreds of landlords who have simplified their workflow with Landee
+            Join hundreds of landlords who have simplified their workflow with Landee & Moony
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
@@ -565,8 +565,8 @@ export default function Landing() {
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <img src="/favicon.png" alt="Landee" className="h-8 w-8" />
-                <span className="text-lg font-bold">Landee</span>
+                <img src="/favicon.png" alt="Landee & Moony" className="h-8 w-8" />
+                <span className="text-lg font-bold">Landee & Moony</span>
               </div>
               <p className="text-sm text-muted-foreground">Modern property management made simple</p>
             </div>
@@ -595,7 +595,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="border-t border-border pt-8 text-center text-sm text-muted-foreground">
-            <p>&copy; {new Date().getFullYear()} Landee. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} Landee & Moony. All rights reserved.</p>
           </div>
         </div>
       </footer>
