@@ -467,8 +467,8 @@ export default function Landing() {
                 </div>
                 <div>
                   <h3 className="font-semibold mb-1">Phone</h3>
-                  <a href="tel:+254700000000" className="text-muted-foreground hover:text-primary transition-colors">
-                    +254 700 000 000
+                  <a href="tel:+254710583121" className="text-muted-foreground hover:text-primary transition-colors">
+                    +254 710 583 121
                   </a>
                 </div>
               </div>
