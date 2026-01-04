@@ -227,6 +227,203 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Pricing Section */}
+      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 bg-background">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <div className="inline-block px-4 py-2 bg-primary/10 border border-primary/20 rounded-full mb-4">
+              <span className="text-sm font-medium text-primary">Pricing</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">Simple, Transparent Pricing</h2>
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">Choose the plan that fits your portfolio. All plans include M-Pesa integration.</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {/* Starter Plan */}
+            <div className="bg-card border-2 border-border rounded-2xl p-8 hover:shadow-xl transition-all">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold mb-2">Starter</h3>
+                <p className="text-muted-foreground">Perfect for individual landlords</p>
+              </div>
+              <div className="mb-6">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold">KES 2,499</span>
+                  <span className="text-muted-foreground">/month</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">Billed monthly</p>
+              </div>
+              <ul className="space-y-4 mb-8">
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Up to 5 properties</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Up to 20 units</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>M-Pesa rent collection</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Tenant management</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Basic reports</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Email support</span>
+                </li>
+              </ul>
+              <Button 
+                variant="outline" 
+                className="w-full text-base py-6"
+                onClick={redirectToLogin}
+              >
+                Start Free Trial
+              </Button>
+            </div>
+
+            {/* Professional Plan - Most Popular */}
+            <div className="bg-card border-2 border-primary rounded-2xl p-8 shadow-xl relative">
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                <span className="bg-primary text-primary-foreground px-4 py-1 rounded-full text-sm font-semibold">
+                  Most Popular
+                </span>
+              </div>
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold mb-2">Professional</h3>
+                <p className="text-muted-foreground">For growing property portfolios</p>
+              </div>
+              <div className="mb-6">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold">KES 4,999</span>
+                  <span className="text-muted-foreground">/month</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">Billed monthly • Save 20% yearly</p>
+              </div>
+              <ul className="space-y-4 mb-8">
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Up to 20 properties</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Up to 100 units</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>M-Pesa rent collection</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Advanced tenant screening</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Maintenance tracking</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Financial reports & analytics</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Priority support</span>
+                </li>
+              </ul>
+              <Button 
+                className="w-full text-base py-6"
+                onClick={redirectToLogin}
+              >
+                Start Free Trial
+              </Button>
+            </div>
+
+            {/* Enterprise Plan */}
+            <div className="bg-card border-2 border-border rounded-2xl p-8 hover:shadow-xl transition-all">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold mb-2">Enterprise</h3>
+                <p className="text-muted-foreground">For property management companies</p>
+              </div>
+              <div className="mb-6">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold">Custom</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">Tailored to your needs</p>
+              </div>
+              <ul className="space-y-4 mb-8">
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Unlimited properties</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Unlimited units</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Multi-user access</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Custom integrations</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>White-label options</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>Dedicated account manager</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <i className="fas fa-check-circle text-primary mt-1"></i>
+                  <span>24/7 phone support</span>
+                </li>
+              </ul>
+              <Button 
+                variant="outline" 
+                className="w-full text-base py-6"
+                onClick={redirectToLogin}
+              >
+                Contact Sales
+              </Button>
+            </div>
+          </div>
+
+          {/* Pricing Features */}
+          <div className="mt-16 text-center">
+            <p className="text-muted-foreground mb-6">All plans include:</p>
+            <div className="flex flex-wrap justify-center gap-6 text-sm">
+              <div className="flex items-center gap-2">
+                <i className="fas fa-shield-alt text-primary"></i>
+                <span>Bank-level security</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <i className="fas fa-mobile-alt text-primary"></i>
+                <span>Mobile app access</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <i className="fas fa-sync text-primary"></i>
+                <span>Automatic backups</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <i className="fas fa-calendar text-primary"></i>
+                <span>14-day free trial</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <i className="fas fa-times-circle text-primary"></i>
+                <span>Cancel anytime</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-primary/10 via-chart-2/5 to-background">
         <div className="max-w-4xl mx-auto text-center">
