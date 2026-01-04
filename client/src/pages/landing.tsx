@@ -8,6 +8,13 @@ export default function Landing() {
   // Set custom title for landing page
   useEffect(() => {
     document.title = 'Landee | The #1 Property Management System in Kenya';
+    
+    // Add smooth scrolling behavior
+    document.documentElement.style.scrollBehavior = 'smooth';
+    
+    return () => {
+      document.documentElement.style.scrollBehavior = 'auto';
+    };
   }, []);
   const [, setLocation] = useLocation();
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +37,10 @@ export default function Landing() {
   
   const redirectToLogin = () => {
     setLocation("/login");
+  };
+
+  const handleContactSales = () => {
+    window.location.href = 'mailto:support@landee.co.ke?subject=Enterprise Plan Inquiry';
   };
 
   return (
@@ -388,7 +399,7 @@ export default function Landing() {
               <Button 
                 variant="outline" 
                 className="w-full text-base py-6"
-                onClick={redirectToLogin}
+                onClick={handleContactSales}
               >
                 Contact Sales
               </Button>
@@ -424,6 +435,102 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Contact Section */}
+      <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-muted/30">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="inline-block px-4 py-2 bg-primary/10 border border-primary/20 rounded-full mb-4">
+              <span className="text-sm font-medium text-primary">Contact Us</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">Get in Touch</h2>
+            <p className="text-lg md:text-xl text-muted-foreground">Have questions? We're here to help!</p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 mb-12">
+            {/* Contact Info */}
+            <div className="space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <i className="fas fa-envelope text-primary text-xl"></i>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Email</h3>
+                  <a href="mailto:support@landee.co.ke" className="text-muted-foreground hover:text-primary transition-colors">
+                    support@landee.co.ke
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-chart-2/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <i className="fas fa-phone text-chart-2 text-xl"></i>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Phone</h3>
+                  <a href="tel:+254700000000" className="text-muted-foreground hover:text-primary transition-colors">
+                    +254 700 000 000
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-chart-1/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <i className="fas fa-map-marker-alt text-chart-1 text-xl"></i>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Office</h3>
+                  <p className="text-muted-foreground">
+                    Nairobi, Kenya
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-chart-5/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <i className="fas fa-clock text-chart-5 text-xl"></i>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Business Hours</h3>
+                  <p className="text-muted-foreground">
+                    Monday - Friday: 8am - 6pm EAT<br />
+                    Saturday: 9am - 2pm EAT
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Contact Card */}
+            <div className="bg-card border border-border rounded-2xl p-8">
+              <h3 className="text-xl font-bold mb-4">Quick Inquiry</h3>
+              <p className="text-muted-foreground mb-6">
+                For immediate assistance, email us at{' '}
+                <a href="mailto:support@landee.co.ke" className="text-primary hover:underline">
+                  support@landee.co.ke
+                </a>
+                {' '}or call our support line.
+              </p>
+              <div className="space-y-4">
+                <Button 
+                  className="w-full"
+                  onClick={() => window.location.href = 'mailto:support@landee.co.ke'}
+                >
+                  <i className="fas fa-envelope mr-2"></i>
+                  Send Email
+                </Button>
+                <Button 
+                  variant="outline"
+                  className="w-full"
+                  onClick={redirectToLogin}
+                >
+                  <i className="fas fa-user-plus mr-2"></i>
+                  Start Free Trial
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-primary/10 via-chart-2/5 to-background">
         <div className="max-w-4xl mx-auto text-center">
@@ -444,6 +551,7 @@ export default function Landing() {
               variant="outline" 
               size="lg"
               className="text-base px-8 py-6"
+              onClick={handleContactSales}
             >
               Contact Sales
             </Button>
@@ -467,22 +575,22 @@ export default function Landing() {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><a href="#features" className="hover:text-foreground transition-colors">Features</a></li>
                 <li><a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Security</a></li>
+                <li><button onClick={redirectToLogin} className="hover:text-foreground transition-colors text-left">Security</button></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-colors">About</a></li>
+                <li><a href="#contact" className="hover:text-foreground transition-colors">About</a></li>
                 <li><a href="#contact" className="hover:text-foreground transition-colors">Contact</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Blog</a></li>
+                <li><button onClick={redirectToLogin} className="hover:text-foreground transition-colors text-left">Blog</button></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-colors">Privacy Policy</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Terms of Service</a></li>
+                <li><button onClick={redirectToLogin} className="hover:text-foreground transition-colors text-left">Privacy Policy</button></li>
+                <li><button onClick={redirectToLogin} className="hover:text-foreground transition-colors text-left">Terms of Service</button></li>
               </ul>
             </div>
           </div>
