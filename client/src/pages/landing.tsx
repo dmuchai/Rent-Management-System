@@ -5,7 +5,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 export default function Landing() {
-  usePageTitle('Landee', false);
+  // Set custom title for landing page
+  useEffect(() => {
+    document.title = 'Landee | The #1 Property Management System in Kenya';
+  }, []);
   const [, setLocation] = useLocation();
   const [error, setError] = useState<string | null>(null);
   
