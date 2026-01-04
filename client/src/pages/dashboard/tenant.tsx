@@ -9,8 +9,18 @@ import PaymentForm from "@/components/payments/PaymentForm";
 import PaymentHistory from "@/components/payments/PaymentHistory";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { usePageTitle } from "@/hooks/usePageTitle";
+
+interface DashboardStats {
+  activeLease: {
+    monthlyRent: string;
+    startDate: string;
+    endDate: string;
+  } | null;
+}
 
 export default function TenantDashboard() {
+  usePageTitle('Dashboard');
   const { toast } = useToast();
   const { user, isAuthenticated, isLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -28,22 +38,22 @@ export default function TenantDashboard() {
     }
   }, [isLoading, isAuthenticated, toast, setLocation]);
 
-  const { data: dashboardStats, isLoading: statsLoading } = useQuery({
+  const { data: dashboardStats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
     retry: false,
   });
 
-  const { data: payments = [], isLoading: paymentsLoading } = useQuery({
+  const { data: payments = [], isLoading: paymentsLoading } = useQuery<any[]>({
     queryKey: ["/api/payments"],
     retry: false,
   });
 
-  const { data: maintenanceRequests = [] } = useQuery({
+  const { data: maintenanceRequests = [] } = useQuery<any[]>({
     queryKey: ["/api/maintenance-requests"],
     retry: false,
   });
 
-  const { data: documents = [] } = useQuery({
+  const { data: documents = [] } = useQuery<any[]>({
     queryKey: ["/api/documents"],
     retry: false,
   });

@@ -17,11 +17,13 @@ interface TenantTableProps {
 export default function TenantTable({ tenants, loading, onAddTenant }: TenantTableProps) {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [resendingTenantId, setResendingTenantId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const resendInvitationMutation = useMutation({
     mutationFn: async (tenantId: string) => {
+      setResendingTenantId(tenantId);
       return await apiRequest("POST", "/api/invitations/resend", { tenantId });
     },
     onSuccess: (data: any) => {
@@ -30,6 +32,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
         description: `Invitation email sent to ${data.email}`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
+      setResendingTenantId(null);
     },
     onError: () => {
       toast({
@@ -37,6 +40,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
         description: "Failed to resend invitation",
         variant: "destructive",
       });
+      setResendingTenantId(null);
     },
   });
 
@@ -76,17 +80,12 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
 
   const handleEdit = (tenant: Tenant) => {
     setSelectedTenant(tenant);
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                <th className="text-left py-3 px-6 font-medium">Tenant</th>
-                <th className="text-left py-3 px-6 font-medium">Contact</th>
-                <th className="text-left py-3 px-6 font-medium">Status</th>
-                <th className="text-left py-3 px-6 font-medium">Emergency Contact</th>
-                <th className="text-left py-3 px-6 font-medium">Actions</th>
-              </tr>
-            </thead>ant(null);
-      setFormOpen(true);
-    }
+    setFormOpen(true);
+  };
+
+  const handleAdd = () => {
+    setSelectedTenant(null);
+    setFormOpen(true);
   };
 
   if (loading) {
@@ -177,11 +176,11 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                           variant="ghost"
                           size="sm"
                           onClick={() => handleResendInvitation(tenant)}
-                          disabled={resendInvitationMutation.isPending}
+                          disabled={resendingTenantId === tenant.id}
                           title="Resend invitation email"
                           data-testid={`button-resend-invitation-${tenant.id}`}
                         >
-                          {resendInvitationMutation.isPending ? (
+                          {resendingTenantId === tenant.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <Mail className="h-4 w-4" />

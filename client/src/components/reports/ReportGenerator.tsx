@@ -6,12 +6,29 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+interface ReportData {
+  payments: Array<{
+    paidDate: string | null;
+    createdAt: string;
+    description: string | null;
+    amount: string;
+    status: string;
+    paymentMethod: string | null;
+  }>;
+  stats: {
+    totalExpected: number;
+    totalCollected: number;
+    totalOverdue: number;
+    collectionRate: number;
+  };
+}
+
 export default function ReportGenerator() {
   const [reportType, setReportType] = useState("monthly");
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]);
 
-  const { data: reportData, isLoading } = useQuery({
+  const { data: reportData, isLoading } = useQuery<ReportData>({
     queryKey: ["/api/reports/payments", { startDate, endDate }],
     retry: false,
   });

@@ -142,7 +142,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
 
   // Get available units with property information
   const availableUnits: UnitWithProperty[] = units
-    .filter((unit: Unit & { isOccupied?: boolean }) => !unit.isOccupied || (isEdit && lease?.unitId === unit.id))
+    .filter((unit: Unit) => (unit.isOccupied === false || unit.isOccupied === null) || (isEdit && lease?.unitId === unit.id))
     .map((unit): UnitWithProperty => {
       const property = properties.find(p => p.id === unit.propertyId);
       return {

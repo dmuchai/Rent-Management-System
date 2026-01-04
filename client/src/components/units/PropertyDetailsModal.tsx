@@ -213,7 +213,7 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
         open={showUnitForm}
         onOpenChange={handleCloseUnitForm}
         propertyId={propertyId}
-        unit={editingUnit}
+        unit={editingUnit || undefined}
       />
     </>
   );

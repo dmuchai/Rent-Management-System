@@ -11,6 +11,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+interface TenantResponse {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  emergencyContact: string | null;
+  userId: string;
+  invitationToken: string;
+  invitationSentAt: string | null;
+  invitationAcceptedAt: string | null;
+  accountStatus: 'pending_invitation' | 'invited' | 'active';
+  createdAt: string;
+  updatedAt: string;
+}
 import {
   Form,
   FormControl,
@@ -45,13 +61,14 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
     },
   });
 
-  const mutation = useMutation({
+  const mutation = useMutation<TenantResponse, Error, InsertTenant>({
     mutationFn: async (data: InsertTenant) => {
       const url = isEdit ? `/api/tenants/${tenant.id}` : "/api/tenants";
       const method = isEdit ? "PUT" : "POST";
-      return await apiRequest(method, url, data);
+      const response = await apiRequest(method, url, data);
+      return await response.json() as TenantResponse;
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: TenantResponse) => {
       queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
       
       if (isEdit) {
@@ -60,12 +77,28 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
           description: "Tenant updated successfully",
         });
       } else {
-        // Show invitation sent message for new tenant
-        toast({
-          title: "Tenant Created! 📧",
-          description: `Invitation email sent to ${data.email}`,
-          duration: 5000,
-        });
+        // Check if invitation was actually sent (backend sets invitation_sent_at only after successful email)
+        const invitationSent = data.invitationSentAt !== null;
+        
+        if (invitationSent && data.email) {
+          toast({
+            title: "Tenant Created! 📧",
+            description: `Invitation email sent to ${data.email}`,
+            duration: 5000,
+          });
+        } else if (data.email) {
+          toast({
+            title: "Tenant Created ⚠️",
+            description: `Tenant created but invitation email failed. You can resend it from the tenant list.`,
+            variant: "destructive",
+            duration: 7000,
+          });
+        } else {
+          toast({
+            title: "Success",
+            description: "Tenant created successfully",
+          });
+        }
       }
       
       onOpenChange(false);

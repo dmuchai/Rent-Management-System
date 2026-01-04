@@ -21,11 +21,11 @@ ALTER TABLE public.tenants
 ALTER COLUMN account_status SET DEFAULT 'pending_invitation';
 
 -- Add unique constraint on invitation_token
-DO $$ BEGIN
+DO $ BEGIN
     ALTER TABLE public.tenants ADD CONSTRAINT tenants_invitation_token_unique UNIQUE (invitation_token);
 EXCEPTION
-    WHEN duplicate_table THEN null;
-END $$;
+    WHEN duplicate_object THEN null;
+END $;
 
 -- Create indexes for faster lookups
 CREATE INDEX IF NOT EXISTS idx_tenants_invitation_token ON public.tenants(invitation_token) WHERE invitation_token IS NOT NULL;

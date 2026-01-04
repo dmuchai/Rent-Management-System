@@ -29,8 +29,8 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
   const [unitForm, setUnitForm] = useState({
     propertyId: propertyId,
     unitNumber: unit?.unitNumber || "",
-    bedrooms: unit?.bedrooms || "",
-    bathrooms: unit?.bathrooms || "",
+    bedrooms: unit?.bedrooms?.toString() || "",
+    bathrooms: unit?.bathrooms?.toString() || "",
     size: unit?.size || "",
     rentAmount: unit?.rentAmount || "",
     isOccupied: unit?.isOccupied || false,
@@ -42,8 +42,8 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
       setUnitForm({
         propertyId: propertyId,
         unitNumber: unit.unitNumber || "",
-        bedrooms: unit.bedrooms || "",
-        bathrooms: unit.bathrooms || "",
+        bedrooms: unit.bedrooms?.toString() || "",
+        bathrooms: unit.bathrooms?.toString() || "",
         size: unit.size || "",
         rentAmount: unit.rentAmount || "",
         isOccupied: unit.isOccupied || false,
@@ -124,8 +124,8 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
     // Prepare data for submission
     const submitData = {
       ...unitForm,
-      bedrooms: unitForm.bedrooms ? parseInt(unitForm.bedrooms) : null,
-      bathrooms: unitForm.bathrooms ? parseInt(unitForm.bathrooms) : null,
+      bedrooms: unitForm.bedrooms ? parseInt(String(unitForm.bedrooms)) : null,
+      bathrooms: unitForm.bathrooms ? parseInt(String(unitForm.bathrooms)) : null,
       size: unitForm.size ? unitForm.size : null, // Keep as string for decimal field
       rentAmount: unitForm.rentAmount, // Keep as string for decimal field
     };

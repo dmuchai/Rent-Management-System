@@ -41,6 +41,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const tenant = tenants[0];
 
     // Check if invitation is expired (7 days)
+    if (!tenant.invitation_sent_at) {
+      return res.status(400).json({ 
+        error: 'Invitation not sent',
+        message: 'This invitation has not been sent yet.'
+      });
+    }
+
     const invitationDate = new Date(tenant.invitation_sent_at);
     const expirationDate = new Date(invitationDate.getTime() + 7 * 24 * 60 * 60 * 1000);
     const now = new Date();
@@ -62,7 +69,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
   } catch (error) {
-    console.error('Error verifying invitation:', error);
+    console.error('Error verifying invitation:', {
+      errorType: error instanceof z.ZodError ? 'ValidationError' : 'ServerError',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
     if (error instanceof z.ZodError) {
       return res.status(400).json({ 
         error: 'Invalid request',

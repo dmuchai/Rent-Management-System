@@ -27,6 +27,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       // Generate secure invitation token
       const invitationToken = crypto.randomBytes(32).toString('hex');
 
+      // Create tenant without invitation_sent_at (will be set after successful email)
       const [tenant] = await sql`
         INSERT INTO public.tenants (
           user_id, 
@@ -36,7 +37,6 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           phone, 
           emergency_contact,
           invitation_token,
-          invitation_sent_at,
           account_status
         )
         VALUES (
@@ -47,8 +47,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           ${tenantData.phone},
           ${tenantData.emergencyContact || null},
           ${invitationToken},
-          NOW(),
-          'invited'
+          'pending_invitation'
         )
         RETURNING *
       `;
@@ -58,7 +57,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         SELECT first_name, last_name FROM public.users WHERE id = ${auth.userId}
       `;
 
-      // Send invitation email
+      // Send invitation email and update tenant only on success
       try {
         await emailService.sendTenantInvitation(
           tenant.email,
@@ -68,13 +67,25 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           undefined, // unitNumber - will add later when creating lease
           landlord ? `${landlord.first_name} ${landlord.last_name}` : undefined
         );
+        
+        // Email sent successfully - update tenant record
+        const [updatedTenant] = await sql`
+          UPDATE public.tenants
+          SET 
+            invitation_sent_at = NOW(),
+            account_status = 'invited'
+          WHERE id = ${tenant.id}
+          RETURNING *
+        `;
+        
         console.log(`✅ Invitation email sent to ${tenant.email}`);
+        return res.status(201).json(updatedTenant);
       } catch (emailError) {
         console.error('Failed to send invitation email:', emailError);
-        // Don't fail the request if email fails, tenant is already created
+        // Email failed - return tenant with pending_invitation status
+        // Frontend can show this status and allow retry via resend
+        return res.status(201).json(tenant);
       }
-
-      return res.status(201).json(tenant);
     } else {
       return res.status(405).json({ error: 'Method not allowed' });
     }

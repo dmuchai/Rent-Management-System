@@ -13,6 +13,21 @@ export class EmailService {
     this.brevoApiKey = process.env.BREVO_API_KEY;
   }
 
+  /**
+   * Escapes HTML special characters to prevent XSS/HTML injection
+   * @param str - The string to escape
+   * @returns Escaped string safe for HTML insertion
+   */
+  private escapeHtml(str: string): string {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   async sendEmail(options: EmailOptions): Promise<void> {
     if (!this.brevoApiKey) {
       console.warn('Brevo API key not configured. Email not sent.');
@@ -21,8 +36,12 @@ export class EmailService {
     }
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch(this.brevoApiUrl, {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'accept': 'application/json',
           'api-key': this.brevoApiKey,
@@ -43,9 +62,16 @@ export class EmailService {
           textContent: options.text,
         }),
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorData = await response.json();
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = await response.text();
+        }
         console.error('Brevo API error:', errorData);
         throw new Error(`Failed to send email via Brevo: ${response.statusText}`);
       }
@@ -67,6 +93,12 @@ export class EmailService {
   ): Promise<void> {
     const invitationLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/accept-invitation?token=${invitationToken}`;
     
+    // Escape all user-provided inputs
+    const escapedTenantName = this.escapeHtml(tenantName);
+    const escapedLandlordName = landlordName ? this.escapeHtml(landlordName) : null;
+    const escapedPropertyName = propertyName ? this.escapeHtml(propertyName) : null;
+    const escapedUnitNumber = unitNumber ? this.escapeHtml(unitNumber) : null;
+    
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
@@ -80,15 +112,15 @@ export class EmailService {
         </div>
         
         <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
-          <h3 style="color: #1F2937; margin-top: 0;">Hello ${tenantName},</h3>
+          <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedTenantName},</h3>
           <p style="color: #4B5563; line-height: 1.6;">
-            ${landlordName || 'Your landlord'} has invited you to create your tenant account on Landee & Moony, 
+            ${escapedLandlordName || 'Your landlord'} has invited you to create your tenant account on Landee & Moony, 
             Kenya's leading property management platform.
           </p>
-          ${propertyName ? `
+          ${escapedPropertyName ? `
             <div style="margin-top: 20px; padding: 15px; background-color: white; border-radius: 6px; border-left: 4px solid #3B82F6;">
               <p style="margin: 0; color: #6B7280; font-size: 14px;">Property Details</p>
-              <p style="margin: 8px 0 0 0; color: #1F2937; font-weight: 600;">${propertyName}${unitNumber ? ` - Unit ${unitNumber}` : ''}</p>
+              <p style="margin: 8px 0 0 0; color: #1F2937; font-weight: 600;">${escapedPropertyName}${escapedUnitNumber ? ` - Unit ${escapedUnitNumber}` : ''}</p>
             </div>
           ` : ''}
         </div>
@@ -185,18 +217,28 @@ Need help? Contact us at support@landeeandmoony.com
       currency: 'KES',
     }).format(amount);
 
+    // Escape all user-provided inputs
+    const escapedTenantName = this.escapeHtml(tenantName);
+    const escapedPropertyName = this.escapeHtml(propertyName);
+    const escapedUnitNumber = this.escapeHtml(unitNumber);
+
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
+        </div>
+        
         <h2 style="color: #3B82F6;">Rent Payment Reminder</h2>
         
-        <p>Dear ${tenantName},</p>
+        <p>Dear ${escapedTenantName},</p>
         
         <p>This is a friendly reminder that your rent payment is due soon.</p>
         
         <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3 style="margin-top: 0;">Payment Details</h3>
-          <p><strong>Property:</strong> ${propertyName}</p>
-          <p><strong>Unit:</strong> ${unitNumber}</p>
+          <p><strong>Property:</strong> ${escapedPropertyName}</p>
+          <p><strong>Unit:</strong> ${escapedUnitNumber}</p>
           <p><strong>Amount Due:</strong> ${formattedAmount}</p>
           <p><strong>Due Date:</strong> ${formattedDate}</p>
         </div>
@@ -211,15 +253,16 @@ Need help? Contact us at support@landeeandmoony.com
           </div>
         ` : ''}
         
-        <p>If you have any questions or concerns, please don't hesitate to contact us.</p>
+        <p>If you have any questions or concerns, please contact us at <a href="mailto:support@landeeandmoony.com" style="color: #3B82F6;">support@landeeandmoony.com</a></p>
         
         <p>Thank you for your prompt attention to this matter.</p>
         
-        <hr style="margin: 30px 0; border: none; border-top: 1px solid #E5E7EB;">
-        
-        <p style="color: #6B7280; font-size: 14px;">
-          This is an automated message from RentFlow Property Management System.
-        </p>
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+          <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
+            © 2026 Landee & Moony. All rights reserved.<br>
+            The #1 Property Management System in Kenya
+          </p>
+        </div>
       </div>
     `;
 
@@ -251,32 +294,44 @@ Need help? Contact us at support@landeeandmoony.com
       currency: 'KES',
     }).format(amount);
 
+    // Escape all user-provided inputs
+    const escapedTenantName = this.escapeHtml(tenantName);
+    const escapedPropertyName = this.escapeHtml(propertyName);
+    const escapedUnitNumber = this.escapeHtml(unitNumber);
+    const escapedConfirmationCode = this.escapeHtml(confirmationCode);
+
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
+        </div>
+        
         <h2 style="color: #10B981;">Payment Confirmation</h2>
         
-        <p>Dear ${tenantName},</p>
+        <p>Dear ${escapedTenantName},</p>
         
         <p>We have successfully received your rent payment. Thank you!</p>
         
         <div style="background-color: #F0FDF4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10B981;">
           <h3 style="margin-top: 0; color: #10B981;">Payment Details</h3>
-          <p><strong>Property:</strong> ${propertyName}</p>
-          <p><strong>Unit:</strong> ${unitNumber}</p>
+          <p><strong>Property:</strong> ${escapedPropertyName}</p>
+          <p><strong>Unit:</strong> ${escapedUnitNumber}</p>
           <p><strong>Amount Paid:</strong> ${formattedAmount}</p>
           <p><strong>Payment Date:</strong> ${formattedDate}</p>
-          <p><strong>Confirmation Code:</strong> ${confirmationCode}</p>
+          <p><strong>Confirmation Code:</strong> ${escapedConfirmationCode}</p>
         </div>
         
         <p>Please keep this confirmation for your records.</p>
         
-        <p>If you have any questions about this payment, please contact us.</p>
+        <p>If you have any questions about this payment, please contact us at <a href="mailto:support@landeeandmoony.com" style="color: #3B82F6;">support@landeeandmoony.com</a></p>
         
-        <hr style="margin: 30px 0; border: none; border-top: 1px solid #E5E7EB;">
-        
-        <p style="color: #6B7280; font-size: 14px;">
-          This is an automated message from RentFlow Property Management System.
-        </p>
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+          <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
+            © 2026 Landee & Moony. All rights reserved.<br>
+            The #1 Property Management System in Kenya
+          </p>
+        </div>
       </div>
     `;
 
@@ -308,18 +363,28 @@ Need help? Contact us at support@landeeandmoony.com
       currency: 'KES',
     }).format(amount);
 
+    // Escape all user-provided inputs
+    const escapedTenantName = this.escapeHtml(tenantName);
+    const escapedPropertyName = this.escapeHtml(propertyName);
+    const escapedUnitNumber = this.escapeHtml(unitNumber);
+
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
+        </div>
+        
         <h2 style="color: #EF4444;">Overdue Payment Notice</h2>
         
-        <p>Dear ${tenantName},</p>
+        <p>Dear ${escapedTenantName},</p>
         
         <p>We notice that your rent payment is now overdue. Please make your payment as soon as possible to avoid any late fees.</p>
         
         <div style="background-color: #FEF2F2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #EF4444;">
           <h3 style="margin-top: 0; color: #EF4444;">Overdue Payment Details</h3>
-          <p><strong>Property:</strong> ${propertyName}</p>
-          <p><strong>Unit:</strong> ${unitNumber}</p>
+          <p><strong>Property:</strong> ${escapedPropertyName}</p>
+          <p><strong>Unit:</strong> ${escapedUnitNumber}</p>
           <p><strong>Amount Due:</strong> ${formattedAmount}</p>
           <p><strong>Original Due Date:</strong> ${formattedDate}</p>
         </div>
@@ -334,13 +399,14 @@ Need help? Contact us at support@landeeandmoony.com
           </div>
         ` : ''}
         
-        <p>If you are experiencing financial difficulties, please contact us to discuss payment arrangements.</p>
+        <p>If you are experiencing financial difficulties, please contact us at <a href="mailto:support@landeeandmoony.com" style="color: #3B82F6;">support@landeeandmoony.com</a> to discuss payment arrangements.</p>
         
-        <hr style="margin: 30px 0; border: none; border-top: 1px solid #E5E7EB;">
-        
-        <p style="color: #6B7280; font-size: 14px;">
-          This is an automated message from RentFlow Property Management System.
-        </p>
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+          <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
+            © 2026 Landee & Moony. All rights reserved.<br>
+            The #1 Property Management System in Kenya
+          </p>
+        </div>
       </div>
     `;
 

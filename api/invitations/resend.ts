@@ -49,6 +49,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         invitation_sent_at = NOW(),
         account_status = 'invited'
       WHERE id = ${tenantId}
+      AND user_id = ${auth.userId}
     `;
 
     // Get landlord info for email

@@ -9,6 +9,14 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { supabase } from "@/lib/supabase";
+
+interface TenantInfo {
+  firstName: string;
+  lastName: string;
+  email: string;
+  valid: boolean;
+}
 
 export default function AcceptInvitation() {
   usePageTitle('Accept Invitation');
@@ -24,7 +32,7 @@ export default function AcceptInvitation() {
   const token = searchParams.get('token');
 
   // Verify token and get tenant info
-  const { data: tenantInfo, isLoading: isVerifying, error: verifyError } = useQuery({
+  const { data: tenantInfo, isLoading: isVerifying, error: verifyError } = useQuery<TenantInfo>({
     queryKey: [`/api/invitations/verify?token=${token}`],
     enabled: !!token,
     retry: false,
@@ -32,32 +40,21 @@ export default function AcceptInvitation() {
 
   // Accept invitation mutation
   const acceptMutation = useMutation({
-    mutationFn: async (password: string) => {
-      const response = await apiRequest("POST", "/api/invitations/accept", {
-        token,
-        password,
-      });
+    mutationFn: async (data: { token: string; password: string }) => {
+      const response = await apiRequest("POST", "/api/invitations/accept", data);
       return response;
     },
-    onSuccess: (data: any) => {
+    onSuccess: async (data: any) => {
       toast({
         title: "Account Created! 🎉",
-        description: "Welcome to Landee & Moony! Redirecting to your dashboard...",
+        description: "Welcome to Landee & Moony! Please login with your new password...",
+        duration: 4000,
       });
 
-      // If session returned, set it and redirect
-      if (data.session) {
-        // Store session token
-        localStorage.setItem('supabase-auth-token', data.session.access_token);
-        setTimeout(() => {
-          setLocation("/dashboard");
-        }, 1500);
-      } else {
-        // Redirect to login
-        setTimeout(() => {
-          setLocation("/login");
-        }, 1500);
-      }
+      // Redirect to login page
+      setTimeout(() => {
+        setLocation("/login");
+      }, 2000);
     },
     onError: (error: any) => {
       toast({
@@ -90,22 +87,8 @@ export default function AcceptInvitation() {
       return;
     }
 
-    acceptMutation.mutate(password);
+    acceptMutation.mutate({ token: token!, password });
   };
-
-  // Loading state
-  if (isVerifying) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-            <p className="text-muted-foreground">Verifying invitation...</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   // Invalid/expired token
   if (!token || verifyError) {
@@ -189,6 +172,7 @@ export default function AcceptInvitation() {
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -215,6 +199,7 @@ export default function AcceptInvitation() {
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
                   >
                     {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>

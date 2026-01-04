@@ -83,6 +83,7 @@ export const tenants = pgTable("tenants", {
   phone: varchar("phone").notNull(),
   emergencyContact: varchar("emergency_contact"),
   invitationToken: varchar("invitation_token").unique(),
+  invitationExpiresAt: timestamp("invitation_expires_at"),
   invitationSentAt: timestamp("invitation_sent_at"),
   invitationAcceptedAt: timestamp("invitation_accepted_at"),
   accountStatus: accountStatusEnum("account_status").default("pending_invitation"),
@@ -272,12 +273,11 @@ export const updateTenantSchema = createInsertSchema(tenants).omit({
   id: true,
   userId: true,
   createdAt: true,
+  updatedAt: true,
   invitationToken: true,
   invitationSentAt: true,
   invitationAcceptedAt: true,
   accountStatus: true,
-});
-  updatedAt: true,
 }).partial();
 
 export const insertLeaseSchema = createInsertSchema(leases).omit({

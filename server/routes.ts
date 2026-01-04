@@ -1308,7 +1308,7 @@ export async function registerRoutes(app: Express) {
       const currentYear = new Date().getFullYear();
       const monthlyRevenue = completedPayments
         .filter(payment => {
-          const paymentDate = new Date(payment.paidDate || payment.createdAt);
+          const paymentDate = new Date(payment.paidDate || payment.createdAt || new Date());
           return paymentDate.getMonth() === currentMonth && paymentDate.getFullYear() === currentYear;
         })
         .reduce((sum, payment) => sum + parseFloat(payment.amount || "0"), 0);

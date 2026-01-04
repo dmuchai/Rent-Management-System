@@ -47,6 +47,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const tenant = tenants[0];
 
+    // Check if invitation_sent_at exists
+    if (!tenant.invitation_sent_at) {
+      return res.status(410).json({ 
+        error: 'Invalid invitation',
+        message: 'This invitation is invalid. Please request a new invitation from your landlord.'
+      });
+    }
+
     // Check if invitation is expired (7 days)
     const invitationDate = new Date(tenant.invitation_sent_at);
     const expirationDate = new Date(invitationDate.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -56,14 +64,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(410).json({ 
         error: 'Invitation expired',
         message: 'This invitation link has expired. Please request a new invitation from your landlord.'
-      });
-    }
-
-    // Check if user already has an account
-    if (tenant.user_id) {
-      return res.status(409).json({ 
-        error: 'Account already exists',
-        message: 'An account has already been created for this invitation.'
       });
     }
 
@@ -87,56 +87,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Create user record in public.users table
-    await sql`
-      INSERT INTO public.users (id, email, first_name, last_name, role)
-      VALUES (
-        ${authData.user.id},
-        ${tenant.email},
-        ${tenant.first_name},
-        ${tenant.last_name},
-        'tenant'
-      )
-      ON CONFLICT (id) DO NOTHING
-    `;
+    // Use transaction for database operations
+    await sql.begin(async (sql) => {
+      // Create user record in public.users table
+      await sql`
+        INSERT INTO public.users (id, email, first_name, last_name, role)
+        VALUES (
+          ${authData.user.id},
+          ${tenant.email},
+          ${tenant.first_name},
+          ${tenant.last_name},
+          'tenant'
+        )
+        ON CONFLICT (id) DO NOTHING
+      `;
 
-    // Update tenant record - link to user account and mark as active
-    await sql`
-      UPDATE public.tenants
-      SET 
-        user_id = ${authData.user.id},
-        invitation_accepted_at = NOW(),
-        account_status = 'active',
-        invitation_token = NULL
-      WHERE id = ${tenant.id}
-    `;
-
-    // Create session for auto-login
-    const { data: sessionData, error: sessionError } = await adminSupabase.auth.admin.createSession({
-      userId: authData.user.id
+      // Update tenant record - link to user account and mark as active
+      await sql`
+        UPDATE public.tenants
+        SET 
+          user_id = ${authData.user.id},
+          invitation_accepted_at = NOW(),
+          account_status = 'active',
+          invitation_token = NULL
+        WHERE id = ${tenant.id}
+      `;
     });
 
-    if (sessionError || !sessionData.session) {
-      console.error('Failed to create session:', sessionError);
-      // Account created successfully, just redirect to login
-      return res.status(201).json({
-        message: 'Account created successfully',
-        requireLogin: true
-      });
-    }
-
-    // Return session for auto-login
+    // Return success - user needs to login with their new credentials
     return res.status(201).json({
       message: 'Account created successfully',
-      session: {
-        access_token: sessionData.session.access_token,
-        refresh_token: sessionData.session.refresh_token,
-        user: {
-          id: authData.user.id,
-          email: authData.user.email,
-          role: 'tenant',
-        }
-      }
+      requireLogin: true,
+      email: authData.user.email
     });
 
   } catch (error) {
