@@ -33,16 +33,19 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
     enabled: open && !!tenant,
   });
 
+  // Compute stable lease IDs for payments query key
+  const leaseIds = leases.map(l => l.id).sort().join(",");
+
   // Fetch tenant's payments (via leases)
   const { data: payments = [], isLoading: paymentsLoading } = useQuery<Payment[]>({
-    queryKey: ["/api/payments", tenant?.id, leases],
+    queryKey: ["/api/payments", tenant?.id, leaseIds],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/payments");
       const allPayments = await response.json();
       const tenantLeaseIds = leases.map(l => l.id);
       return allPayments.filter((payment: Payment) => tenantLeaseIds.includes(payment.leaseId));
     },
-    enabled: open && !!tenant && leases.length > 0,
+    enabled: open && !!tenant && leaseIds.length > 0,
   });
 
   // Fetch all properties and units to show property/unit names
