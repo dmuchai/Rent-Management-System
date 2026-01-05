@@ -1115,7 +1115,6 @@ export class DatabaseStorage implements IStorage {
         phone: tenants.phone,
         emergencyContact: tenants.emergencyContact,
         invitationToken: tenants.invitationToken,
-        invitationExpiresAt: tenants.invitationExpiresAt,
         invitationSentAt: tenants.invitationSentAt,
         invitationAcceptedAt: tenants.invitationAcceptedAt,
         accountStatus: tenants.accountStatus,

@@ -806,7 +806,18 @@ export default function LandlordDashboard() {
               />
             </div>
 
-            <PaymentHistory payments={payments} loading={paymentsLoading} />
+            <PaymentHistory 
+              payments={payments} 
+              loading={paymentsLoading}
+              onViewPayment={(payment) => {
+                // TODO: Implement view payment modal
+                console.log('View payment:', payment);
+              }}
+              onEditPayment={(payment) => {
+                // TODO: Implement edit payment functionality
+                console.log('Edit payment:', payment);
+              }}
+            />
           </div>
         );
 
