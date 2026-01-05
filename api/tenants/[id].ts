@@ -8,11 +8,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
   try {
     if (req.method === 'DELETE') {
-      const tenantId = req.query.id as string;
+      const tenantIdParam = req.query.id;
 
-      if (!tenantId) {
+      // Validate tenantId parameter
+      if (!tenantIdParam) {
         return res.status(400).json({ error: 'Tenant ID is required' });
       }
+
+      // Handle array case - reject multiple IDs
+      if (Array.isArray(tenantIdParam)) {
+        return res.status(400).json({ error: 'Multiple tenant IDs not supported' });
+      }
+
+      const tenantId: string = tenantIdParam;
 
       // Use a transaction to prevent TOCTOU race conditions
       await sql.begin(async (tx) => {

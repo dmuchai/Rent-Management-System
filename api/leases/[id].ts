@@ -8,11 +8,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
   try {
     if (req.method === 'DELETE') {
-      const leaseId = req.query.id as string;
+      const leaseIdParam = req.query.id;
 
-      if (!leaseId) {
+      // Validate leaseId parameter
+      if (!leaseIdParam) {
         return res.status(400).json({ error: 'Lease ID is required' });
       }
+
+      // Handle array case - reject multiple IDs
+      if (Array.isArray(leaseIdParam)) {
+        return res.status(400).json({ error: 'Multiple lease IDs not supported' });
+      }
+
+      const leaseId: string = leaseIdParam;
 
       // Use a transaction to prevent race conditions
       await sql.begin(async (tx) => {
