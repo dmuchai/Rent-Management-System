@@ -71,10 +71,10 @@ export class EmailService {
       throw new Error('Brevo API key not configured. Please set BREVO_API_KEY environment variable.');
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
       const response = await fetch(this.brevoApiUrl, {
         method: 'POST',
         signal: controller.signal,
@@ -98,8 +98,6 @@ export class EmailService {
           textContent: options.text,
         }),
       });
-      
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         let errorData;
@@ -116,6 +114,8 @@ export class EmailService {
     } catch (error) {
       console.error('Failed to send email:', error);
       throw new Error(`Failed to send email: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
