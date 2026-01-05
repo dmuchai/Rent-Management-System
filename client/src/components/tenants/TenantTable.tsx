@@ -136,13 +136,14 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
               <tr>
                 <th className="text-left py-3 px-6 font-medium">Tenant</th>
                 <th className="text-left py-3 px-6 font-medium">Contact</th>
+                <th className="text-left py-3 px-6 font-medium">Status</th>
                 <th className="text-left py-3 px-6 font-medium">Emergency Contact</th>
                 <th className="text-left py-3 px-6 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {tenants.filter(t => t && t.id).map((tenant) => (
-                <tr key={tenant.id} className="border-b border-border" data-testid={`tenant-row-${tenant.id}`}>
+                <tr key={tenant.id} className="border-b border-border hover:bg-muted/30 transition-colors" data-testid={`tenant-row-${tenant.id}`}>
                   <td className="py-4 px-6">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
@@ -170,7 +171,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                     {tenant.emergencyContact || "N/A"}
                   </td>
                   <td className="py-4 px-6">
-                    <div className="flex space-x-2">
+                    <div className="flex items-center gap-2">
                       {(tenant.accountStatus === 'invited' || tenant.accountStatus === 'pending_invitation') && (
                         <Button
                           variant="ghost"
@@ -179,6 +180,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                           disabled={resendingTenantId === tenant.id}
                           title="Resend invitation email"
                           data-testid={`button-resend-invitation-${tenant.id}`}
+                          className="hover:bg-blue-100 hover:text-blue-700"
                         >
                           {resendingTenantId === tenant.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -192,13 +194,18 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                         size="sm"
                         onClick={() => handleEdit(tenant)}
                         data-testid={`button-edit-tenant-${tenant.id}`}
+                        className="hover:bg-yellow-100 hover:text-yellow-700"
+                        title="Edit tenant"
                       >
                         <i className="fas fa-edit"></i>
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handleEdit(tenant)}
                         data-testid={`button-view-tenant-${tenant.id}`}
+                        className="hover:bg-green-100 hover:text-green-700"
+                        title="View details"
                       >
                         <i className="fas fa-eye"></i>
                       </Button>
