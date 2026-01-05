@@ -76,6 +76,14 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
     .filter((p: any) => p.status === 'pending')
     .reduce((sum: number, p: any) => sum + parseFloat(p.amount || '0'), 0);
 
+  // Safely compute tenant name with fallback
+  const tenantName = lease.tenant 
+    ? [lease.tenant.firstName, lease.tenant.lastName]
+        .filter(name => name && name.trim())
+        .join(' ')
+        .trim() || 'Unknown tenant'
+    : 'Unknown tenant';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -172,7 +180,7 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
                   <div>
                     <p className="text-sm text-muted-foreground">Name</p>
                     <p className="font-medium">
-                      {lease.tenant?.firstName} {lease.tenant?.lastName}
+                      {tenantName}
                     </p>
                   </div>
                   <div>
