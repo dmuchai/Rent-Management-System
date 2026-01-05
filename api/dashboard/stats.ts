@@ -56,6 +56,86 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     const monthlyRevenue = parseFloat(revenueStats[0]?.monthly_revenue || '0');
     const pendingPaymentsCount = parseInt(revenueStats[0]?.pending_count || '0');
 
+    // Get occupancy rate
+    const occupancyStats = await sql`
+      SELECT 
+        COUNT(*) as total_units,
+        COUNT(CASE WHEN u.is_occupied = true THEN 1 END) as occupied_units
+      FROM public.units u
+      INNER JOIN public.properties p ON u.property_id = p.id
+      WHERE p.owner_id = ${auth.userId}
+    `;
+    const totalUnits = parseInt(occupancyStats[0]?.total_units || '0');
+    const occupiedUnits = parseInt(occupancyStats[0]?.occupied_units || '0');
+    const occupancyRate = totalUnits > 0 ? ((occupiedUnits / totalUnits) * 100).toFixed(1) : '0';
+
+    // Get overdue payments count
+    const overduePaymentsData = await sql`
+      SELECT COUNT(*) as overdue_count
+      FROM public.payments pm
+      INNER JOIN public.leases l ON pm.lease_id = l.id
+      INNER JOIN public.units u ON l.unit_id = u.id
+      INNER JOIN public.properties p ON u.property_id = p.id
+      WHERE p.owner_id = ${auth.userId}
+      AND pm.status = 'pending'
+      AND pm.due_date < NOW()
+    `;
+    const overduePayments = parseInt(overduePaymentsData[0]?.overdue_count || '0');
+
+    // Get expiring leases (next 30 days)
+    const expiringLeasesData = await sql`
+      SELECT 
+        l.id, l.end_date,
+        t.first_name, t.last_name, t.email,
+        u.unit_number,
+        p.name as property_name
+      FROM public.leases l
+      INNER JOIN public.tenants t ON l.tenant_id = t.id
+      INNER JOIN public.units u ON l.unit_id = u.id
+      INNER JOIN public.properties p ON u.property_id = p.id
+      WHERE p.owner_id = ${auth.userId}
+      AND l.is_active = true
+      AND l.end_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'
+      ORDER BY l.end_date ASC
+    `;
+
+    const expiringLeases = expiringLeasesData.map((lease: any) => ({
+      id: lease.id,
+      endDate: lease.end_date,
+      tenant: {
+        firstName: lease.first_name,
+        lastName: lease.last_name,
+        email: lease.email,
+      },
+      unit: {
+        unitNumber: lease.unit_number,
+      },
+      property: {
+        name: lease.property_name,
+      }
+    }));
+
+    // Get revenue trend (last 6 months)
+    const revenueTrendData = await sql`
+      SELECT 
+        TO_CHAR(DATE_TRUNC('month', COALESCE(pm.paid_date, pm.created_at)), 'YYYY-MM') as month,
+        SUM(CAST(pm.amount AS DECIMAL)) as revenue
+      FROM public.payments pm
+      INNER JOIN public.leases l ON pm.lease_id = l.id
+      INNER JOIN public.units u ON l.unit_id = u.id
+      INNER JOIN public.properties p ON u.property_id = p.id
+      WHERE p.owner_id = ${auth.userId}
+      AND pm.status = 'completed'
+      AND COALESCE(pm.paid_date, pm.created_at) >= NOW() - INTERVAL '6 months'
+      GROUP BY DATE_TRUNC('month', COALESCE(pm.paid_date, pm.created_at))
+      ORDER BY month ASC
+    `;
+
+    const revenueTrend = revenueTrendData.map((item: any) => ({
+      month: item.month,
+      revenue: parseFloat(item.revenue || '0').toFixed(2),
+    }));
+
     // Get recent completed payments (last 5)
     const recentPaymentsData = await sql`
       SELECT 
@@ -100,6 +180,12 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       totalRevenue: totalRevenue.toFixed(2),
       monthlyRevenue: monthlyRevenue.toFixed(2),
       pendingPayments: pendingPaymentsCount,
+      occupancyRate,
+      totalUnits,
+      occupiedUnits,
+      overduePayments,
+      expiringLeases,
+      revenueTrend,
       recentPayments,
     });
   } catch (error) {

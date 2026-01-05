@@ -450,10 +450,11 @@ export default function LandlordDashboard() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
               <StatsCard
                 title="Total Properties"
                 value={dashboardStats?.totalProperties || 0}
+                subtitle={`${dashboardStats?.totalUnits || 0} units`}
                 icon="fas fa-building"
                 color="primary"
                 loading={statsLoading}
@@ -462,24 +463,36 @@ export default function LandlordDashboard() {
               <StatsCard
                 title="Active Tenants"
                 value={dashboardStats?.totalTenants || 0}
+                subtitle="Occupied units"
                 icon="fas fa-users"
                 color="chart-2"
                 loading={statsLoading}
                 data-testid="stat-tenants"
               />
               <StatsCard
+                title="Occupancy Rate"
+                value={`${dashboardStats?.occupancyRate || 0}%`}
+                subtitle={`${dashboardStats?.occupiedUnits || 0}/${dashboardStats?.totalUnits || 0} occupied`}
+                icon="fas fa-chart-pie"
+                color="chart-3"
+                loading={statsLoading}
+                data-testid="stat-occupancy"
+              />
+              <StatsCard
                 title="Monthly Revenue"
-                value={`KES ${dashboardStats?.monthlyRevenue?.toLocaleString() || 0}`}
+                value={`KES ${parseFloat(dashboardStats?.monthlyRevenue || 0).toLocaleString()}`}
+                subtitle="This month"
                 icon="fas fa-money-bill-wave"
-                color="chart-2"
+                color="chart-4"
                 loading={statsLoading}
                 data-testid="stat-revenue"
               />
               <StatsCard
                 title="Overdue Payments"
                 value={dashboardStats?.overduePayments || 0}
+                subtitle={dashboardStats?.overduePayments > 0 ? "Requires attention" : "All current"}
                 icon="fas fa-exclamation-triangle"
-                color="destructive"
+                color={dashboardStats?.overduePayments > 0 ? "destructive" : "chart-2"}
                 loading={statsLoading}
                 data-testid="stat-overdue"
               />
@@ -553,6 +566,104 @@ export default function LandlordDashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Revenue Trend Chart */}
+            {dashboardStats?.revenueTrend && dashboardStats.revenueTrend.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center text-lg">
+                    <i className="fas fa-chart-line mr-2 text-blue-600"></i>
+                    Revenue Trend (Last 6 Months)
+                  </CardTitle>
+                  <CardDescription>Track your monthly revenue performance</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {dashboardStats.revenueTrend.map((item: any, index: number) => {
+                      const monthName = new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                      const revenue = parseFloat(item.revenue);
+                      const maxRevenue = Math.max(...dashboardStats.revenueTrend.map((i: any) => parseFloat(i.revenue)));
+                      const barWidth = maxRevenue > 0 ? (revenue / maxRevenue) * 100 : 0;
+                      
+                      return (
+                        <div key={index} className="space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">{monthName}</span>
+                            <span className="font-semibold">KES {revenue.toLocaleString()}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div 
+                              className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" 
+                              style={{ width: `${barWidth}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Expiring Leases Alert */}
+            {dashboardStats?.expiringLeases && dashboardStats.expiringLeases.length > 0 && (
+              <Card className="border-yellow-200 bg-yellow-50">
+                <CardHeader>
+                  <CardTitle className="flex items-center text-lg text-yellow-800">
+                    <i className="fas fa-calendar-times mr-2"></i>
+                    Leases Expiring Soon ({dashboardStats.expiringLeases.length})
+                  </CardTitle>
+                  <CardDescription className="text-yellow-700">
+                    These leases expire within the next 30 days - consider renewal
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {dashboardStats.expiringLeases.map((lease: any) => {
+                      const daysUntilExpiry = Math.ceil((new Date(lease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                      const isUrgent = daysUntilExpiry <= 7;
+                      
+                      return (
+                        <div 
+                          key={lease.id} 
+                          className={`flex items-center justify-between p-3 rounded-lg ${isUrgent ? 'bg-red-100 border border-red-200' : 'bg-white border border-yellow-200'}`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-10 h-10 ${isUrgent ? 'bg-red-200' : 'bg-yellow-200'} rounded-full flex items-center justify-center`}>
+                              <i className={`fas fa-${isUrgent ? 'exclamation' : 'clock'} ${isUrgent ? 'text-red-600' : 'text-yellow-600'}`}></i>
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">
+                                {lease.tenant.firstName} {lease.tenant.lastName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {lease.property.name} - Unit {lease.unit.unitNumber}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <Badge variant={isUrgent ? "destructive" : "secondary"} className="mb-1">
+                              {daysUntilExpiry} {daysUntilExpiry === 1 ? 'day' : 'days'} left
+                            </Badge>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(lease.endDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <Button 
+                    className="w-full mt-4" 
+                    variant="outline"
+                    onClick={() => setActiveSection("leases")}
+                  >
+                    <i className="fas fa-file-contract mr-2"></i>
+                    Manage Leases
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Recent Activity */}
             <div className="grid lg:grid-cols-2 gap-6">
