@@ -6,7 +6,17 @@ import TenantForm from "./TenantForm";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, MailCheck, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { Mail, MailCheck, CheckCircle2, Clock, Loader2, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface TenantTableProps {
   tenants: Tenant[];
@@ -19,6 +29,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<'view' | 'edit' | 'create'>('create');
   const [resendingTenantId, setResendingTenantId] = useState<string | null>(null);
+  const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -42,6 +53,28 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
         variant: "destructive",
       });
       setResendingTenantId(null);
+    },
+  });
+
+  const deleteTenantMutation = useMutation({
+    mutationFn: async (tenantId: string) => {
+      return await apiRequest("DELETE", `/api/tenants/${tenantId}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Tenant Deleted",
+        description: "Tenant has been successfully removed",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
+      setTenantToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete tenant",
+        variant: "destructive",
+      });
+      setTenantToDelete(null);
     },
   });
 
@@ -218,6 +251,16 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                       >
                         <i className="fas fa-eye"></i>
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setTenantToDelete(tenant)}
+                        data-testid={`button-delete-tenant-${tenant.id}`}
+                        className="hover:bg-red-100 hover:text-red-700"
+                        title="Delete tenant"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -233,6 +276,27 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
         tenant={selectedTenant}
         mode={formMode}
       />
+
+      <AlertDialog open={!!tenantToDelete} onOpenChange={() => setTenantToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Tenant</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {tenantToDelete?.firstName} {tenantToDelete?.lastName}? 
+              This action cannot be undone and will remove all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => tenantToDelete && deleteTenantMutation.mutate(tenantToDelete.id)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -14,7 +14,21 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     if (req.method === 'GET') {
       // Get all tenants owned by this landlord
       const tenants = await sql`
-        SELECT t.*
+        SELECT 
+          t.id,
+          t.user_id as "userId",
+          t.first_name as "firstName",
+          t.last_name as "lastName",
+          t.email,
+          t.phone,
+          t.emergency_contact as "emergencyContact",
+          t.invitation_token as "invitationToken",
+          t.invitation_expires_at as "invitationExpiresAt",
+          t.invitation_sent_at as "invitationSentAt",
+          t.invitation_accepted_at as "invitationAcceptedAt",
+          t.account_status as "accountStatus",
+          t.created_at as "createdAt",
+          t.updated_at as "updatedAt"
         FROM public.tenants t
         WHERE t.user_id = ${auth.userId}
         ORDER BY t.created_at DESC
