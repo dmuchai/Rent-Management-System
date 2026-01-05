@@ -129,7 +129,7 @@ export class EmailService {
     unitNumber?: string,
     landlordName?: string
   ): Promise<void> {
-    const invitationLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/accept-invitation?token=${invitationToken}`;
+    const invitationLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/accept-invitation?token=${encodeURIComponent(invitationToken)}`;
     
     // Escape all user-provided inputs
     const escapedTenantName = this.escapeHtml(tenantName);
