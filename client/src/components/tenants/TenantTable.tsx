@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Tenant } from "@shared/schema";
 import TenantForm from "./TenantForm";
+import TenantDetailsModal from "./TenantDetailsModal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, MailCheck, CheckCircle2, Clock, Loader2, Trash2 } from "lucide-react";
+import { Mail, MailCheck, CheckCircle2, Clock, Loader2, Trash2, Search, Filter, Eye } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +19,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface TenantTableProps {
   tenants: Tenant[];
@@ -27,11 +36,40 @@ interface TenantTableProps {
 export default function TenantTable({ tenants, loading, onAddTenant }: TenantTableProps) {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [formMode, setFormMode] = useState<'view' | 'edit' | 'create'>('create');
   const [resendingTenantId, setResendingTenantId] = useState<string | null>(null);
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Filter and search tenants
+  const filteredTenants = useMemo(() => {
+    return tenants.filter((tenant) => {
+      // Status filter
+      if (statusFilter !== "all" && tenant.accountStatus !== statusFilter) {
+        return false;
+      }
+
+      // Search filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const fullName = `${tenant.firstName} ${tenant.lastName}`.toLowerCase();
+        const email = tenant.email?.toLowerCase() || "";
+        const phone = tenant.phone?.toLowerCase() || "";
+        
+        return (
+          fullName.includes(query) ||
+          email.includes(query) ||
+          phone.includes(query)
+        );
+      }
+
+      return true;
+    });
+  }, [tenants, searchQuery, statusFilter]);
 
   const resendInvitationMutation = useMutation({
     mutationFn: async ({ tenantId, tenantEmail }: { tenantId: string; tenantEmail: string }) => {
@@ -120,8 +158,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
 
   const handleView = (tenant: Tenant) => {
     setSelectedTenant(tenant);
-    setFormMode('view');
-    setFormOpen(true);
+    setDetailsOpen(true);
   };
 
   const handleAdd = () => {
@@ -172,6 +209,52 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
   return (
     <>
       <div className="bg-card rounded-xl border border-border overflow-hidden">
+        {/* Header with Search and Filters */}
+        <div className="p-6 border-b border-border">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold">Tenants</h2>
+            <Button onClick={handleAdd} data-testid="button-add-tenant">
+              <i className="fas fa-plus mr-2"></i>
+              Add Tenant
+            </Button>
+          </div>
+
+          {/* Search and Filter Controls */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search by name, email, or phone..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="w-full sm:w-48">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <Filter className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="invited">Invited</SelectItem>
+                  <SelectItem value="pending_invitation">Pending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Results count */}
+          {searchQuery || statusFilter !== "all" ? (
+            <p className="text-sm text-muted-foreground mt-3">
+              Showing {filteredTenants.length} of {tenants.length} tenants
+            </p>
+          ) : null}
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-muted/50 border-b border-border">
@@ -184,7 +267,31 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
               </tr>
             </thead>
             <tbody>
-              {tenants.filter(t => t && t.id).map((tenant) => (
+              {filteredTenants.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center">
+                    <i className="fas fa-search text-4xl text-muted-foreground mb-4 block"></i>
+                    <p className="text-muted-foreground text-lg">
+                      {searchQuery || statusFilter !== "all" 
+                        ? "No tenants match your search criteria"
+                        : "No tenants found"}
+                    </p>
+                    {(searchQuery || statusFilter !== "all") && (
+                      <Button 
+                        variant="link" 
+                        onClick={() => {
+                          setSearchQuery("");
+                          setStatusFilter("all");
+                        }}
+                        className="mt-2"
+                      >
+                        Clear filters
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ) : (
+                filteredTenants.filter(t => t && t.id).map((tenant) => (
                 <tr key={tenant.id} className="border-b border-border hover:bg-muted/30 transition-colors" data-testid={`tenant-row-${tenant.id}`}>
                   <td className="py-4 px-6">
                     <div className="flex items-center space-x-3">
@@ -249,7 +356,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                         className="hover:bg-green-100 hover:text-green-700"
                         title="View details"
                       >
-                        <i className="fas fa-eye"></i>
+                        <Eye className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -264,7 +371,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                     </div>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>
@@ -275,6 +382,12 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
         onOpenChange={setFormOpen}
         tenant={selectedTenant}
         mode={formMode}
+      />
+
+      <TenantDetailsModal
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        tenant={selectedTenant}
       />
 
       <AlertDialog open={!!tenantToDelete} onOpenChange={() => setTenantToDelete(null)}>
