@@ -15,7 +15,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     // Validate and extract paymentId early
     if (!paymentIdParam || Array.isArray(paymentIdParam)) {
       await sql.end();
-      return res.status(400).json({ error: 'Payment ID is required' });
+      return res.status(400).json({ error: 'Payment ID is required', details: null });
     }
     
     const paymentId = paymentIdParam;
@@ -62,18 +62,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       });
       
       if (error.message === 'PAYMENT_NOT_FOUND') {
-        return res.status(404).json({ error: 'Payment not found or unauthorized' });
+        return res.status(404).json({ error: 'Payment not found or unauthorized', details: null });
       }
       
       if (error.message === 'PAYMENT_COMPLETED') {
         return res.status(400).json({ 
           error: 'Cannot delete completed payment',
-          message: 'Completed payments cannot be deleted for audit purposes'
+          details: 'Completed payments cannot be deleted for audit purposes'
         });
       }
       
       return res.status(500).json({ 
-        error: 'Failed to delete payment'
+        error: 'Failed to delete payment',
+        details: null
       });
     } finally {
       await sql.end();
@@ -182,9 +183,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         WHERE l.id = ${paymentData.leaseId}
       `;
       if (leases.length === 0) {
-        return res.status(404).json({ message: 'Lease not found' });
+        return res.status(404).json({ error: 'Lease not found', details: null });
       } else if (leases[0].owner_id !== auth.userId) {
-        return res.status(403).json({ message: 'Access denied' });
+        return res.status(403).json({ error: 'Access denied', details: null });
       }
       
       const [payment] = await sql`
@@ -205,12 +206,12 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       return res.status(201).json(payment);
     }
     
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed', details: null });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ message: 'Invalid input', errors: error.errors });
+      res.status(400).json({ error: 'Invalid input', details: error.errors });
     } else {
-      res.status(500).json({ message: 'Failed to process request' });
+      res.status(500).json({ error: 'Failed to process request', details: null });
     }
   } finally {
     await sql.end();
