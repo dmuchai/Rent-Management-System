@@ -29,7 +29,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           INNER JOIN public.leases l ON p.lease_id = l.id
           INNER JOIN public.units u ON l.unit_id = u.id
           INNER JOIN public.properties pr ON u.property_id = pr.id
-          WHERE p.id = ${paymentId} AND pr.user_id = ${auth.userId}
+          WHERE p.id = ${paymentId} AND pr.owner_id = ${auth.userId}
           FOR UPDATE
         `;
 
