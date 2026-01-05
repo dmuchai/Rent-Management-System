@@ -14,6 +14,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
     // Validate leaseId parameter
     if (!leaseIdParam || Array.isArray(leaseIdParam)) {
+      await sql.end();
       return res.status(400).json({ error: 'Lease ID is required' });
     }
 

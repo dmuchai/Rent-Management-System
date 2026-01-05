@@ -17,6 +17,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
     // Validate tenantId parameter
     if (!tenantIdParam || Array.isArray(tenantIdParam)) {
+      await sql.end();
       return res.status(400).json({ error: 'Tenant ID is required' });
     }
 
