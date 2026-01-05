@@ -17,6 +17,7 @@ interface TenantTableProps {
 export default function TenantTable({ tenants, loading, onAddTenant }: TenantTableProps) {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<'view' | 'edit' | 'create'>('create');
   const [resendingTenantId, setResendingTenantId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -80,11 +81,19 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
 
   const handleEdit = (tenant: Tenant) => {
     setSelectedTenant(tenant);
+    setFormMode('edit');
+    setFormOpen(true);
+  };
+
+  const handleView = (tenant: Tenant) => {
+    setSelectedTenant(tenant);
+    setFormMode('view');
     setFormOpen(true);
   };
 
   const handleAdd = () => {
     setSelectedTenant(null);
+    setFormMode('create');
     setFormOpen(true);
   };
 
@@ -202,7 +211,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleEdit(tenant)}
+                        onClick={() => handleView(tenant)}
                         data-testid={`button-view-tenant-${tenant.id}`}
                         className="hover:bg-green-100 hover:text-green-700"
                         title="View details"
@@ -222,6 +231,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
         open={formOpen}
         onOpenChange={setFormOpen}
         tenant={selectedTenant}
+        mode={formMode}
       />
     </>
   );

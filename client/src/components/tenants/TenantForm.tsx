@@ -42,12 +42,14 @@ interface TenantFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tenant?: any;
+  mode?: 'view' | 'edit' | 'create';
 }
 
-export default function TenantForm({ open, onOpenChange, tenant }: TenantFormProps) {
+export default function TenantForm({ open, onOpenChange, tenant, mode = 'create' }: TenantFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const isEdit = !!tenant;
+  const isEdit = mode === 'edit';
+  const isView = mode === 'view';
 
   const form = useForm<InsertTenant>({
     resolver: zodResolver(insertTenantSchema),
@@ -133,7 +135,7 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle data-testid="tenant-form-title">
-            {isEdit ? "Edit Tenant" : "Add New Tenant"}
+            {isView ? "Tenant Details" : isEdit ? "Edit Tenant" : "Add New Tenant"}
           </DialogTitle>
         </DialogHeader>
 
@@ -147,7 +149,7 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
                   <FormItem>
                     <FormLabel>First Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="John" {...field} data-testid="input-tenant-firstname" />
+                      <Input placeholder="John" {...field} data-testid="input-tenant-firstname" readOnly={isView} disabled={isView} className={isView ? "bg-muted" : ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -161,7 +163,7 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
                   <FormItem>
                     <FormLabel>Last Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Doe" {...field} data-testid="input-tenant-lastname" />
+                      <Input placeholder="Doe" {...field} data-testid="input-tenant-lastname" readOnly={isView} disabled={isView} className={isView ? "bg-muted" : ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -181,6 +183,9 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
                       placeholder="john@example.com" 
                       {...field} 
                       data-testid="input-tenant-email"
+                      readOnly={isView}
+                      disabled={isView}
+                      className={isView ? "bg-muted" : ""}
                     />
                   </FormControl>
                   <FormMessage />
@@ -200,6 +205,9 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
                       placeholder="+254 700 000 000" 
                       {...field} 
                       data-testid="input-tenant-phone"
+                      readOnly={isView}
+                      disabled={isView}
+                      className={isView ? "bg-muted" : ""}
                     />
                   </FormControl>
                   <FormMessage />
@@ -219,6 +227,9 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
                       {...field}
                       value={field.value || ""}
                       data-testid="input-tenant-emergency"
+                      readOnly={isView}
+                      disabled={isView}
+                      className={isView ? "bg-muted" : ""}
                     />
                   </FormControl>
                   <FormMessage />
@@ -233,15 +244,17 @@ export default function TenantForm({ open, onOpenChange, tenant }: TenantFormPro
                 onClick={() => onOpenChange(false)}
                 data-testid="button-cancel-tenant"
               >
-                Cancel
+                {isView ? "Close" : "Cancel"}
               </Button>
-              <Button
-                type="submit"
-                disabled={mutation.isPending}
-                data-testid="button-save-tenant"
-              >
-                {mutation.isPending ? "Saving..." : isEdit ? "Update Tenant" : "Create Tenant"}
-              </Button>
+              {!isView && (
+                <Button
+                  type="submit"
+                  disabled={mutation.isPending}
+                  data-testid="button-save-tenant"
+                >
+                  {mutation.isPending ? "Saving..." : isEdit ? "Update Tenant" : "Create Tenant"}
+                </Button>
+              )}
             </div>
           </form>
         </Form>
