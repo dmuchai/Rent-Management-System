@@ -4,9 +4,8 @@ import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
-  const sql = createDbConnection();
-  
   if (req.method === 'DELETE') {
+    const sql = createDbConnection();
     const paymentIdParam = req.query.id;
     
     // Validate and extract paymentId
