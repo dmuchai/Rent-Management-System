@@ -55,6 +55,17 @@ export class EmailService {
     }
   }
 
+  /**
+   * Sanitizes email subject line to prevent header injection attacks
+   * Removes CR/LF characters that could be used to inject additional headers
+   */
+  private sanitizeSubject(str: string): string {
+    if (!str || typeof str !== 'string') {
+      return '';
+    }
+    return str.replace(/[\r\n]/g, '').trim();
+  }
+
   async sendEmail(options: EmailOptions): Promise<void> {
     if (!this.brevoApiKey) {
       console.warn('Brevo API key not configured. Email not sent.');
@@ -298,7 +309,7 @@ Need help? Contact us at support@landeeandmoony.com
 
     await this.sendEmail({
       to: tenantEmail,
-      subject: `Rent Payment Reminder - ${propertyName} Unit ${unitNumber}`,
+      subject: `Rent Payment Reminder - ${this.sanitizeSubject(propertyName)} Unit ${this.sanitizeSubject(unitNumber)}`,
       html,
       text: `Dear ${tenantName}, your rent payment of ${formattedAmount} for ${propertyName} Unit ${unitNumber} is due on ${formattedDate}.`,
     });
@@ -367,7 +378,7 @@ Need help? Contact us at support@landeeandmoony.com
 
     await this.sendEmail({
       to: tenantEmail,
-      subject: `Payment Confirmation - ${propertyName} Unit ${unitNumber}`,
+      subject: `Payment Confirmation - ${this.sanitizeSubject(propertyName)} Unit ${this.sanitizeSubject(unitNumber)}`,
       html,
       text: `Dear ${tenantName}, your payment of ${formattedAmount} for ${propertyName} Unit ${unitNumber} has been confirmed. Confirmation code: ${confirmationCode}.`,
     });
@@ -445,7 +456,7 @@ Need help? Contact us at support@landeeandmoony.com
 
     await this.sendEmail({
       to: tenantEmail,
-      subject: `OVERDUE: Rent Payment - ${propertyName} Unit ${unitNumber}`,
+      subject: `OVERDUE: Rent Payment - ${this.sanitizeSubject(propertyName)} Unit ${this.sanitizeSubject(unitNumber)}`,
       html,
       text: `Dear ${tenantName}, your rent payment of ${formattedAmount} for ${propertyName} Unit ${unitNumber} was due on ${formattedDate} and is now overdue.`,
     });
