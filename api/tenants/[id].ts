@@ -54,8 +54,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   } catch (error: any) {
     console.error('Error deleting tenant:', error);
     return res.status(500).json({ 
-      error: 'Failed to delete tenant',
-      message: error.message 
+      error: 'Failed to delete tenant'
     });
   }
 });
