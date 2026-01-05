@@ -17,6 +17,30 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+// Helper function to safely format dates
+const formatPaymentDate = (paidDate: string | Date | null | undefined, createdAt: string | Date | null | undefined): string => {
+  const dateValue = paidDate || createdAt;
+  if (!dateValue) return 'Unknown date';
+  
+  try {
+    const date = new Date(dateValue);
+    if (isNaN(date.getTime())) return 'Invalid date';
+    return date.toLocaleDateString();
+  } catch {
+    return 'Invalid date';
+  }
+};
+
+// Helper function to safely format amounts
+const formatPaymentAmount = (amount: string | number | null | undefined): string => {
+  if (amount === null || amount === undefined) return '0.00';
+  
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(numAmount) || !isFinite(numAmount)) return '0.00';
+  
+  return numAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 // Extended payment type with relations
 type PaymentWithRelations = Payment & {
   tenant?: {
@@ -242,10 +266,10 @@ export default function PaymentHistory({ payments, loading, onViewPayment, onEdi
                       {getPaymentTypeBadge(payment.paymentType || 'other')}
                     </td>
                     <td className="py-4 px-6">
-                      {new Date(payment.paidDate || payment.createdAt!).toLocaleDateString()}
+                      {formatPaymentDate(payment.paidDate, payment.createdAt)}
                     </td>
                     <td className="py-4 px-6 font-semibold">
-                      KES {parseFloat(payment.amount).toLocaleString()}
+                      KES {formatPaymentAmount(payment.amount)}
                     </td>
                     <td className="py-4 px-6">
                       <span className="capitalize">{payment.paymentMethod || "N/A"}</span>
@@ -302,7 +326,7 @@ export default function PaymentHistory({ payments, loading, onViewPayment, onEdi
             <AlertDialogTitle>Delete Payment Record</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete this payment of{" "}
-              <strong>KES {paymentToDelete ? parseFloat(paymentToDelete.amount).toLocaleString() : 0}</strong>
+              <strong>KES {formatPaymentAmount(paymentToDelete?.amount)}</strong>
               {paymentToDelete?.tenant && (
                 <> for {paymentToDelete.tenant.firstName} {paymentToDelete.tenant.lastName}</>
               )}?

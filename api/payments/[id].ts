@@ -5,22 +5,17 @@ import { createDbConnection } from '../_lib/db.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   const sql = createDbConnection();
+  const paymentIdParam = req.query.id;
+  
+  // Validate and extract paymentId early
+  if (!paymentIdParam || Array.isArray(paymentIdParam)) {
+    return res.status(400).json({ error: 'Payment ID is required' });
+  }
+  
+  const paymentId = paymentIdParam;
 
   try {
     if (req.method === 'DELETE') {
-      const paymentIdParam = req.query.id;
-
-      // Validate paymentId parameter
-      if (!paymentIdParam) {
-        return res.status(400).json({ error: 'Payment ID is required' });
-      }
-
-      // Handle array case - reject multiple IDs
-      if (Array.isArray(paymentIdParam)) {
-        return res.status(400).json({ error: 'Multiple payment IDs not supported' });
-      }
-
-      const paymentId: string = paymentIdParam;
 
       // Use a transaction to prevent race conditions
       await sql.begin(async (tx) => {
@@ -60,8 +55,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       return res.status(405).json({ error: 'Method not allowed' });
     }
   } catch (error: any) {
-    console.error('Error deleting payment:', error);
-    
+    console.error('Error deleting payment:', {
+      paymentId,
+      errorMessage: error.message,
+      errorCode: error.code,
+    });
     // Handle specific transaction errors
     if (error.message === 'PAYMENT_NOT_FOUND') {
       return res.status(404).json({ error: 'Payment not found or unauthorized' });
