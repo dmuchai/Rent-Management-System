@@ -34,14 +34,14 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
   const { toast } = useToast();
 
   const resendInvitationMutation = useMutation({
-    mutationFn: async (tenantId: string) => {
+    mutationFn: async ({ tenantId, tenantEmail }: { tenantId: string; tenantEmail: string }) => {
       setResendingTenantId(tenantId);
       return await apiRequest("POST", "/api/invitations/resend", { tenantId });
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: any, variables) => {
       toast({
         title: "Invitation Resent! 📧",
-        description: `Invitation email sent to ${data.email}`,
+        description: `Invitation email sent to ${variables.tenantEmail}`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
       setResendingTenantId(null);
@@ -109,7 +109,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
   };
 
   const handleResendInvitation = (tenant: Tenant) => {
-    resendInvitationMutation.mutate(tenant.id);
+    resendInvitationMutation.mutate({ tenantId: tenant.id, tenantEmail: tenant.email });
   };
 
   const handleEdit = (tenant: Tenant) => {

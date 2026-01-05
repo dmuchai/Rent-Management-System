@@ -3,6 +3,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Eye, Pencil, Trash2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Lease, Tenant, Unit, Property } from "@/../../shared/schema";
 
 // Extended lease type with relations for component usage
@@ -15,9 +29,36 @@ interface LeaseTableProps {
   leases: LeaseWithRelations[];
   loading: boolean;
   onEditLease?: (lease: LeaseWithRelations) => void;
+  onViewLease?: (lease: LeaseWithRelations) => void;
 }
 
-export default function LeaseTable({ leases, loading, onEditLease }: LeaseTableProps) {
+export default function LeaseTable({ leases, loading, onEditLease, onViewLease }: LeaseTableProps) {
+  const [leaseToDelete, setLeaseToDelete] = useState<LeaseWithRelations | null>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const deleteLeaseMutation = useMutation({
+    mutationFn: async (leaseId: string) => {
+      return await apiRequest("DELETE", `/api/leases/${leaseId}`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Lease Deleted",
+        description: "Lease agreement has been successfully removed",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/leases"] });
+      setLeaseToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete lease",
+        variant: "destructive",
+      });
+      setLeaseToDelete(null);
+    },
+  });
+
   if (loading) {
     return (
       <Card>
@@ -143,16 +184,37 @@ export default function LeaseTable({ leases, loading, onEditLease }: LeaseTableP
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      {onEditLease && (
+                      {onViewLease && (
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          onClick={() => onEditLease(lease)}
+                          onClick={() => onViewLease(lease)}
+                          title="View lease details"
+                          className="hover:bg-green-100 hover:text-green-700"
                         >
-                          <i className="fas fa-edit mr-1"></i>
-                          Edit
+                          <Eye className="h-4 w-4" />
                         </Button>
                       )}
+                      {onEditLease && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onEditLease(lease)}
+                          title="Edit lease"
+                          className="hover:bg-yellow-100 hover:text-yellow-700"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setLeaseToDelete(lease)}
+                        title="Delete lease"
+                        className="hover:bg-red-100 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -160,6 +222,34 @@ export default function LeaseTable({ leases, loading, onEditLease }: LeaseTableP
             })}
           </TableBody>
         </Table>
+
+        <AlertDialog open={!!leaseToDelete} onOpenChange={() => setLeaseToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Lease Agreement</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete the lease for{" "}
+                {leaseToDelete?.tenant ? 
+                  [leaseToDelete.tenant.firstName, leaseToDelete.tenant.lastName]
+                    .filter(Boolean)
+                    .join(' ')
+                  : 'this tenant'
+                }?
+                <br /><br />
+                This action cannot be undone and will remove all lease data.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => leaseToDelete && deleteLeaseMutation.mutate(leaseToDelete.id)}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

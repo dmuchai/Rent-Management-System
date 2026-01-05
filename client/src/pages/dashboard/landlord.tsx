@@ -749,6 +749,10 @@ export default function LandlordDashboard() {
             <LeaseTable 
               leases={leases} 
               loading={leasesLoading}
+              onViewLease={(lease) => {
+                setEditingLease(lease);
+                setIsLeaseFormOpen(true);
+              }}
               onEditLease={(lease) => {
                 setEditingLease(lease);
                 setIsLeaseFormOpen(true);
