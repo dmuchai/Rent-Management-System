@@ -68,9 +68,7 @@ export class EmailService {
 
   async sendEmail(options: EmailOptions): Promise<void> {
     if (!this.brevoApiKey) {
-      console.warn('Brevo API key not configured. Email not sent.');
-      console.log('Would have sent email to:', options.to, 'Subject:', options.subject);
-      return;
+      throw new Error('Brevo API key not configured. Please set BREVO_API_KEY environment variable.');
     }
 
     try {
