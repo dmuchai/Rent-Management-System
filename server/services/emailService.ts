@@ -111,13 +111,13 @@ export class EmailService {
           errorData = await response.text();
         }
         console.error('Brevo API error:', errorData);
-        throw new Error(`Failed to send email via Brevo: ${response.statusText}`);
+        throw new Error(`Failed to send email via Brevo: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
       }
 
       console.log('✅ Email sent successfully to:', options.to);
     } catch (error) {
       console.error('Failed to send email:', error);
-      throw new Error('Failed to send email');
+      throw new Error(`Failed to send email: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
