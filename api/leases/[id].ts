@@ -4,13 +4,14 @@ import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
+  // Validate method before creating DB connection
+  if (req.method !== 'DELETE') {
+    return res.status(405).json({ error: 'Method not allowed', details: null });
+  }
+
   const sql = createDbConnection();
   
   try {
-    if (req.method !== 'DELETE') {
-      return res.status(405).json({ error: 'Method not allowed', details: null });
-    }
-
     const leaseIdParam = req.query.id;
 
     // Validate leaseId parameter
