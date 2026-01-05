@@ -22,22 +22,20 @@ interface TenantDetailsModalProps {
 }
 
 export default function TenantDetailsModal({ open, onOpenChange, tenant }: TenantDetailsModalProps) {
-  if (!tenant) return null;
-
   // Fetch tenant's leases
   const { data: leases = [], isLoading: leasesLoading } = useQuery<Lease[]>({
-    queryKey: ["/api/leases", tenant.id],
+    queryKey: ["/api/leases", tenant?.id],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/leases");
       const allLeases = await response.json();
-      return allLeases.filter((lease: Lease) => lease.tenantId === tenant.id);
+      return allLeases.filter((lease: Lease) => lease.tenantId === tenant?.id);
     },
     enabled: open && !!tenant,
   });
 
   // Fetch tenant's payments (via leases)
   const { data: payments = [], isLoading: paymentsLoading } = useQuery<Payment[]>({
-    queryKey: ["/api/payments", tenant.id, leases],
+    queryKey: ["/api/payments", tenant?.id, leases],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/payments");
       const allPayments = await response.json();
@@ -77,6 +75,7 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
 
   // Get status badge
   const getStatusBadge = () => {
+    if (!tenant) return null;
     const status = tenant.accountStatus || 'pending_invitation';
     
     switch (status) {
@@ -130,7 +129,8 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      {!tenant ? null : (
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start justify-between">
             <div>
@@ -435,6 +435,7 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
           </TabsContent>
         </Tabs>
       </DialogContent>
+      )}
     </Dialog>
   );
 }
