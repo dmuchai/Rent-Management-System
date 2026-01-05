@@ -55,6 +55,9 @@ export default function PropertyGrid({ properties, units, loading, onAddProperty
       filtered = filtered.filter(property => property.propertyType === filterType);
     }
 
+    // Create shallow copy before sorting to avoid mutating original array
+    filtered = [...filtered];
+
     // Sort
     filtered.sort((a, b) => {
       switch (sortBy) {
