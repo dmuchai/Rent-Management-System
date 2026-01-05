@@ -7,6 +7,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import StatsCard from "@/components/dashboard/StatsCard";
 import PropertyCard from "@/components/properties/PropertyCard";
+import PropertyGrid from "@/components/properties/PropertyGrid";
 import PropertyForm from "@/components/properties/PropertyForm";
 import TenantForm from "@/components/tenants/TenantForm";
 import TenantTable from "@/components/tenants/TenantTable";
@@ -245,6 +246,16 @@ export default function LandlordDashboard() {
     queryKey: ["/api/maintenance-requests"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/maintenance-requests");
+      return await response.json();
+    },
+    retry: false,
+  });
+
+  // Fetch all units for property statistics
+  const { data: units = [] } = useQuery({
+    queryKey: ["/api/units"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/units");
       return await response.json();
     },
     retry: false,
@@ -812,38 +823,12 @@ export default function LandlordDashboard() {
           </div>
         );      case "properties":
         return (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <h2 className="text-xl font-semibold">Properties</h2>
-              <button 
-                onClick={() => setIsPropertyFormOpen(true)}
-                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors w-full sm:w-auto"
-                data-testid="button-addproperty"
-              >
-                <i className="fas fa-plus mr-2"></i>Add Property
-              </button>
-            </div>
-
-            {propertiesLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-              </div>
-            ) : properties.length === 0 ? (
-              <div className="text-center py-12">
-                <i className="fas fa-building text-4xl text-muted-foreground mb-4"></i>
-                <p className="text-muted-foreground text-lg" data-testid="text-noproperties">
-                  No properties added yet
-                </p>
-                <p className="text-muted-foreground">Add your first property to get started</p>
-              </div>
-            ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {properties.map((property: any) => (
-                  <PropertyCard key={property.id} property={property} />
-                ))}
-              </div>
-            )}
-          </div>
+          <PropertyGrid 
+            properties={properties}
+            units={units}
+            loading={propertiesLoading}
+            onAddProperty={() => setIsPropertyFormOpen(true)}
+          />
         );
 
       case "tenants":
