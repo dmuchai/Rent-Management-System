@@ -8,6 +8,18 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   const sql = createDbConnection();
   try {
     if (req.method === 'GET') {
+      // Auto-expire leases that have passed their end date
+      await sql`
+        UPDATE public.leases l
+        SET is_active = false, updated_at = NOW()
+        FROM public.units u
+        INNER JOIN public.properties p ON u.property_id = p.id
+        WHERE l.unit_id = u.id
+        AND p.owner_id = ${auth.userId}
+        AND l.is_active = true
+        AND l.end_date < NOW()
+      `;
+
       // Get all leases for landlord's properties with tenant and unit details
       const leases = await sql`
         SELECT 

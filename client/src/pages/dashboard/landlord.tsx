@@ -12,6 +12,7 @@ import TenantForm from "@/components/tenants/TenantForm";
 import TenantTable from "@/components/tenants/TenantTable";
 import LeaseForm from "@/components/leases/LeaseForm";
 import LeaseTable from "@/components/leases/LeaseTable";
+import LeaseDetailsModal from "@/components/leases/LeaseDetailsModal";
 import PaymentHistory from "@/components/payments/PaymentHistory";
 import DocumentManager from "@/components/documents/DocumentManager";
 import ReportGenerator from "@/components/reports/ReportGenerator";
@@ -78,6 +79,7 @@ export default function LandlordDashboard() {
   const [isPropertyFormOpen, setIsPropertyFormOpen] = useState(false);
   const [isTenantFormOpen, setIsTenantFormOpen] = useState(false);
   const [isLeaseFormOpen, setIsLeaseFormOpen] = useState(false);
+  const [isLeaseDetailsOpen, setIsLeaseDetailsOpen] = useState(false);
   const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
   const [isPasswordChangeOpen, setIsPasswordChangeOpen] = useState(false);
   const [isPaymentFormOpen, setIsPaymentFormOpen] = useState(false);
@@ -86,6 +88,7 @@ export default function LandlordDashboard() {
   
   // State for editing leases
   const [editingLease, setEditingLease] = useState<Lease | null>(null);
+  const [viewingLease, setViewingLease] = useState<Lease | null>(null);
 
   // Form state for profile editing
   const [profileForm, setProfileForm] = useState({
@@ -628,11 +631,11 @@ export default function LandlordDashboard() {
                           key={lease.id} 
                           className={`flex items-center justify-between p-3 rounded-lg ${isUrgent ? 'bg-red-100 border border-red-200' : 'bg-white border border-yellow-200'}`}
                         >
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-3 flex-1">
                             <div className={`w-10 h-10 ${isUrgent ? 'bg-red-200' : 'bg-yellow-200'} rounded-full flex items-center justify-center`}>
                               <i className={`fas fa-${isUrgent ? 'exclamation' : 'clock'} ${isUrgent ? 'text-red-600' : 'text-yellow-600'}`}></i>
                             </div>
-                            <div>
+                            <div className="flex-1">
                               <p className="font-medium text-sm">
                                 {lease.tenant.firstName} {lease.tenant.lastName}
                               </p>
@@ -641,13 +644,38 @@ export default function LandlordDashboard() {
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <Badge variant={isUrgent ? "destructive" : "secondary"} className="mb-1">
-                              {daysUntilExpiry} {daysUntilExpiry === 1 ? 'day' : 'days'} left
-                            </Badge>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(lease.endDate).toLocaleDateString()}
-                            </p>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <Badge variant={isUrgent ? "destructive" : "secondary"} className="mb-1">
+                                {daysUntilExpiry} {daysUntilExpiry === 1 ? 'day' : 'days'} left
+                              </Badge>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(lease.endDate).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="bg-white hover:bg-blue-50 border-blue-300 text-blue-700"
+                              onClick={() => {
+                                // Find the full lease object from leases array
+                                const fullLease = leases.find((l: any) => l.id === lease.id);
+                                if (fullLease) {
+                                  // Pre-fill form for renewal (new lease with same tenant/unit)
+                                  const renewalLease = {
+                                    ...fullLease,
+                                    id: undefined, // Remove ID for new lease
+                                    startDate: new Date(lease.endDate), // Start after current lease ends
+                                    endDate: new Date(new Date(lease.endDate).setFullYear(new Date(lease.endDate).getFullYear() + 1)), // Add 1 year
+                                  };
+                                  setEditingLease(renewalLease as any);
+                                  setIsLeaseFormOpen(true);
+                                }
+                              }}
+                            >
+                              <i className="fas fa-sync-alt mr-1"></i>
+                              Renew
+                            </Button>
                           </div>
                         </div>
                       );
@@ -659,7 +687,7 @@ export default function LandlordDashboard() {
                     onClick={() => setActiveSection("leases")}
                   >
                     <i className="fas fa-file-contract mr-2"></i>
-                    Manage Leases
+                    Manage All Leases
                   </Button>
                 </CardContent>
               </Card>
@@ -861,8 +889,8 @@ export default function LandlordDashboard() {
               leases={leases} 
               loading={leasesLoading}
               onViewLease={(lease) => {
-                setEditingLease(lease);
-                setIsLeaseFormOpen(true);
+                setViewingLease(lease);
+                setIsLeaseDetailsOpen(true);
               }}
               onEditLease={(lease) => {
                 setEditingLease(lease);
@@ -1106,6 +1134,18 @@ export default function LandlordDashboard() {
           }
         }}
         lease={editingLease || undefined}
+      />
+
+      {/* Lease Details Modal */}
+      <LeaseDetailsModal
+        open={isLeaseDetailsOpen}
+        onOpenChange={(open) => {
+          setIsLeaseDetailsOpen(open);
+          if (!open) {
+            setViewingLease(null);
+          }
+        }}
+        lease={viewingLease}
       />
 
       {/* Edit Profile Modal */}
