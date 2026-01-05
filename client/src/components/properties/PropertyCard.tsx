@@ -3,7 +3,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Property } from "@shared/schema";
 import PropertyDetailsModal from "@/components/units/PropertyDetailsModal";
-import { Home, MapPin, TrendingUp } from "lucide-react";
+import PropertyForm from "./PropertyForm";
+import { Home, MapPin, TrendingUp, Edit, Trash2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface PropertyCardProps {
   property: Property;
@@ -14,7 +28,34 @@ interface PropertyCardProps {
 
 export default function PropertyCard({ property, occupancyRate = 0, occupiedCount = 0, availableCount = 0 }: PropertyCardProps) {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const defaultImage = "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300";
+
+  const deletePropertyMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", `/api/properties?id=${property.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({
+        title: "Property Deleted",
+        description: "Property has been successfully removed",
+      });
+      setShowDeleteDialog(false);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete property",
+        variant: "destructive",
+      });
+      setShowDeleteDialog(false);
+    },
+  });
 
   // Get occupancy badge color
   const getOccupancyBadge = () => {
@@ -98,9 +139,21 @@ export default function PropertyCard({ property, occupancyRate = 0, occupiedCoun
           <Button 
             variant="outline" 
             size="sm"
+            onClick={() => setShowEditForm(true)}
             data-testid={`button-edit-property-${property.id}`}
+            title="Edit property"
           >
-            <i className="fas fa-edit"></i>
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowDeleteDialog(true)}
+            data-testid={`button-delete-property-${property.id}`}
+            className="hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+            title="Delete property"
+          >
+            <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -111,6 +164,34 @@ export default function PropertyCard({ property, occupancyRate = 0, occupiedCoun
         onOpenChange={setShowDetailsModal}
         propertyId={property.id}
       />
+
+      {/* Edit Property Form */}
+      <PropertyForm
+        open={showEditForm}
+        onOpenChange={setShowEditForm}
+        property={property}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Property</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{property.name}"? This action cannot be undone and will remove all associated units and data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletePropertyMutation.mutate()}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

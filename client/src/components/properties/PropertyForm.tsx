@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -48,6 +48,20 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
     },
   });
 
+  // Reset form when property changes or dialog opens
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        name: property?.name || "",
+        address: property?.address || "",
+        propertyType: property?.propertyType || "",
+        totalUnits: property?.totalUnits || 1,
+        description: property?.description || "",
+        imageUrl: property?.imageUrl || "",
+      });
+    }
+  }, [property, open, form]);
+
   const mutation = useMutation({
     mutationFn: async (data: InsertProperty) => {
       const url = isEdit ? `/api/properties?id=${property.id}` : "/api/properties";
@@ -56,6 +70,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       toast({
         title: "Success",
         description: isEdit 
