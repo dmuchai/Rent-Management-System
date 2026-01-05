@@ -37,6 +37,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           throw new Error('PAYMENT_NOT_FOUND');
         }
 
+        // Prevent deletion of completed payments
+        if (payment.status === 'completed') {
+          throw new Error('PAYMENT_COMPLETED');
+        }
+
         // Delete the payment
         await tx`
           DELETE FROM public.payments
