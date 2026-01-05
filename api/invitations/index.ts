@@ -165,29 +165,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      await sql.begin(async (sql) => {
-        await sql`
-          INSERT INTO public.users (id, email, first_name, last_name, role)
-          VALUES (
-            ${authData.user.id},
-            ${tenant.email},
-            ${tenant.first_name},
-            ${tenant.last_name},
-            'tenant'
-          )
-          ON CONFLICT (id) DO NOTHING
-        `;
+      // Wrap DB transaction to ensure auth user cleanup on failure
+      try {
+        await sql.begin(async (sql) => {
+          await sql`
+            INSERT INTO public.users (id, email, first_name, last_name, role)
+            VALUES (
+              ${authData.user.id},
+              ${tenant.email},
+              ${tenant.first_name},
+              ${tenant.last_name},
+              'tenant'
+            )
+            ON CONFLICT (id) DO NOTHING
+          `;
 
-        await sql`
-          UPDATE public.tenants
-          SET 
-            user_id = ${authData.user.id},
-            invitation_accepted_at = NOW(),
-            account_status = 'active',
-            invitation_token = NULL
-          WHERE id = ${tenant.id}
-        `;
-      });
+          await sql`
+            UPDATE public.tenants
+            SET 
+              user_id = ${authData.user.id},
+              invitation_accepted_at = NOW(),
+              account_status = 'active',
+              invitation_token = NULL
+            WHERE id = ${tenant.id}
+          `;
+        });
+      } catch (dbError) {
+        // Database transaction failed - cleanup orphaned auth user
+        console.error('Database transaction failed, cleaning up auth user:', dbError);
+        try {
+          await adminSupabase.auth.admin.deleteUser(authData.user.id);
+          console.log(`Deleted orphaned auth user: ${authData.user.id}`);
+        } catch (deleteError) {
+          console.error('Failed to delete orphaned auth user:', deleteError);
+          // Log but continue to throw original error
+        }
+        
+        return res.status(500).json({ 
+          error: 'Account creation failed',
+          message: 'Failed to complete account setup. Please try again.'
+        });
+      }
 
       return res.status(201).json({
         message: 'Account created successfully',
