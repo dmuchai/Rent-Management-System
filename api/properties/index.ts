@@ -70,13 +70,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
         const propertyData = insertPropertySchema.partial().parse(req.body);
         
+        // Auto-calculate totalUnits from actual units count
+        const unitsCountResult = await sql`
+          SELECT COUNT(*)::int as count FROM public.units WHERE property_id = ${id}
+        `;
+        const totalUnits = unitsCountResult[0]?.count || 0;
+        
         const [updatedProperty] = await sql`
           UPDATE public.properties 
           SET 
             name = COALESCE(${propertyData.name || null}, name),
             address = COALESCE(${propertyData.address || null}, address),
             property_type = COALESCE(${propertyData.propertyType || null}, property_type),
-            total_units = COALESCE(${propertyData.totalUnits || null}, total_units),
+            total_units = ${totalUnits},
             description = COALESCE(${propertyData.description !== undefined ? propertyData.description : null}, description),
             image_url = COALESCE(${propertyData.imageUrl !== undefined ? propertyData.imageUrl : null}, image_url),
             updated_at = NOW()
@@ -120,16 +126,16 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         console.log('Request body:', JSON.stringify(req.body, null, 2));
         console.log('Auth userId:', auth.userId);
         
-        const { name, address, propertyType, totalUnits, description, imageUrl } = req.body;
+        const { name, address, propertyType, description, imageUrl } = req.body;
         
-        // Validate required fields
-        if (!name || !address || !propertyType || !totalUnits) {
+        // Validate required fields (totalUnits removed - will default to 0)
+        if (!name || !address || !propertyType) {
           return res.status(400).json({ message: 'Missing required fields' });
         }
         
         console.log('Creating property with raw SQL');
         
-        // Use raw SQL to insert property
+        // Use raw SQL to insert property with totalUnits = 0 (will update when units are added)
         const newProperties = await sql`
           INSERT INTO public.properties (
             name, address, property_type, total_units, description, image_url, owner_id, created_at, updated_at
@@ -138,7 +144,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
             ${name},
             ${address},
             ${propertyType},
-            ${parseInt(totalUnits)},
+            0,
             ${description || null},
             ${imageUrl || null},
             ${auth.userId},

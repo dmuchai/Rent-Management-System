@@ -41,6 +41,10 @@
       "destination": "/api/leases/[id]"
     },
     {
+      "source": "/api/units/:id",
+      "destination": "/api/units/[id]"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

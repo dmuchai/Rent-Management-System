@@ -251,6 +251,7 @@ export const insertPropertySchema = createInsertSchema(properties).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  totalUnits: true, // Auto-calculated from units count
 });
 
 export const insertUnitSchema = createInsertSchema(units).omit({

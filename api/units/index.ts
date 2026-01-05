@@ -89,6 +89,14 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           )
           RETURNING *
         `;
+        
+        // Auto-sync property totalUnits
+        await sql`
+          UPDATE public.properties 
+          SET total_units = (SELECT COUNT(*)::int FROM public.units WHERE property_id = ${unitData.propertyId})
+          WHERE id = ${unitData.propertyId}
+        `;
+        
         // Transform to camelCase for frontend
         const transformedUnit = {
           id: unit.id,

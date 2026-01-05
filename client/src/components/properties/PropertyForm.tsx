@@ -6,6 +6,7 @@ import { insertPropertySchema, type InsertProperty } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { supabase } from "@/lib/supabase";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Upload, X } from "lucide-react";
 
 interface PropertyFormProps {
   open: boolean;
@@ -35,6 +37,8 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEdit = !!property;
+  const [uploading, setUploading] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(property?.imageUrl || null);
 
   const form = useForm<InsertProperty>({
     resolver: zodResolver(insertPropertySchema.omit({ ownerId: true })),
@@ -42,7 +46,6 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
       name: property?.name || "",
       address: property?.address || "",
       propertyType: property?.propertyType || "",
-      totalUnits: property?.totalUnits || 1,
       description: property?.description || "",
       imageUrl: property?.imageUrl || "",
     },
@@ -55,12 +58,60 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
         name: property?.name || "",
         address: property?.address || "",
         propertyType: property?.propertyType || "",
-        totalUnits: property?.totalUnits || 1,
         description: property?.description || "",
         imageUrl: property?.imageUrl || "",
       });
+      setImagePreview(property?.imageUrl || null);
     }
   }, [property, open, form]);
+
+  const handleImageUpload = async (file: File) => {
+    try {
+      setUploading(true);
+      
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `property-images/${fileName}`;
+      
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('property-images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (error) throw error;
+      
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('property-images')
+        .getPublicUrl(filePath);
+      
+      form.setValue('imageUrl', publicUrl);
+      setImagePreview(publicUrl);
+      
+      toast({
+        title: "Success",
+        description: "Image uploaded successfully",
+      });
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast({
+        title: "Error",
+        description: "Failed to upload image",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleImageRemove = () => {
+    form.setValue('imageUrl', '');
+    setImagePreview(null);
+  };
 
   const mutation = useMutation({
     mutationFn: async (data: InsertProperty) => {
@@ -154,7 +205,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Property Type</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-property-type">
                           <SelectValue placeholder="Select type" />
@@ -168,26 +219,6 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
                         <SelectItem value="commercial">Commercial</SelectItem>
                       </SelectContent>
                     </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="totalUnits"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Total Units</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        min="1"
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
-                        data-testid="input-total-units"
-                      />
-                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -218,14 +249,51 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
               name="imageUrl"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Image URL (Optional)</FormLabel>
+                  <FormLabel>Property Image (Optional)</FormLabel>
                   <FormControl>
-                    <Input 
-                      placeholder="https://example.com/image.jpg" 
-                      {...field}
-                      value={field.value || ""}
-                      data-testid="input-property-image"
-                    />
+                    <div className="space-y-4">
+                      {imagePreview ? (
+                        <div className="relative">
+                          <img
+                            src={imagePreview}
+                            alt="Property preview"
+                            className="w-full h-48 object-cover rounded-lg"
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-2 right-2"
+                            onClick={handleImageRemove}
+                            disabled={uploading}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                          <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Click to upload an image
+                          </p>
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleImageUpload(file);
+                            }}
+                            disabled={uploading}
+                            className="cursor-pointer"
+                          />
+                          {uploading && (
+                            <p className="text-sm text-muted-foreground mt-2">
+                              Uploading...
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
