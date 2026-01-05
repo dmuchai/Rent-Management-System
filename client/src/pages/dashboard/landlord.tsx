@@ -252,7 +252,7 @@ export default function LandlordDashboard() {
   });
 
   // Fetch all units for property statistics
-  const { data: units = [] } = useQuery({
+  const { data: units = [], isLoading: unitsLoading } = useQuery({
     queryKey: ["/api/units"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/units");
@@ -270,8 +270,8 @@ export default function LandlordDashboard() {
   useRealtimeSubscription("leases", ["/api/leases", "/api/dashboard/stats"]);
   // Payments changes affect both endpoints
   useRealtimeSubscription("payments", ["/api/payments", "/api/dashboard/stats"]);
-  // Units changes don't affect stats, just the units endpoint
-  useRealtimeSubscription("units", ["/api/units"]);
+  // Units changes affect both units endpoint and dashboard stats (totalUnits, occupiedUnits)
+  useRealtimeSubscription("units", ["/api/units", "/api/dashboard/stats"]);
 
   // Profile update mutation
   const profileUpdateMutation = useMutation({
@@ -826,7 +826,7 @@ export default function LandlordDashboard() {
           <PropertyGrid 
             properties={properties}
             units={units}
-            loading={propertiesLoading}
+            loading={propertiesLoading || unitsLoading}
             onAddProperty={() => setIsPropertyFormOpen(true)}
           />
         );
