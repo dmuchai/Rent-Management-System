@@ -477,7 +477,7 @@ export default function LandlordDashboard() {
                 value={`${dashboardStats?.occupancyRate || 0}%`}
                 subtitle={`${dashboardStats?.occupiedUnits || 0}/${dashboardStats?.totalUnits || 0} occupied`}
                 icon="fas fa-chart-pie"
-                color="chart-3"
+                color="chart-2"
                 loading={statsLoading}
                 data-testid="stat-occupancy"
               />

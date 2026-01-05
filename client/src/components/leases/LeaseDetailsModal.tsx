@@ -52,6 +52,11 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
     const startDate = new Date(lease.startDate);
     const endDate = new Date(lease.endDate);
 
+    // Handle invalid dates
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return { label: "Unknown", color: "bg-gray-100 text-gray-700", variant: "secondary" as const };
+    }
+
     if (!lease.isActive) {
       return { label: "Inactive", color: "bg-gray-100 text-gray-700", variant: "secondary" as const };
     }
@@ -83,6 +88,17 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
         .join(' ')
         .trim() || 'Unknown tenant'
     : 'Unknown tenant';
+
+  // Safely parse monetary values with fallback to 0
+  const safeMonthlyRent = (() => {
+    const parsed = parseFloat(lease.monthlyRent as any);
+    return isNaN(parsed) ? 0 : parsed;
+  })();
+
+  const safeSecurityDeposit = (() => {
+    const parsed = parseFloat((lease.securityDeposit as any) || '0');
+    return isNaN(parsed) ? 0 : parsed;
+  })();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -127,7 +143,7 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
                 <CardTitle className="text-sm font-medium text-muted-foreground">Monthly Rent</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">KES {parseFloat(lease.monthlyRent).toLocaleString()}</p>
+                <p className="text-2xl font-bold">KES {safeMonthlyRent.toLocaleString()}</p>
               </CardContent>
             </Card>
             
@@ -136,7 +152,7 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
                 <CardTitle className="text-sm font-medium text-muted-foreground">Security Deposit</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">KES {parseFloat(lease.securityDeposit || '0').toLocaleString()}</p>
+                <p className="text-2xl font-bold">KES {safeSecurityDeposit.toLocaleString()}</p>
               </CardContent>
             </Card>
             
@@ -283,22 +299,29 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {payments.map((payment: any) => (
-                          <TableRow key={payment.id}>
-                            <TableCell>
-                              {formatDate(payment.paidDate || payment.createdAt)}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              KES {parseFloat(payment.amount).toLocaleString()}
-                            </TableCell>
-                            <TableCell>{payment.paymentMethod || '—'}</TableCell>
-                            <TableCell>
-                              <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'}>
-                                {payment.status}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {payments.map((payment: any) => {
+                          const safeAmount = (() => {
+                            const parsed = parseFloat(payment.amount);
+                            return isNaN(parsed) ? 0 : parsed;
+                          })();
+                          
+                          return (
+                            <TableRow key={payment.id}>
+                              <TableCell>
+                                {formatDate(payment.paidDate || payment.createdAt)}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                KES {safeAmount.toLocaleString()}
+                              </TableCell>
+                              <TableCell>{payment.paymentMethod || '—'}</TableCell>
+                              <TableCell>
+                                <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'}>
+                                  {payment.status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   )}
