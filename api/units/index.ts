@@ -66,7 +66,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     } else if (req.method === 'POST') {
       const unitData = insertUnitSchema.parse(req.body);
 
-      // Verify property ownership
+      // Verify property ownership before transaction
       const properties = await sql`
         SELECT * FROM public.properties WHERE id = ${unitData.propertyId}
       `;
@@ -75,8 +75,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(404).json({ message: 'Property not found' });
       } else if (properties[0].owner_id !== auth.userId) {
         return res.status(403).json({ message: 'Access denied' });
-      } else {
-        const [unit] = await sql`
+      }
+
+      // Use a transaction to ensure atomicity and prevent race conditions
+      const result = await sql.begin(async (tx) => {
+        // Lock the property row to prevent concurrent unit insertions
+        await tx`
+          SELECT id FROM public.properties 
+          WHERE id = ${unitData.propertyId} 
+          FOR UPDATE
+        `;
+
+        // Insert the unit
+        const [unit] = await tx`
           INSERT INTO public.units (property_id, unit_number, bedrooms, bathrooms, size, rent_amount, is_occupied)
           VALUES (
             ${unitData.propertyId},
@@ -90,28 +101,30 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           RETURNING *
         `;
         
-        // Auto-sync property totalUnits
-        await sql`
+        // Auto-sync property totalUnits (property row is already locked)
+        await tx`
           UPDATE public.properties 
           SET total_units = (SELECT COUNT(*)::int FROM public.units WHERE property_id = ${unitData.propertyId})
           WHERE id = ${unitData.propertyId}
         `;
         
-        // Transform to camelCase for frontend
-        const transformedUnit = {
-          id: unit.id,
-          propertyId: unit.property_id,
-          unitNumber: unit.unit_number,
-          bedrooms: unit.bedrooms,
-          bathrooms: unit.bathrooms,
-          size: unit.size,
-          rentAmount: unit.rent_amount,
-          isOccupied: unit.is_occupied,
-          createdAt: unit.created_at,
-          updatedAt: unit.updated_at
-        };
-        return res.status(201).json(transformedUnit);
-      }
+        return unit;
+      });
+      
+      // Transform to camelCase for frontend
+      const transformedUnit = {
+        id: result.id,
+        propertyId: result.property_id,
+        unitNumber: result.unit_number,
+        bedrooms: result.bedrooms,
+        bathrooms: result.bathrooms,
+        size: result.size,
+        rentAmount: result.rent_amount,
+        isOccupied: result.is_occupied,
+        createdAt: result.created_at,
+        updatedAt: result.updated_at
+      };
+      return res.status(201).json(transformedUnit);
     } else if (req.method === 'PUT') {
       const unitUpdateSchema = z.object({
         id: z.string().min(1, 'Unit ID is required'),
