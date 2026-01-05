@@ -182,12 +182,15 @@ export default function PropertyCard({ property, occupancyRate = 0, occupiedCoun
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletePropertyMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deletePropertyMutation.mutate()}
-              className="bg-red-600 hover:bg-red-700"
+              disabled={deletePropertyMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Delete
+              {deletePropertyMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
