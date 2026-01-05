@@ -83,7 +83,7 @@ export const tenants = pgTable("tenants", {
   phone: varchar("phone").notNull(),
   emergencyContact: varchar("emergency_contact"),
   invitationToken: varchar("invitation_token").unique(),
-  invitationExpiresAt: timestamp("invitation_expires_at"),
+  // invitationExpiresAt: timestamp("invitation_expires_at"), // Not in database - expiration calculated from invitationSentAt + 7 days
   invitationSentAt: timestamp("invitation_sent_at"),
   invitationAcceptedAt: timestamp("invitation_accepted_at"),
   accountStatus: accountStatusEnum("account_status").default("pending_invitation"),
