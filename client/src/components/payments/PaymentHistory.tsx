@@ -105,18 +105,42 @@ export default function PaymentHistory({ payments, loading, onViewPayment, onEdi
   };
 
   const getPaymentTypeBadge = (type: string) => {
-    const typeMap: Record<string, { label: string; color: string }> = {
-      rent: { label: "Rent", color: "bg-blue-100 text-blue-800" },
-      deposit: { label: "Deposit", color: "bg-purple-100 text-purple-800" },
-      utility: { label: "Utility", color: "bg-orange-100 text-orange-800" },
-      maintenance: { label: "Maintenance", color: "bg-cyan-100 text-cyan-800" },
-      late_fee: { label: "Late Fee", color: "bg-red-100 text-red-800" },
-      other: { label: "Other", color: "bg-gray-100 text-gray-800" },
+    const typeMap: Record<string, { label: string; color: string; hover: string }> = {
+      rent: { 
+        label: "Rent", 
+        color: "bg-blue-100 text-blue-800",
+        hover: "hover:bg-blue-100 hover:text-blue-800"
+      },
+      deposit: { 
+        label: "Deposit", 
+        color: "bg-purple-100 text-purple-800",
+        hover: "hover:bg-purple-100 hover:text-purple-800"
+      },
+      utility: { 
+        label: "Utility", 
+        color: "bg-orange-100 text-orange-800",
+        hover: "hover:bg-orange-100 hover:text-orange-800"
+      },
+      maintenance: { 
+        label: "Maintenance", 
+        color: "bg-cyan-100 text-cyan-800",
+        hover: "hover:bg-cyan-100 hover:text-cyan-800"
+      },
+      late_fee: { 
+        label: "Late Fee", 
+        color: "bg-red-100 text-red-800",
+        hover: "hover:bg-red-100 hover:text-red-800"
+      },
+      other: { 
+        label: "Other", 
+        color: "bg-gray-100 text-gray-800",
+        hover: "hover:bg-gray-100 hover:text-gray-800"
+      },
     };
 
     const config = typeMap[type] || typeMap.other;
     return (
-      <Badge variant="secondary" className={`${config.color} hover:${config.color}`}>
+      <Badge variant="secondary" className={`${config.color} ${config.hover}`}>
         {config.label}
       </Badge>
     );
