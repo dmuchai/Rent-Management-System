@@ -28,6 +28,33 @@ export class EmailService {
       .replace(/'/g, '&#039;');
   }
 
+  /**
+   * Validates and sanitizes URLs to prevent unsafe schemes
+   * Only allows http and https protocols
+   * @param url - The URL to validate
+   * @returns Sanitized URL or null if invalid/unsafe
+   */
+  private validateUrl(url: string | undefined): string | null {
+    if (!url || typeof url !== 'string') {
+      return null;
+    }
+
+    try {
+      const parsedUrl = new URL(url);
+      
+      // Only allow http and https protocols
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        console.warn(`Rejected unsafe URL scheme: ${parsedUrl.protocol}`);
+        return null;
+      }
+
+      return parsedUrl.href;
+    } catch (error) {
+      console.warn('Invalid URL provided:', url);
+      return null;
+    }
+  }
+
   async sendEmail(options: EmailOptions): Promise<void> {
     if (!this.brevoApiKey) {
       console.warn('Brevo API key not configured. Email not sent.');
@@ -221,6 +248,9 @@ Need help? Contact us at support@landeeandmoony.com
     const escapedTenantName = this.escapeHtml(tenantName);
     const escapedPropertyName = this.escapeHtml(propertyName);
     const escapedUnitNumber = this.escapeHtml(unitNumber);
+    
+    // Validate payment link to ensure only safe URLs
+    const safePaymentLink = this.validateUrl(paymentLink);
 
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -243,9 +273,9 @@ Need help? Contact us at support@landeeandmoony.com
           <p><strong>Due Date:</strong> ${formattedDate}</p>
         </div>
         
-        ${paymentLink ? `
+        ${safePaymentLink ? `
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${paymentLink}" 
+            <a href="${safePaymentLink}" 
                style="background-color: #3B82F6; color: white; padding: 12px 24px; 
                       text-decoration: none; border-radius: 6px; display: inline-block;">
               Pay Now
@@ -367,6 +397,9 @@ Need help? Contact us at support@landeeandmoony.com
     const escapedTenantName = this.escapeHtml(tenantName);
     const escapedPropertyName = this.escapeHtml(propertyName);
     const escapedUnitNumber = this.escapeHtml(unitNumber);
+    
+    // Validate payment link to ensure only safe URLs
+    const safePaymentLink = this.validateUrl(paymentLink);
 
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -389,9 +422,9 @@ Need help? Contact us at support@landeeandmoony.com
           <p><strong>Original Due Date:</strong> ${formattedDate}</p>
         </div>
         
-        ${paymentLink ? `
+        ${safePaymentLink ? `
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${paymentLink}" 
+            <a href="${safePaymentLink}" 
                style="background-color: #EF4444; color: white; padding: 12px 24px; 
                       text-decoration: none; border-radius: 6px; display: inline-block;">
               Pay Now
