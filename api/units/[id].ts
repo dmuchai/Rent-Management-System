@@ -23,13 +23,14 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
     // Use a transaction to ensure consistency
     const result = await sql.begin(async (tx) => {
-      // Verify the unit belongs to this landlord's property and lock the row
+      // Verify the unit belongs to this landlord's property
+      // Lock BOTH the unit row and the property row to prevent concurrent deletions
       const [unit] = await tx`
         SELECT u.id, u.property_id, p.owner_id
         FROM public.units u
         INNER JOIN public.properties p ON u.property_id = p.id
         WHERE u.id = ${unitId}
-        FOR UPDATE
+        FOR UPDATE OF u, p
       `;
 
       if (!unit) {
@@ -59,7 +60,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         WHERE id = ${unitId}
       `;
       
-      // Auto-sync property totalUnits
+      // Auto-sync property totalUnits (property row is already locked)
       await tx`
         UPDATE public.properties 
         SET total_units = (SELECT COUNT(*)::int FROM public.units WHERE property_id = ${propertyId})
