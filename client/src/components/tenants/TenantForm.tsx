@@ -20,7 +20,6 @@ interface TenantResponse {
   phone: string;
   emergencyContact: string | null;
   userId: string;
-  invitationToken: string;
   invitationSentAt: string | null;
   invitationAcceptedAt: string | null;
   accountStatus: 'pending_invitation' | 'invited' | 'active';

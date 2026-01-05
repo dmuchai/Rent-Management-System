@@ -314,6 +314,8 @@ export type InsertUnit = z.infer<typeof insertUnitSchema>;
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
 export type UpdateTenant = z.infer<typeof updateTenantSchema>;
+// Public tenant type without sensitive fields (for API responses)
+export type PublicTenant = Omit<Tenant, 'invitationToken'>;
 export type Lease = typeof leases.$inferSelect;
 export type InsertLease = z.infer<typeof insertLeaseSchema>;
 export type Payment = typeof payments.$inferSelect;
