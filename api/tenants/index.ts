@@ -17,6 +17,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       const tenants = await sql`
         SELECT 
           t.id,
+          t.landlord_id as "landlordId",
           t.user_id as "userId",
           t.first_name as "firstName",
           t.last_name as "lastName",
@@ -29,7 +30,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           t.created_at as "createdAt",
           t.updated_at as "updatedAt"
         FROM public.tenants t
-        WHERE t.user_id = ${auth.userId}
+        WHERE t.landlord_id = ${auth.userId}
         ORDER BY t.created_at DESC
       `;
       
@@ -43,6 +44,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       // Create tenant without invitation_sent_at (will be set after successful email)
       const [tenant] = await sql`
         INSERT INTO public.tenants (
+          landlord_id,
           user_id, 
           first_name, 
           last_name, 
@@ -54,6 +56,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         )
         VALUES (
           ${auth.userId},
+          NULL,
           ${tenantData.firstName}, 
           ${tenantData.lastName}, 
           ${tenantData.email}, 
@@ -91,6 +94,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           WHERE id = ${tenant.id}
           RETURNING 
             id,
+            landlord_id as "landlordId",
             user_id as "userId",
             first_name as "firstName",
             last_name as "lastName",
@@ -112,7 +116,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         // Note: invitationToken excluded from response for security
         const sanitizedTenant = {
           id: tenant.id,
-          userId: auth.userId,
+          landlordId: auth.userId,
+          userId: null,
           firstName: tenant.first_name,
           lastName: tenant.last_name,
           email: tenant.email,

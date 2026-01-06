@@ -76,6 +76,7 @@ export const accountStatusEnum = pgEnum("account_status", [
 // Tenants table
 export const tenants = pgTable("tenants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  landlordId: varchar("landlord_id").notNull().references(() => users.id),
   userId: varchar("user_id").references(() => users.id),
   firstName: varchar("first_name").notNull(),
   lastName: varchar("last_name").notNull(),

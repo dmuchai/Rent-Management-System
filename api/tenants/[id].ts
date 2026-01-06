@@ -26,7 +26,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       // Verify the tenant belongs to this landlord and lock the row
       const [tenant] = await tx`
         SELECT id FROM public.tenants
-        WHERE id = ${tenantId} AND user_id = ${auth.userId}
+        WHERE id = ${tenantId} AND landlord_id = ${auth.userId}
         FOR UPDATE
       `;
 
@@ -48,7 +48,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       // Delete the tenant
       await tx`
         DELETE FROM public.tenants
-        WHERE id = ${tenantId} AND user_id = ${auth.userId}
+        WHERE id = ${tenantId} AND landlord_id = ${auth.userId}
       `;
     });
 

@@ -293,15 +293,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const tenants = await sql`
-        SELECT t.*, p.landlord_id
+        SELECT t.*
         FROM public.tenants t
-        LEFT JOIN public.leases l ON t.id = l.tenant_id
-        LEFT JOIN public.units u ON l.unit_id = u.id
-        LEFT JOIN public.properties p ON u.property_id = p.id
         WHERE t.id = ${tenantId}
-        AND p.landlord_id = ${user.id}
+        AND t.landlord_id = ${user.id}
         AND t.account_status IN ('pending_invitation', 'invited')
-        LIMIT 1
       `;
 
       if (tenants.length === 0) {
