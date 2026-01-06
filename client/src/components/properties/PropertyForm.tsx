@@ -261,45 +261,74 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
                   <FormControl>
                     <div className="space-y-4">
                       {imagePreview ? (
-                        <div className="relative">
-                          <img
-                            src={imagePreview}
-                            alt="Property preview"
-                            className="w-full h-48 object-cover rounded-lg"
-                          />
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="icon"
-                            className="absolute top-2 right-2"
-                            onClick={handleImageRemove}
-                            disabled={uploading}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <img
+                              src={imagePreview}
+                              alt="Property preview"
+                              className="w-full h-48 object-cover rounded-lg"
+                            />
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              className="absolute top-2 right-2"
+                              onClick={handleImageRemove}
+                              disabled={uploading}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <p className="text-sm text-green-600">
+                            ✓ Image ready. Click "{isEdit ? 'Update' : 'Create'} Property" to save.
+                          </p>
                         </div>
                       ) : (
-                        <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                          <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                          <p className="text-sm text-muted-foreground mb-4">
-                            Click to upload an image
-                          </p>
+                        <>
+                          <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                            <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                            <p className="text-sm text-muted-foreground mb-4">
+                              Click to upload an image
+                            </p>
+                            <Input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleImageUpload(file);
+                              }}
+                              disabled={uploading}
+                              className="cursor-pointer"
+                            />
+                            {uploading && (
+                              <p className="text-sm text-muted-foreground mt-2">
+                                Uploading...
+                              </p>
+                            )}
+                          </div>
+                          <div className="relative">
+                            <div className="absolute inset-0 flex items-center">
+                              <span className="w-full border-t" />
+                            </div>
+                            <div className="relative flex justify-center text-xs uppercase">
+                              <span className="bg-background px-2 text-muted-foreground">
+                                Or paste URL
+                              </span>
+                            </div>
+                          </div>
                           <Input
-                            type="file"
-                            accept="image/*"
+                            type="url"
+                            placeholder="https://example.com/image.jpg"
+                            {...field}
                             onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleImageUpload(file);
+                              field.onChange(e);
+                              if (e.target.value) {
+                                setImagePreview(e.target.value);
+                              }
                             }}
                             disabled={uploading}
-                            className="cursor-pointer"
                           />
-                          {uploading && (
-                            <p className="text-sm text-muted-foreground mt-2">
-                              Uploading...
-                            </p>
-                          )}
-                        </div>
+                        </>
                       )}
                     </div>
                   </FormControl>
