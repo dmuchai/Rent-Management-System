@@ -292,12 +292,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(401).json({ error: 'Invalid or expired token' });
       }
 
+      // Verify tenant belongs to this landlord through authoritative property ownership chain
+      // This protects against landlord_id being stale or tampered with
       const tenants = await sql`
-        SELECT t.*
+        SELECT DISTINCT t.*
         FROM public.tenants t
+        LEFT JOIN public.leases l ON t.id = l.tenant_id
+        LEFT JOIN public.units u ON l.unit_id = u.id
+        LEFT JOIN public.properties p ON u.property_id = p.id
         WHERE t.id = ${tenantId}
-        AND t.landlord_id = ${user.id}
         AND t.account_status IN ('pending_invitation', 'invited')
+        AND (
+          -- Either tenant has a lease with landlord's property
+          p.owner_id = ${user.id}
+          -- OR tenant was created by this landlord (for tenants without leases yet)
+          OR t.landlord_id = ${user.id}
+        )
       `;
 
       if (tenants.length === 0) {

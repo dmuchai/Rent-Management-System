@@ -23,11 +23,20 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
     // Use a transaction to prevent TOCTOU race conditions
     await sql.begin(async (tx) => {
-      // Verify the tenant belongs to this landlord and lock the row
+      // Verify tenant belongs to this landlord through authoritative property ownership
+      // Uses property ownership as source of truth, with landlord_id as fallback for tenants without leases
       const [tenant] = await tx`
-        SELECT id FROM public.tenants
-        WHERE id = ${tenantId} AND landlord_id = ${auth.userId}
-        FOR UPDATE
+        SELECT DISTINCT t.id
+        FROM public.tenants t
+        LEFT JOIN public.leases l ON t.id = l.tenant_id
+        LEFT JOIN public.units u ON l.unit_id = u.id
+        LEFT JOIN public.properties p ON u.property_id = p.id
+        WHERE t.id = ${tenantId}
+        AND (
+          p.owner_id = ${auth.userId}
+          OR t.landlord_id = ${auth.userId}
+        )
+        FOR UPDATE OF t
       `;
 
       if (!tenant) {
