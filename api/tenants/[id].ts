@@ -36,12 +36,18 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           p.owner_id = ${auth.userId}
           OR t.landlord_id = ${auth.userId}
         )
-        FOR UPDATE OF t
       `;
 
       if (!tenant) {
         throw new Error('TENANT_NOT_FOUND');
       }
+
+      // Lock the tenant row for update
+      await tx`
+        SELECT id FROM public.tenants
+        WHERE id = ${tenantId}
+        FOR UPDATE
+      `;
 
       // Re-check for active leases inside the transaction
       const [activeLease] = await tx`
