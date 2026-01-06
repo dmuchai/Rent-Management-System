@@ -211,14 +211,6 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         {/* Header with Search and Filters */}
         <div className="p-6 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold">Tenants</h2>
-            <Button onClick={handleAdd} data-testid="button-add-tenant">
-              <i className="fas fa-plus mr-2"></i>
-              Add Tenant
-            </Button>
-          </div>
-
           {/* Search and Filter Controls */}
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
