@@ -146,23 +146,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
-        email: tenant.email,
-        password: password,
-        email_confirm: true,
-        user_metadata: {
-          firstName: tenant.first_name,
-          lastName: tenant.last_name,
-          role: 'tenant',
-        }
-      });
+      // Check if user already exists in Supabase auth
+      const { data: existingUsers } = await adminSupabase.auth.admin.listUsers();
+      const existingUser = existingUsers?.users?.find(u => u.email === tenant.email);
 
-      if (authError || !authData.user) {
-        console.error('Failed to create auth user:', authError);
-        return res.status(500).json({ 
-          error: 'Account creation failed',
-          message: authError?.message || 'Failed to create user account'
+      let authUserId: string;
+
+      if (existingUser) {
+        // User already exists - check if they're already linked to this tenant
+        if (tenant.user_id === existingUser.id) {
+          return res.status(400).json({
+            error: 'Account already created',
+            message: 'Your account has already been created. Please login instead.',
+            shouldLogin: true
+          });
+        }
+        
+        // User exists but not linked - update their password and link them
+        const { error: updateError } = await adminSupabase.auth.admin.updateUserById(
+          existingUser.id,
+          { password: password }
+        );
+
+        if (updateError) {
+          console.error('Failed to update user password:', updateError);
+          return res.status(500).json({
+            error: 'Account update failed',
+            message: 'Failed to update account. Please contact support.'
+          });
+        }
+
+        authUserId = existingUser.id;
+      } else {
+        // Create new user
+        const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
+          email: tenant.email,
+          password: password,
+          email_confirm: true,
+          user_metadata: {
+            firstName: tenant.first_name,
+            lastName: tenant.last_name,
+            role: 'tenant',
+          }
         });
+
+        if (authError || !authData.user) {
+          console.error('Failed to create auth user:', authError);
+          return res.status(500).json({ 
+            error: 'Account creation failed',
+            message: authError?.message || 'Failed to create user account'
+          });
+        }
+
+        authUserId = authData.user.id;
       }
 
       // Wrap DB transaction to ensure auth user cleanup on failure
@@ -171,7 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sql`
             INSERT INTO public.users (id, email, first_name, last_name, role)
             VALUES (
-              ${authData.user.id},
+              ${authUserId},
               ${tenant.email},
               ${tenant.first_name},
               ${tenant.last_name},
@@ -183,7 +219,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sql`
             UPDATE public.tenants
             SET 
-              user_id = ${authData.user.id},
+              user_id = ${authUserId},
               invitation_accepted_at = NOW(),
               account_status = 'active',
               invitation_token = NULL
@@ -191,13 +227,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `;
         });
       } catch (dbError) {
-        // Database transaction failed - cleanup orphaned auth user
-        console.error('Database transaction failed, cleaning up auth user:', dbError);
-        try {
-          await adminSupabase.auth.admin.deleteUser(authData.user.id);
-          console.log(`Deleted orphaned auth user: ${authData.user.id}`);
-        } catch (deleteError) {
-          console.error('Failed to delete orphaned auth user:', deleteError);
+        // Database transaction failed - cleanup orphaned auth user (only if we created a new one)
+        console.error('Database transaction failed:', dbError);
+        if (!existingUser) {
+          try {
+            await adminSupabase.auth.admin.deleteUser(authUserId);
+            console.log(`Deleted orphaned auth user: ${authUserId}`);
+          } catch (deleteError) {
+            console.error('Failed to delete orphaned auth user:', deleteError);
+          }
+        }
           // Log but continue to throw original error
         }
         

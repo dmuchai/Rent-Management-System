@@ -47,7 +47,8 @@ export default function AcceptInvitation() {
   const acceptMutation = useMutation({
     mutationFn: async (data: { token: string; password: string }) => {
       const response = await apiRequest("POST", "/api/invitations?action=accept", data);
-      return response;
+      const result = await response.json();
+      return result;
     },
     onSuccess: async (data: any) => {
       toast({
@@ -62,11 +63,22 @@ export default function AcceptInvitation() {
       }, 2000);
     },
     onError: (error: any) => {
+      // Check if the error indicates user should login
+      const errorMessage = error.message || "Failed to create account";
+      const shouldLogin = errorMessage.includes('already been created') || errorMessage.includes('Please login');
+      
       toast({
-        title: "Error",
-        description: error.message || "Failed to create account",
-        variant: "destructive",
+        title: shouldLogin ? "Account Already Exists" : "Error",
+        description: errorMessage,
+        variant: shouldLogin ? "default" : "destructive",
       });
+
+      // If user should login, redirect after a moment
+      if (shouldLogin) {
+        setTimeout(() => {
+          setLocation("/login");
+        }, 3000);
+      }
     },
   });
 
