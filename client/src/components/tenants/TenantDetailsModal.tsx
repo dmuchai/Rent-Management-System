@@ -15,6 +15,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FileText, Download, User, Home, Calendar, DollarSign, Mail, Phone, AlertCircle, CheckCircle2, MailCheck, Clock } from "lucide-react";
 import type { Tenant, Lease, Payment, Property } from "@/../../shared/schema";
 
+// Extended lease type with populated relations from API join
+interface LeaseWithRelations extends Lease {
+  property?: {
+    id: string;
+    name: string;
+  };
+  unit?: {
+    id: string;
+    unitNumber: string;
+  };
+  tenant?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+}
+
 interface TenantDetailsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -23,12 +40,12 @@ interface TenantDetailsModalProps {
 
 export default function TenantDetailsModal({ open, onOpenChange, tenant }: TenantDetailsModalProps) {
   // Fetch tenant's leases
-  const { data: leases = [], isLoading: leasesLoading } = useQuery<Lease[]>({
+  const { data: leases = [], isLoading: leasesLoading } = useQuery<LeaseWithRelations[]>({
     queryKey: ["/api/leases", tenant?.id],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/leases");
       const allLeases = await response.json();
-      return allLeases.filter((lease: Lease) => lease.tenantId === tenant?.id);
+      return allLeases.filter((lease: LeaseWithRelations) => lease.tenantId === tenant?.id);
     },
     enabled: open && !!tenant,
   });
@@ -117,13 +134,31 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
     });
   };
 
-  const getPropertyName = (lease: Lease) => {
+  const getPropertyName = (lease: LeaseWithRelations): string => {
     // Use property data from lease object (populated by API join)
-    return (lease as any).property?.name || 'Unknown Property';
+    if (!lease.property?.name) {
+      console.warn('[TenantDetailsModal] Missing property data for lease:', {
+        leaseId: lease.id,
+        unitId: lease.unitId,
+        hasPropertyData: !!lease.property,
+        propertyName: lease.property?.name
+      });
+      return 'Unknown Property';
+    }
+    return lease.property.name;
   };
 
-  const getUnitNumber = (lease: Lease) => {
-    return (lease as any).unit?.unitNumber || (lease as any).unitId || '—';
+  const getUnitNumber = (lease: LeaseWithRelations): string => {
+    if (!lease.unit?.unitNumber) {
+      console.warn('[TenantDetailsModal] Missing unit data for lease:', {
+        leaseId: lease.id,
+        unitId: lease.unitId,
+        hasUnitData: !!lease.unit,
+        unitNumber: lease.unit?.unitNumber
+      });
+      return lease.unitId || '—';
+    }
+    return lease.unit.unitNumber;
   };
 
   return (
