@@ -137,7 +137,10 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
           : "Property created! Now add units with rent amounts by clicking 'View Details'",
       });
       onOpenChange(false);
-      form.reset();
+      // Only reset form for new properties, not edits
+      if (!isEdit) {
+        form.reset();
+      }
     },
     onError: (error) => {
       if (isUnauthorizedError(error)) {
@@ -160,6 +163,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
   });
 
   const onSubmit = (data: InsertProperty) => {
+    console.log('Form submission data:', data);
     mutation.mutate(data);
   };
 
