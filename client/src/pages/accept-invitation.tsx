@@ -46,7 +46,7 @@ export default function AcceptInvitation() {
   // Accept invitation mutation
   const acceptMutation = useMutation({
     mutationFn: async (data: { token: string; password: string }) => {
-      const response = await apiRequest("POST", "/api/invitations/accept", data);
+      const response = await apiRequest("POST", "/api/invitations?action=accept", data);
       return response;
     },
     onSuccess: async (data: any) => {
