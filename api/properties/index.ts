@@ -79,12 +79,12 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         const [updatedProperty] = await sql`
           UPDATE public.properties 
           SET 
-            name = COALESCE(${propertyData.name || null}, name),
-            address = COALESCE(${propertyData.address || null}, address),
-            property_type = COALESCE(${propertyData.propertyType || null}, property_type),
+            name = COALESCE(NULLIF(${propertyData.name || null}, ''), name),
+            address = COALESCE(NULLIF(${propertyData.address || null}, ''), address),
+            property_type = COALESCE(NULLIF(${propertyData.propertyType || null}, ''), property_type),
             total_units = ${totalUnits},
-            description = COALESCE(${propertyData.description !== undefined ? propertyData.description : null}, description),
-            image_url = COALESCE(${propertyData.imageUrl !== undefined ? propertyData.imageUrl : null}, image_url),
+            description = ${propertyData.description !== undefined ? (propertyData.description || null) : sql`description`},
+            image_url = ${propertyData.imageUrl !== undefined ? (propertyData.imageUrl || null) : sql`image_url`},
             updated_at = NOW()
           WHERE id = ${id}
           RETURNING *
