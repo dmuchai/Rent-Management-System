@@ -138,6 +138,15 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         RETURNING *
       `;
 
+      // Update unit occupancy status if lease is active
+      if (leaseData.isActive) {
+        await sql`
+          UPDATE public.units
+          SET is_occupied = true, updated_at = NOW()
+          WHERE id = ${leaseData.unitId}
+        `;
+      }
+
       return res.status(201).json(lease);
     }
 
@@ -228,6 +237,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           updated_at = NOW()
         WHERE id = ${leaseData.id}
         RETURNING *
+      `;
+
+      // Update unit occupancy status based on lease active status
+      await sql`
+        UPDATE public.units u
+        SET 
+          is_occupied = EXISTS(
+            SELECT 1 FROM public.leases l 
+            WHERE l.unit_id = u.id 
+            AND l.is_active = true
+          ),
+          updated_at = NOW()
+        WHERE u.id = ${leaseData.unitId}
       `;
 
       // Transform response to camelCase
