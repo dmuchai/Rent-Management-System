@@ -232,10 +232,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   
   // Handle POST /api/invitations/resend (requires auth)
   if (req.method === 'POST' && action === 'resend') {
-    // Extract auth from request manually since we can't use requireAuth wrapper here
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized' });
+    // Use cookie-based auth (same as other endpoints)
+    const authToken = req.cookies['supabase-auth-token'];
+    if (!authToken) {
+      return res.status(401).json({ error: 'Unauthorized - No auth token' });
     }
 
     const sql = createDbConnection();
@@ -247,13 +247,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const { tenantId } = resendSchema.parse(req.body);
       
-      // Get user ID from session (simplified - in production verify JWT)
-      const token = authHeader.substring(7);
+      // Verify user from cookie token
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
-      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+      const { data: { user }, error: userError } = await supabase.auth.getUser(authToken);
       
       if (userError || !user) {
-        return res.status(401).json({ error: 'Invalid token' });
+        return res.status(401).json({ error: 'Invalid or expired token' });
       }
 
       const tenants = await sql`
