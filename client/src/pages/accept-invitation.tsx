@@ -33,7 +33,12 @@ export default function AcceptInvitation() {
 
   // Verify token and get tenant info
   const { data: tenantInfo, isLoading: isVerifying, error: verifyError } = useQuery<TenantInfo>({
-    queryKey: [`/api/invitations/verify?token=${token}`],
+    queryKey: ['verify-invitation', token],
+    queryFn: async () => {
+      if (!token) throw new Error('No token provided');
+      const response = await apiRequest("GET", `/api/invitations?token=${token}`);
+      return await response.json();
+    },
     enabled: !!token,
     retry: false,
   });
@@ -92,6 +97,9 @@ export default function AcceptInvitation() {
 
   // Invalid/expired token
   if (!token || verifyError) {
+    const errorMessage = verifyError?.message || "The invitation link you're trying to use is no longer valid.";
+    const isExpired = errorMessage.includes('expired') || errorMessage.includes('410');
+    
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md border-destructive">
@@ -103,8 +111,13 @@ export default function AcceptInvitation() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              {verifyError?.message || "The invitation link you're trying to use is no longer valid."}
+              {errorMessage}
             </p>
+            {isExpired && (
+              <p className="text-sm font-medium text-orange-600">
+                Invitation expired. Please request a new one from your landlord.
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               Please contact your landlord to request a new invitation.
             </p>
