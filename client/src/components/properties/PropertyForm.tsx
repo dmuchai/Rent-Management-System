@@ -322,9 +322,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
                             {...field}
                             onChange={(e) => {
                               field.onChange(e);
-                              if (e.target.value) {
-                                setImagePreview(e.target.value);
-                              }
+                              setImagePreview(e.target.value || null);
                             }}
                             disabled={uploading}
                           />
