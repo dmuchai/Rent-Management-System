@@ -118,12 +118,8 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
   };
 
   const getPropertyName = (lease: Lease) => {
-    // Get property via unit relationship
-    const property = properties.find((p: Property) => {
-      // Check if any unit in this property matches the lease's unitId
-      return (p as any).units?.some((u: any) => u.id === lease.unitId);
-    });
-    return property?.name || 'Unknown Property';
+    // Use property data from lease object (populated by API join)
+    return (lease as any).property?.name || 'Unknown Property';
   };
 
   const getUnitNumber = (lease: Lease) => {
