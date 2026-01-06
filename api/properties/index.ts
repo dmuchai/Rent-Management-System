@@ -133,7 +133,21 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           ORDER BY created_at DESC
         `;
 
-        return res.status(200).json(userProperties);
+        // Transform to camelCase for frontend consistency
+        const transformedProperties = userProperties.map(prop => ({
+          id: prop.id,
+          name: prop.name,
+          address: prop.address,
+          propertyType: prop.property_type,
+          totalUnits: prop.total_units,
+          description: prop.description,
+          imageUrl: prop.image_url,
+          ownerId: prop.owner_id,
+          createdAt: prop.created_at,
+          updatedAt: prop.updated_at
+        }));
+
+        return res.status(200).json(transformedProperties);
       } else if (req.method === 'POST') {
         console.log('Request body:', JSON.stringify(req.body, null, 2));
         console.log('Auth userId:', auth.userId);
