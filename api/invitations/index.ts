@@ -237,8 +237,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.error('Failed to delete orphaned auth user:', deleteError);
           }
         }
-          // Log but continue to throw original error
-        }
         
         return res.status(500).json({ 
           error: 'Account creation failed',
@@ -249,7 +247,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json({
         message: 'Account created successfully',
         requireLogin: true,
-        email: authData.user.email
+        email: tenant.email
       });
 
     } catch (error) {
@@ -295,11 +293,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const tenants = await sql`
-        SELECT t.*
+        SELECT t.*, p.landlord_id
         FROM public.tenants t
+        LEFT JOIN public.leases l ON t.id = l.tenant_id
+        LEFT JOIN public.units u ON l.unit_id = u.id
+        LEFT JOIN public.properties p ON u.property_id = p.id
         WHERE t.id = ${tenantId}
-        AND t.user_id = ${user.id}
+        AND p.landlord_id = ${user.id}
         AND t.account_status IN ('pending_invitation', 'invited')
+        LIMIT 1
       `;
 
       if (tenants.length === 0) {
