@@ -121,13 +121,14 @@ export default function LeaseTable({ leases, loading, onEditLease, onViewLease }
         <CardTitle>Lease Agreements ({leases.length})</CardTitle>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tenant</TableHead>
-              <TableHead>Unit</TableHead>
-              <TableHead>Lease Term</TableHead>
-              <TableHead>Monthly Rent</TableHead>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tenant</TableHead>
+                <TableHead>Unit</TableHead>
+                <TableHead>Lease Term</TableHead>
+                <TableHead>Monthly Rent</TableHead>
               <TableHead>Security Deposit</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Actions</TableHead>
@@ -250,6 +251,7 @@ export default function LeaseTable({ leases, loading, onEditLease, onViewLease }
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </div>
       </CardContent>
     </Card>
   );

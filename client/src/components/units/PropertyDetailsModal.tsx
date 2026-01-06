@@ -81,7 +81,7 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
   if (!property) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-4xl" aria-describedby="error-description">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby="error-description">
           <DialogHeader>
             <DialogTitle>Error Loading Property</DialogTitle>
             <DialogDescription id="error-description">

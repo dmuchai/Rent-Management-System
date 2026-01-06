@@ -135,7 +135,7 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Unit" : "Add New Unit"}</DialogTitle>
           <DialogDescription>

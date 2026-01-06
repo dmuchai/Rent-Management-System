@@ -133,7 +133,7 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {!tenant ? null : (
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-start justify-between">
             <div>
@@ -315,17 +315,18 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
                 ) : leases.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">No lease records found</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Property</TableHead>
-                        <TableHead>Unit</TableHead>
-                        <TableHead>Start Date</TableHead>
-                        <TableHead>End Date</TableHead>
-                        <TableHead>Monthly Rent</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Property</TableHead>
+                          <TableHead>Unit</TableHead>
+                          <TableHead>Start Date</TableHead>
+                          <TableHead>End Date</TableHead>
+                          <TableHead>Monthly Rent</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
                     <TableBody>
                       {leases.map((lease) => (
                         <TableRow key={lease.id}>
@@ -348,6 +349,7 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -367,15 +369,16 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
                 ) : payments.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">No payment records found</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Method</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Method</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
                     <TableBody>
                       {payments.map((payment) => {
                         const safeAmount = (() => {
@@ -402,6 +405,7 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
                       })}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>

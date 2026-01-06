@@ -82,17 +82,18 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
 
   return (
     <div className="space-y-4">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Unit Number</TableHead>
-            <TableHead>Bedrooms</TableHead>
-            <TableHead>Bathrooms</TableHead>
-            <TableHead>Size (sq ft)</TableHead>
-            <TableHead>Monthly Rent</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Unit Number</TableHead>
+              <TableHead>Bedrooms</TableHead>
+              <TableHead>Bathrooms</TableHead>
+              <TableHead>Size (sq ft)</TableHead>
+              <TableHead>Monthly Rent</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
         </TableHeader>
         <TableBody>
           {units.map((unit: Unit) => (
@@ -152,6 +153,7 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
           ))}
         </TableBody>
       </Table>
+      </div>
 
       <div className="text-sm text-gray-500">
         Showing {units.length} unit{units.length !== 1 ? "s" : ""}

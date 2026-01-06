@@ -289,15 +289,16 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
                       <p className="text-muted-foreground">No payments recorded for this lease</p>
                     </div>
                   ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Method</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Amount</TableHead>
+                            <TableHead>Method</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
                       <TableBody>
                         {payments.map((payment: any) => {
                           const safeAmount = (() => {
@@ -324,6 +325,7 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
                         })}
                       </TableBody>
                     </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
