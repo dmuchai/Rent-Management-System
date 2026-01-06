@@ -96,11 +96,19 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
         title: "Success",
         description: "Image uploaded successfully",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading image:', error);
+      
+      // Check if it's a bucket not found error
+      const isBucketError = error?.message?.includes('Bucket not found') || 
+                           error?.statusCode === 404 || 
+                           error?.status === 400;
+      
       toast({
         title: "Error",
-        description: "Failed to upload image",
+        description: isBucketError 
+          ? "Storage bucket not configured. Please create 'property-images' bucket in Supabase Storage or enter image URL manually."
+          : "Failed to upload image",
         variant: "destructive",
       });
     } finally {
