@@ -83,8 +83,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
             address = COALESCE(NULLIF(${propertyData.address || null}, ''), address),
             property_type = COALESCE(NULLIF(${propertyData.propertyType || null}, ''), property_type),
             total_units = ${totalUnits},
-            description = ${propertyData.description !== undefined ? (propertyData.description || null) : sql`description`},
-            image_url = ${propertyData.imageUrl !== undefined ? (propertyData.imageUrl || null) : sql`image_url`},
+            description = COALESCE(NULLIF(${propertyData.description || null}, ''), description),
+            image_url = COALESCE(NULLIF(${propertyData.imageUrl || null}, ''), image_url),
             updated_at = NOW()
           WHERE id = ${id}
           RETURNING *
