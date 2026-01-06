@@ -74,7 +74,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
   const resendInvitationMutation = useMutation({
     mutationFn: async ({ tenantId, tenantEmail }: { tenantId: string; tenantEmail: string }) => {
       setResendingTenantId(tenantId);
-      return await apiRequest("POST", "/api/invitations/resend", { tenantId });
+      return await apiRequest("POST", "/api/invitations?action=resend", { tenantId });
     },
     onSuccess: (data: any, variables) => {
       toast({
