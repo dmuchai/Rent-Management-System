@@ -90,7 +90,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           RETURNING *
         `;
 
-        return res.status(200).json(updatedProperty);
+        // Transform to camelCase for frontend consistency
+        return res.status(200).json({
+          id: updatedProperty.id,
+          name: updatedProperty.name,
+          address: updatedProperty.address,
+          propertyType: updatedProperty.property_type,
+          totalUnits: updatedProperty.total_units,
+          description: updatedProperty.description,
+          imageUrl: updatedProperty.image_url,
+          ownerId: updatedProperty.owner_id,
+          createdAt: updatedProperty.created_at,
+          updatedAt: updatedProperty.updated_at
+        });
       } else if (req.method === 'DELETE') {
         // Delete property
         const existingProperty = await sql`
@@ -160,7 +172,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         // Don't auto-create units - let users add them with proper details (rent, bedrooms, etc.)
         // This ensures quality data and prevents confusion with placeholder units
         
-        return res.status(201).json(createdProperty);
+        // Transform to camelCase for frontend consistency
+        return res.status(201).json({
+          id: createdProperty.id,
+          name: createdProperty.name,
+          address: createdProperty.address,
+          propertyType: createdProperty.property_type,
+          totalUnits: createdProperty.total_units,
+          description: createdProperty.description,
+          imageUrl: createdProperty.image_url,
+          ownerId: createdProperty.owner_id,
+          createdAt: createdProperty.created_at,
+          updatedAt: createdProperty.updated_at
+        });
     } else {
       return res.status(405).json({ error: 'Method not allowed' });
     }

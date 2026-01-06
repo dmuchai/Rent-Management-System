@@ -125,7 +125,9 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
     mutationFn: async (data: InsertProperty) => {
       const url = isEdit ? `/api/properties?id=${property.id}` : "/api/properties";
       const method = isEdit ? "PUT" : "POST";
-      return await apiRequest(method, url, data);
+      const response = await apiRequest(method, url, data);
+      console.log('API response:', response);
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
