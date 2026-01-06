@@ -1,7 +1,8 @@
 -- Add landlord_id column to tenants table to track ownership
 -- This separates landlord ownership from tenant's user account
+-- Note: Using VARCHAR to match users.id type (VARCHAR with gen_random_uuid())
 
--- Add the column (nullable initially)
+-- Add the column (nullable initially) - type must match users.id exactly
 ALTER TABLE public.tenants 
 ADD COLUMN IF NOT EXISTS landlord_id VARCHAR REFERENCES public.users(id);
 
@@ -12,13 +13,18 @@ WHERE account_status IN ('pending_invitation', 'invited')
 AND user_id IS NOT NULL;
 
 -- Set landlord_id for active tenants by finding through leases->units->properties
+-- Use most recent active lease to determine landlord (handles tenant transfers between landlords)
 UPDATE public.tenants t
 SET landlord_id = subquery.owner_id
 FROM (
-  SELECT DISTINCT l.tenant_id, p.owner_id
+  SELECT DISTINCT ON (l.tenant_id)
+    l.tenant_id,
+    p.owner_id
   FROM public.leases l
   JOIN public.units u ON l.unit_id = u.id
   JOIN public.properties p ON u.property_id = p.id
+  WHERE l.is_active = true
+  ORDER BY l.tenant_id, l.start_date DESC, l.created_at DESC
 ) AS subquery
 WHERE t.id = subquery.tenant_id
 AND t.account_status = 'active'
