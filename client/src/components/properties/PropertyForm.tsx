@@ -326,6 +326,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
                             type="url"
                             placeholder="https://example.com/image.jpg"
                             {...field}
+                            value={field.value || ''}
                             onChange={(e) => {
                               field.onChange(e);
                               setImagePreview(e.target.value || null);
