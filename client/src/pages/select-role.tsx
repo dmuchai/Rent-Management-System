@@ -1,0 +1,179 @@
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { API_BASE_URL } from "@/lib/config";
+import { apiRequest } from "@/lib/queryClient";
+import { Building2, Home, Users } from "lucide-react";
+import { usePageTitle } from "@/hooks/usePageTitle";
+import { useQueryClient } from "@tanstack/react-query";
+import { AUTH_QUERY_KEYS } from "@/lib/auth-keys";
+
+export default function SelectRole() {
+  usePageTitle('Select Your Role');
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<string>("");
+
+  const roles = [
+    {
+      id: "landlord",
+      title: "Landlord",
+      description: "I own properties and want to manage them",
+      icon: Building2,
+      features: ["Add and manage properties", "Track rent payments", "Manage tenants", "View financial reports"],
+    },
+    {
+      id: "tenant",
+      title: "Tenant",
+      description: "I rent a property",
+      icon: Home,
+      features: ["View lease details", "Make rent payments", "Submit maintenance requests", "Track payment history"],
+    },
+    {
+      id: "property_manager",
+      title: "Property Manager",
+      description: "I manage properties for landlords",
+      icon: Users,
+      features: ["Manage multiple properties", "Handle tenant relations", "Process payments", "Generate reports"],
+    },
+  ];
+
+  const handleRoleSelection = async () => {
+    if (!selectedRole) {
+      toast({
+        title: "Error",
+        description: "Please select a role to continue",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await apiRequest("POST", "/api/auth?action=set-role", {
+        role: selectedRole,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to set role");
+      }
+
+      toast({
+        title: "Success",
+        description: "Your account has been set up successfully!",
+      });
+
+      // Invalidate auth query to refresh user data
+      await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
+
+      // Small delay to ensure query refetch completes
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Redirect to dashboard
+      setLocation("/dashboard");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to set role",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl">
+        {/* Logo/Brand */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center mb-4">
+            <img src="/favicon.png" alt="Landee & Moony" className="h-12 w-12 mr-3" />
+            <h1 className="text-3xl font-bold">Landee & Moony</h1>
+          </div>
+          <p className="text-muted-foreground">Welcome! Please select your role to get started</p>
+        </div>
+
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">How will you use Landee & Moony?</CardTitle>
+            <CardDescription>Choose the role that best describes you. You can change this later in settings.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3 mb-6">
+              {roles.map((role) => {
+                const Icon = role.icon;
+                return (
+                  <button
+                    key={role.id}
+                    onClick={() => setSelectedRole(role.id)}
+                    disabled={isLoading}
+                    className={`relative p-6 rounded-lg border-2 transition-all text-left hover:border-primary hover:shadow-md ${
+                      selectedRole === role.id
+                        ? "border-primary bg-primary/5 shadow-md"
+                        : "border-border bg-card"
+                    } ${isLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                  >
+                    <div className="flex flex-col items-center text-center space-y-3">
+                      <div className={`p-3 rounded-full ${
+                        selectedRole === role.id ? "bg-primary text-primary-foreground" : "bg-muted"
+                      }`}>
+                        <Icon className="h-8 w-8" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg mb-1">{role.title}</h3>
+                        <p className="text-sm text-muted-foreground mb-3">{role.description}</p>
+                      </div>
+                      <ul className="text-xs text-left space-y-1 w-full">
+                        {role.features.map((feature, idx) => (
+                          <li key={idx} className="flex items-start">
+                            <span className="mr-2">•</span>
+                            <span className="text-muted-foreground">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    {selectedRole === role.id && (
+                      <div className="absolute top-3 right-3">
+                        <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center">
+                          <svg
+                            className="h-4 w-4 text-primary-foreground"
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path d="M5 13l4 4L19 7"></path>
+                          </svg>
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-center">
+              <Button
+                onClick={handleRoleSelection}
+                disabled={!selectedRole || isLoading}
+                className="w-full md:w-auto min-w-[200px]"
+                size="lg"
+              >
+                {isLoading ? "Setting up..." : "Continue to Dashboard"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

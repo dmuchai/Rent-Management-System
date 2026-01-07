@@ -5,6 +5,7 @@
 // POST /api/auth?action=logout - Logout user
 // POST /api/auth?action=set-session - Set session from OAuth tokens
 // POST /api/auth?action=sync-user - Sync user to public.users table
+// POST /api/auth?action=set-role - Set user role (for new OAuth users)
 // GET  /api/auth?action=user - Get current user
 // GET  /api/auth?action=google - Initiate Google OAuth
 
@@ -282,16 +283,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .single();
 
       if (!existingUser) {
+        // New user - check if they have a role in metadata (email/password registration)
+        // or if they need to select a role (OAuth sign-in)
+        const hasRoleInMetadata = user.user_metadata?.role;
+        const role = hasRoleInMetadata ? user.user_metadata.role : null;
+
         await adminSupabase.from('users').insert({
           id: user.id,
           email: user.email!,
           first_name: user.user_metadata?.firstName || user.user_metadata?.full_name?.split(' ')[0] || '',
           last_name: user.user_metadata?.lastName || user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
-          role: user.user_metadata?.role || 'landlord',
+          role: role,
+        });
+
+        // If no role, user needs to select one
+        if (!role) {
+          return res.status(200).json({ 
+            message: 'User synced successfully',
+            needsRoleSelection: true 
+          });
+        }
+      }
+
+      // Check if existing user has no role (incomplete OAuth registration)
+      if (existingUser && !existingUser.role) {
+        return res.status(200).json({ 
+          message: 'User synced successfully',
+          needsRoleSelection: true 
         });
       }
 
-      return res.status(200).json({ message: 'User synced successfully' });
+      return res.status(200).json({ 
+        message: 'User synced successfully',
+        needsRoleSelection: false 
+      });
     }
 
     // GET /api/auth?action=user - Get current user
@@ -376,6 +401,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         redirectUrl: linkingUrl,
         provider: 'google',
       });
+    }
+
+    // POST /api/auth?action=set-role - Set user role (for new OAuth users)
+    if (action === 'set-role' && req.method === 'POST') {
+      const token = req.cookies['supabase-auth-token'];
+      if (!token) {
+        return res.status(401).json({ error: 'Unauthorized - please log in' });
+      }
+
+      // Verify user is authenticated
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { role } = req.body;
+
+      if (!role) {
+        return res.status(400).json({ error: 'Role is required' });
+      }
+
+      const validRoles = ['landlord', 'tenant', 'property_manager'];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ error: 'Invalid role. Must be landlord, tenant, or property_manager' });
+      }
+
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
+      
+      // Check if user exists
+      const { data: existingUser } = await adminSupabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (!existingUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Only allow setting role if it's currently null (prevent role changes after initial setup)
+      if (existingUser.role !== null) {
+        return res.status(400).json({ error: 'Role has already been set. Please contact support to change your role.' });
+      }
+
+      // Update user role
+      const { error: updateError } = await adminSupabase
+        .from('users')
+        .update({ 
+          role: role,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('Role update error:', updateError);
+        return res.status(500).json({ error: 'Failed to update role' });
+      }
+
+      return res.status(200).json({ message: 'Role set successfully' });
     }
 
     // POST /api/auth?action=change-password - Change user password

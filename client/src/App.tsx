@@ -15,6 +15,7 @@ import AuthCallback from "@/pages/auth-callback";
 import AcceptInvitation from "@/pages/accept-invitation";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
+import SelectRole from "@/pages/select-role";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -25,18 +26,24 @@ function Router() {
   useEffect(() => {
     if (!isLoading) {
       if (isAuthenticated) {
+        // If user has no role, redirect to role selection
+        if (user && !user.role && location !== '/select-role') {
+          setLocation('/select-role');
+          return;
+        }
+        
         // If authenticated and on landing/login page, redirect to dashboard
         if (location === "/" || location === "/login") {
           setLocation("/dashboard");
         }
       } else {
-        // If not authenticated and trying to access dashboard, redirect to login
-        if (location === "/dashboard") {
+        // If not authenticated and trying to access protected routes, redirect to login
+        if (location === "/dashboard" || location === "/select-role") {
           setLocation("/login");
         }
       }
     }
-  }, [isAuthenticated, isLoading, location, setLocation]);
+  }, [isAuthenticated, isLoading, location, setLocation, user]);
 
   if (isLoading) {
     return (
@@ -55,9 +62,14 @@ function Router() {
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/auth-callback" component={AuthCallback} />
+      <Route path="/select-role" component={SelectRole} />
       <Route path="/dashboard" component={() => {
         if (!isAuthenticated) {
           return <Login />;
+        }
+        // If user has no role, redirect to role selection
+        if (!user?.role) {
+          return <SelectRole />;
         }
         // Route to appropriate dashboard based on user role
         if (user?.role === 'tenant') {

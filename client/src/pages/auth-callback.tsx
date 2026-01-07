@@ -52,10 +52,26 @@ export default function AuthCallback() {
         setStatus("Syncing user data...");
 
         // Sync user to public.users table
-        await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
+        const syncResponse = await fetch(`${API_BASE_URL}/api/auth?action=sync-user`, {
           method: 'POST',
           credentials: 'include',
         });
+
+        const syncData = await syncResponse.json();
+
+        // Check if user needs to select a role
+        if (syncData.needsRoleSelection) {
+          console.log('[AuthCallback] ✅ New OAuth user - redirecting to role selection');
+          
+          // Clear timeout since we're successfully redirecting
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          
+          window.location.href = '/select-role';
+          return;
+        }
 
         setStatus("Redirecting to dashboard...");
         await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
