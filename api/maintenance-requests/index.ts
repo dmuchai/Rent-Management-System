@@ -163,9 +163,29 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
       const tenantId = tenants[0].id;
 
-      // Get unit ID from active lease if not provided
+      // Get unit ID from active lease if not provided, or validate if provided
       let unitId = requestData.unitId;
-      if (!unitId) {
+      
+      if (unitId) {
+        // If unitId is provided, verify it belongs to an active lease for this tenant
+        const leases = await sql`
+          SELECT unit_id FROM public.leases 
+          WHERE tenant_id = ${tenantId} 
+            AND unit_id = ${unitId}
+            AND status = 'active'
+            AND start_date <= CURRENT_DATE
+            AND end_date >= CURRENT_DATE
+          LIMIT 1
+        `;
+
+        if (leases.length === 0) {
+          return res.status(403).json({ 
+            error: 'Access denied', 
+            details: 'You do not have an active lease for the specified unit' 
+          });
+        }
+      } else {
+        // If no unitId provided, get it from tenant's active lease
         const leases = await sql`
           SELECT unit_id FROM public.leases 
           WHERE tenant_id = ${tenantId} 
