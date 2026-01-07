@@ -238,11 +238,6 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(404).json({ error: 'Maintenance request not found', details: null });
       }
 
-      // Check if user has permission (get user role from metadata)
-      const { data: { user } } = await sql.begin(async () => {
-        return { data: { user: { user_metadata: { role: requests[0].owner_id === auth.userId ? 'landlord' : 'tenant' } } } };
-      });
-
       // Only landlords can update maintenance requests
       if (requests[0].owner_id !== auth.userId) {
         return res.status(403).json({ error: 'Access denied - only landlords can update requests', details: null });
