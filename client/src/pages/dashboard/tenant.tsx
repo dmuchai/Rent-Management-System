@@ -6,7 +6,9 @@ import { useLocation } from "wouter";
 import Header from "@/components/layout/Header";
 import StatsCard from "@/components/dashboard/StatsCard";
 import PaymentForm from "@/components/payments/PaymentForm";
-import PaymentHistory from "@/components/payments/PaymentHistory";
+import EnhancedPaymentHistory from "@/components/payments/EnhancedPaymentHistory";
+import MaintenanceRequestForm from "@/components/maintenance/MaintenanceRequestForm";
+import MaintenanceRequestList from "@/components/maintenance/MaintenanceRequestList";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -16,6 +18,7 @@ interface DashboardStats {
     monthlyRent: string;
     startDate: string;
     endDate: string;
+    unitId?: string;
   } | null;
 }
 
@@ -24,6 +27,7 @@ export default function TenantDashboard() {
   const { toast } = useToast();
   const { user, isAuthenticated, isLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const [isMaintenanceFormOpen, setIsMaintenanceFormOpen] = useState(false);
 
   // Authentication guard - redirect unauthenticated users
   useEffect(() => {
@@ -40,16 +44,6 @@ export default function TenantDashboard() {
 
   const { data: dashboardStats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
-    retry: false,
-  });
-
-  const { data: payments = [], isLoading: paymentsLoading } = useQuery<any[]>({
-    queryKey: ["/api/payments"],
-    retry: false,
-  });
-
-  const { data: maintenanceRequests = [] } = useQuery<any[]>({
-    queryKey: ["/api/maintenance-requests"],
     retry: false,
   });
 
@@ -197,39 +191,7 @@ export default function TenantDashboard() {
               <h3 className="text-lg font-semibold">Payment History</h3>
             </div>
             <div className="p-6">
-              {paymentsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : payments.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8" data-testid="text-nopaymentshistory">
-                  No payments recorded yet
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {payments.slice(0, 5).map((payment: any) => (
-                    <div key={payment.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg" data-testid={`payment-history-${payment.id}`}>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-chart-2/10 rounded-full flex items-center justify-center">
-                          <i className="fas fa-check text-chart-2 text-sm"></i>
-                        </div>
-                        <div>
-                          <p className="font-medium">{payment.description || 'Payment'}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(payment.paidDate || payment.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold">KES {parseFloat(payment.amount).toLocaleString()}</p>
-                        <Button variant="link" size="sm" className="h-auto p-0">
-                          Receipt
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <EnhancedPaymentHistory limit={5} showViewAll={true} tenantView={true} />
             </div>
           </div>
 
@@ -274,45 +236,26 @@ export default function TenantDashboard() {
           <div className="bg-card rounded-xl border border-border">
             <div className="p-6 border-b border-border flex justify-between items-center">
               <h3 className="text-lg font-semibold">Maintenance Requests</h3>
-              <Button data-testid="button-newmaintenance">
+              <Button 
+                data-testid="button-newmaintenance"
+                onClick={() => setIsMaintenanceFormOpen(true)}
+              >
                 <i className="fas fa-plus mr-2"></i>New Request
               </Button>
             </div>
             <div className="p-6">
-              {maintenanceRequests.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8" data-testid="text-nomaintenancerequests">
-                  No maintenance requests
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {maintenanceRequests.map((request: any) => (
-                    <div key={request.id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg" data-testid={`maintenance-request-${request.id}`}>
-                      <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 bg-chart-1/10 rounded-full flex items-center justify-center">
-                          <i className="fas fa-wrench text-chart-1"></i>
-                        </div>
-                        <div>
-                          <p className="font-medium">{request.title}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Submitted on {new Date(request.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                      <span className={`px-3 py-1 text-sm rounded-full ${
-                        request.status === "completed" ? "bg-chart-2/10 text-chart-2" :
-                        request.status === "in_progress" ? "bg-chart-4/10 text-chart-4" :
-                        "bg-muted text-muted-foreground"
-                      }`}>
-                        {request.status.replace('_', ' ')}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <MaintenanceRequestList limit={5} showViewAll={true} />
             </div>
           </div>
         </div>
       </div>
+
+      {/* Maintenance Request Form Modal */}
+      <MaintenanceRequestForm
+        open={isMaintenanceFormOpen}
+        onOpenChange={setIsMaintenanceFormOpen}
+        unitId={activeLease?.unitId}
+      />
     </div>
   );
 }

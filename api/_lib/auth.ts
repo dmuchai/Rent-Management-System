@@ -16,7 +16,7 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   }
 });
 
-export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; user: User } | null> {
+export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; user: User; role: string } | null> {
   // Get token from httpOnly cookie set by auth-callback
   const authToken = req.cookies['supabase-auth-token'];
   
@@ -60,7 +60,8 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
       console.log('✅ Auth verification successful for user:', user.id);
       console.log('User email:', user.email);
     }
-    return { userId: user.id, user };
+    const role = user.user_metadata?.role || 'landlord';
+    return { userId: user.id, user, role };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('❌ Auth verification exception:', errorMessage);
@@ -85,7 +86,7 @@ export function requireAuth(
   handler: (
     req: VercelRequest, 
     res: VercelResponse, 
-    auth: { userId: string; user: User }
+    auth: { userId: string; user: User; role: string }
   ) => Promise<void | VercelResponse>
 ) {
   return async (req: VercelRequest, res: VercelResponse) => {
