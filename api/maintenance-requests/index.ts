@@ -248,9 +248,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       const requests = await sql`
         SELECT mr.*, p.owner_id, t.user_id as tenant_user_id
         FROM public.maintenance_requests mr
+        INNER JOIN public.tenants t ON mr.tenant_id = t.id
         INNER JOIN public.units u ON mr.unit_id = u.id
         INNER JOIN public.properties p ON u.property_id = p.id
-        INNER JOIN public.tenants t ON mr.tenant_id = t.id
         WHERE mr.id = ${id}
       `;
 
@@ -263,30 +263,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(403).json({ error: 'Access denied - only landlords can update requests', details: null });
       }
 
-      // Build update query dynamically
-      const setParts = [];
-      
-      if (updateData.status !== undefined) {
-        setParts.push(`status = '${updateData.status}'`);
-      }
-      
-      if (updateData.assignedTo !== undefined) {
-        setParts.push(`assigned_to = '${updateData.assignedTo}'`);
-      }
-      
-      if (updateData.completedDate !== undefined) {
-        setParts.push(`completed_date = '${new Date(updateData.completedDate).toISOString()}'`);
-      }
-
-      if (setParts.length === 0) {
+      // Check if any updates were provided
+      if (Object.keys(updateData).length === 0) {
         return res.status(400).json({ error: 'No updates provided', details: null });
       }
 
-      setParts.push(`updated_at = '${new Date().toISOString()}'`);
-
+      // Build update query with COALESCE to preserve existing values
       const updatedRequest = await sql`
         UPDATE public.maintenance_requests
-        SET ${sql.unsafe(setParts.join(', '))}
+        SET 
+          status = COALESCE(${updateData.status ?? null}, status),
+          assigned_to = COALESCE(${updateData.assignedTo ?? null}, assigned_to),
+          completed_date = COALESCE(${updateData.completedDate ? new Date(updateData.completedDate).toISOString() : null}, completed_date),
+          updated_at = NOW()
         WHERE id = ${id}
         RETURNING *
       `;
