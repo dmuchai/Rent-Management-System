@@ -62,13 +62,11 @@ export default function SelectRole() {
         description: "Your account has been set up successfully!",
       });
 
-      // Invalidate auth query to refresh user data
+      // Invalidate and refetch auth query to refresh user data
       await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
+      await queryClient.refetchQueries({ queryKey: AUTH_QUERY_KEYS.user, type: 'active' });
 
-      // Small delay to ensure query refetch completes
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Redirect to dashboard
+      // Redirect to dashboard after query synchronization is complete
       setLocation("/dashboard");
     } catch (error) {
       toast({

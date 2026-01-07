@@ -57,6 +57,13 @@ export default function AuthCallback() {
           credentials: 'include',
         });
 
+        if (!syncResponse.ok) {
+          console.error('[AuthCallback] Failed to sync user');
+          setStatus("User sync failed");
+          setLocation('/?error=sync_failed');
+          return;
+        }
+
         const syncData = await syncResponse.json();
 
         // Check if user needs to select a role

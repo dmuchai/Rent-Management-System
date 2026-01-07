@@ -118,7 +118,7 @@ Google OAuth
   ↓ (User selects "Landlord")
 /api/auth?action=set-role
   ↓ (Role saved to database)
-/dashboard (Landlord Dashboard)
+/dashboard (4. **Session Security**: Uses httpOnly cookies (XSS mitigation) with SameSite=Lax (CSRF protection) for session management.)
 ```
 
 ### Flow 2: New User - Email/Password Registration (Landlord/Property Manager)
