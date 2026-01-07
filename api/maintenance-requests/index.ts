@@ -335,9 +335,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   } catch (error) {
     console.error('Maintenance request error:', error);
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid input', details: error.errors });
+      return res.status(400).json({ error: 'Invalid input', details: error.errors });
     } else {
-      res.status(500).json({ error: 'Failed to process request', details: null });
+      return res.status(500).json({ error: 'Failed to process request', details: null });
     }
   } finally {
     await sql.end();
