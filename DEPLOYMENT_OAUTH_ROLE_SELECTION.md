@@ -4,6 +4,8 @@
 
 ✅ **Implementation Complete** - All code changes have been made to enable role selection for new Google OAuth users.
 
+**Important:** Only Landlords and Property Managers can self-register. Tenants must be invited through the tenant invitation system.
+
 ## What Was Changed
 
 ### 1. **Database Schema** (`shared/schema.ts`)
@@ -13,10 +15,13 @@
 ### 2. **Backend API** (`api/auth.ts`)
 - Enhanced `sync-user` endpoint to detect new OAuth users and return `needsRoleSelection` flag
 - Added new `set-role` endpoint for users to set their role (one-time only)
+- Restricted role selection to `landlord` and `property_manager` only (tenants must be invited)
+- Updated validation schemas to prevent tenant self-registration
 - Updated API documentation comments
 
 ### 3. **Frontend Pages**
-- **New page**: `/select-role` - Beautiful role selection UI with Landlord, Tenant, and Property Manager options
+- **New page**: `/select-role` - Beautiful role selection UI with Landlord and Property Manager options
+- **Updated**: `/register` - Removed tenant option, added invitation info message
 - **Updated**: `/auth-callback` - Redirects new OAuth users to role selection instead of dashboard
 - **Updated**: Router logic in `App.tsx` - Protects against users without roles accessing dashboard
 
@@ -46,30 +51,41 @@ Deploy your application as usual. The changes are backward compatible:
 ### Step 3: Test the Flow
 After deployment, test these scenarios:
 
-1. **New Google OAuth User**
+1. **New Google OAuth User (Landlord/Property Manager)**
    - Go to login page
    - Click "Sign In with Google"
    - Should redirect to `/select-role` after OAuth
-   - Select a role
+   - Select Landlord or Property Manager role
    - Should redirect to dashboard
+   - Verify "Tenant" option is NOT available
 
 2. **Existing User with Google**
    - Sign in with Google
    - Should go directly to dashboard (no role selection)
 
-3. **New Email/Password User**
+3. **New Email/Password User (Landlord/Property Manager)**
    - Go to register page
-   - Fill form and select role
-   - Register
-   - Should go directly to dashboard after login
+   - Fill form and select Landlord or Property Manager
+   - Verify "Tenant" option is NOT available
+   - Register and login
+   - Should go directly to dashboard
+
+4. **Tenant Invitation Flow**
+   - Landlord creates tenant and sends invitation
+   - Tenant receives email
+   - Click invitation link
+   - Create password
+   - Login as tenant
+   - Should go to tenant dashboard
 
 ## No Breaking Changes
 
 This implementation is **fully backward compatible**:
 - ✅ Existing users keep their roles
-- ✅ Email/password registration unchanged
+- ✅ Email/password registration only allows Landlord/Property Manager
 - ✅ Existing OAuth users bypass role selection
 - ✅ Dashboard routing works as before
+- ✅ Tenant invitation system unchanged and working correctly
 
 ## Rollback Plan
 
@@ -85,13 +101,15 @@ Then redeploy the previous version of the code.
 ## Files Changed
 
 ```
-✓ api/auth.ts - Backend endpoints
+✓ api/auth.ts - Backend endpoints and validation
 ✓ client/src/pages/select-role.tsx - NEW role selection page
+✓ client/src/pages/register.tsx - Remove tenant option
 ✓ client/src/pages/auth-callback.tsx - OAuth callback handling
 ✓ client/src/App.tsx - Router configuration
 ✓ shared/schema.ts - Database schema
 ✓ migrations/allow-null-role-for-oauth-users.sql - NEW migration
 ✓ OAUTH_ROLE_SELECTION.md - Documentation
+✓ DEPLOYMENT_OAUTH_ROLE_SELECTION.md - Deployment guide
 ```
 
 ## Support

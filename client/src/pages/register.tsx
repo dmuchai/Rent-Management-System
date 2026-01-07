@@ -186,9 +186,13 @@ export default function Register() {
                 >
                   <option value="">Select your role</option>
                   <option value="landlord">Landlord</option>
-                  <option value="tenant">Tenant</option>
                   <option value="property_manager">Property Manager</option>
                 </select>
+              </div>
+              <div className="p-3 bg-muted rounded-lg border border-border text-sm">
+                <p className="text-muted-foreground">
+                  <strong>Tenants:</strong> You'll receive an invitation link via email from your landlord or property manager. Use that link to create your account.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>

@@ -24,21 +24,14 @@ export default function SelectRole() {
       title: "Landlord",
       description: "I own properties and want to manage them",
       icon: Building2,
-      features: ["Add and manage properties", "Track rent payments", "Manage tenants", "View financial reports"],
-    },
-    {
-      id: "tenant",
-      title: "Tenant",
-      description: "I rent a property",
-      icon: Home,
-      features: ["View lease details", "Make rent payments", "Submit maintenance requests", "Track payment history"],
+      features: ["Add and manage properties", "Track rent payments", "Invite and manage tenants", "View financial reports"],
     },
     {
       id: "property_manager",
       title: "Property Manager",
       description: "I manage properties for landlords",
       icon: Users,
-      features: ["Manage multiple properties", "Handle tenant relations", "Process payments", "Generate reports"],
+      features: ["Manage multiple properties", "Handle tenant relations", "Process rent payments", "Generate reports"],
     },
   ];
 
@@ -106,7 +99,7 @@ export default function SelectRole() {
             <CardDescription>Choose the role that best describes you. You can change this later in settings.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-3 mb-6">
+            <div className="grid gap-4 md:grid-cols-2 mb-6">
               {roles.map((role) => {
                 const Icon = role.icon;
                 return (
@@ -159,6 +152,20 @@ export default function SelectRole() {
                   </button>
                 );
               })}
+            </div>
+
+            {/* Tenant Information */}
+            <div className="mb-6 p-4 bg-muted rounded-lg border border-border">
+              <div className="flex items-start gap-3">
+                <Home className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-sm mb-1">Are you a Tenant?</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Tenants receive an invitation link via email from their landlord or property manager. 
+                    Please check your email for your invitation link to create your account.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-center">

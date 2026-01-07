@@ -29,7 +29,7 @@ const registerSchema = z.object({
   password: z.string().min(8),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
-  role: z.enum(['landlord', 'tenant']).default('landlord'),
+  role: z.enum(['landlord', 'property_manager']).default('landlord'),
 });
 
 const forgotPasswordSchema = z.object({
@@ -422,9 +422,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Role is required' });
       }
 
-      const validRoles = ['landlord', 'tenant', 'property_manager'];
+      const validRoles = ['landlord', 'property_manager'];
       if (!validRoles.includes(role)) {
-        return res.status(400).json({ error: 'Invalid role. Must be landlord, tenant, or property_manager' });
+        return res.status(400).json({ error: 'Invalid role. Must be landlord or property_manager. Tenants must be invited by a landlord.' });
       }
 
       const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
