@@ -47,7 +47,7 @@ export default function MaintenanceRequestList({
   const [selectedRequest, setSelectedRequest] = useState<MaintenanceRequest | null>(null);
   const [showAllRequests, setShowAllRequests] = useState(false);
 
-  const { data: requests = [], isLoading } = useQuery<MaintenanceRequest[]>({
+  const { data: requests = [], isLoading, isError, error } = useQuery<MaintenanceRequest[]>({
     queryKey: ["/api/maintenance-requests"],
     retry: false,
   });
@@ -107,6 +107,20 @@ export default function MaintenanceRequestList({
     );
   }
 
+  if (isError) {
+    return (
+      <div className="text-center py-12">
+        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i className="fas fa-exclamation-triangle text-2xl text-red-600"></i>
+        </div>
+        <p className="text-muted-foreground text-lg font-medium">Failed to load maintenance requests</p>
+        <p className="text-sm text-muted-foreground mt-2">
+          Please try again later
+        </p>
+      </div>
+    );
+  }
+
   if (requests.length === 0) {
     return (
       <div className="text-center py-12">
@@ -160,7 +174,7 @@ export default function MaintenanceRequestList({
                       </span>
                       <span className="flex items-center gap-1">
                         <i className="far fa-building"></i>
-                        {request.unit.unitNumber}
+                        {request.unit?.unitNumber ?? "—"}
                       </span>
                     </div>
                   </div>
@@ -231,7 +245,7 @@ export default function MaintenanceRequestList({
                   <div>
                     <Label className="text-sm text-muted-foreground">Location</Label>
                     <p className="text-sm font-medium mt-1">
-                      {selectedRequest.property.name} - Unit {selectedRequest.unit.unitNumber}
+                      {selectedRequest.property?.name ?? "N/A"} - Unit {selectedRequest.unit?.unitNumber ?? "N/A"}
                     </p>
                   </div>
                 </div>
@@ -257,18 +271,21 @@ export default function MaintenanceRequestList({
                         </p>
                       </div>
                     </div>
-                    {selectedRequest.status === "in_progress" && (
+                    {(selectedRequest.status === "in_progress" || selectedRequest.status === "completed") && (
                       <div className="flex items-start gap-3">
                         <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2"></div>
                         <div>
                           <p className="text-sm font-medium">In Progress</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(selectedRequest.updatedAt).toLocaleString()}
+                            {/* Use updatedAt as fallback until backend provides inProgressAt field */}
+                            {selectedRequest.status === "in_progress" 
+                              ? new Date(selectedRequest.updatedAt).toLocaleString()
+                              : "Status changed"}
                           </p>
                         </div>
                       </div>
                     )}
-                    {selectedRequest.completedDate && (
+                    {selectedRequest.status === "completed" && selectedRequest.completedDate && (
                       <div className="flex items-start gap-3">
                         <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
                         <div>

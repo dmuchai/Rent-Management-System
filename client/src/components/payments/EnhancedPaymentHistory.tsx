@@ -39,17 +39,21 @@ interface Payment {
 interface EnhancedPaymentHistoryProps {
   limit?: number;
   showViewAll?: boolean;
-  tenantView?: boolean;
 }
 
 export default function EnhancedPaymentHistory({
   limit = 5,
   showViewAll = true,
-  tenantView = true,
 }: EnhancedPaymentHistoryProps) {
   const { toast } = useToast();
   const [showAllPayments, setShowAllPayments] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Safe amount parser to prevent NaN display
+  const parseAmount = (amount: string | number): number => {
+    const parsed = parseFloat(amount.toString());
+    return isNaN(parsed) ? 0 : parsed;
+  };
 
   const { data: payments = [], isLoading } = useQuery<Payment[]>({
     queryKey: ["/api/payments"],
@@ -205,7 +209,7 @@ export default function EnhancedPaymentHistory({
                 <div className="text-right flex items-center gap-3">
                   <div>
                     <p className="font-bold text-lg">
-                      KES {parseFloat(payment.amount.toString()).toLocaleString()}
+                      KES {parseAmount(payment.amount).toLocaleString()}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {payment.paymentType.replace(/_/g, " ")}
@@ -271,7 +275,7 @@ export default function EnhancedPaymentHistory({
                   KES{" "}
                   {payments
                     .filter((p) => p.status === "completed")
-                    .reduce((sum, p) => sum + parseFloat(p.amount.toString()), 0)
+                    .reduce((sum, p) => sum + parseAmount(p.amount), 0)
                     .toLocaleString()}
                 </p>
                 <p className="text-xs text-muted-foreground">Total Paid</p>

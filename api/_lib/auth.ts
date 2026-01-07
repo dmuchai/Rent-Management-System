@@ -60,7 +60,41 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
       console.log('✅ Auth verification successful for user:', user.id);
       console.log('User email:', user.email);
     }
-    const role = user.user_metadata?.role || 'landlord';
+    
+    // Securely load role from server-only database table (not user-controlled metadata)
+    const ALLOWED_ROLES = ['landlord', 'tenant', 'property_manager'] as const;
+    type AllowedRole = typeof ALLOWED_ROLES[number];
+    
+    let role: AllowedRole | null = null;
+    
+    try {
+      const { data: userData, error: roleError } = await supabaseAdmin
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      
+      if (roleError) {
+        console.error('❌ Failed to fetch user role from database:', roleError.message);
+        return null;
+      }
+      
+      // Validate role against whitelist
+      if (userData?.role && ALLOWED_ROLES.includes(userData.role as AllowedRole)) {
+        role = userData.role as AllowedRole;
+      } else {
+        console.error('❌ Invalid or missing role for user:', user.id, 'Role:', userData?.role);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Exception while fetching user role:', error);
+      return null;
+    }
+    
+    if (isDebugMode) {
+      console.log('✅ User role verified:', role);
+    }
+    
     return { userId: user.id, user, role };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

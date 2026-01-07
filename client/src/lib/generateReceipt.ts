@@ -113,7 +113,9 @@ export const generatePaymentReceipt = (payment: PaymentReceiptData) => {
   doc.setFont("helvetica", "bold");
   doc.text("Payment Date:", rightCol, y);
   doc.setFont("helvetica", "normal");
-  doc.text(new Date(payment.paidDate).toLocaleDateString(), rightCol + 40, y);
+  const paidDate = new Date(payment.paidDate);
+  const formattedDate = isNaN(paidDate.getTime()) ? "—" : paidDate.toLocaleDateString();
+  doc.text(formattedDate, rightCol + 40, y);
   
   y += 10;
   doc.setFont("helvetica", "bold");
@@ -178,9 +180,19 @@ export const generatePaymentReceipt = (payment: PaymentReceiptData) => {
     { align: "center" }
   );
   
-  // Save the PDF
-  const fileName = `receipt-${payment.id.substring(0, 8)}-${new Date().toISOString().split('T')[0]}.pdf`;
-  doc.save(fileName);
+  // Save the PDF with validated ID and sanitized filename
+  const paymentIdPart = payment?.id && payment.id.length >= 8 
+    ? payment.id.substring(0, 8) 
+    : "unknown";
+  const datePart = new Date().toISOString().split('T')[0].replace(/:/g, '-');
+  const fileName = `receipt-${paymentIdPart}-${datePart}.pdf`;
+  
+  try {
+    doc.save(fileName);
+  } catch (error) {
+    console.error("Failed to save receipt PDF:", error);
+    throw new Error(`Unable to generate receipt: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 };
 
 export default generatePaymentReceipt;

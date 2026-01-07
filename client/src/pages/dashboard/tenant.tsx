@@ -191,7 +191,7 @@ export default function TenantDashboard() {
               <h3 className="text-lg font-semibold">Payment History</h3>
             </div>
             <div className="p-6">
-              <EnhancedPaymentHistory limit={5} showViewAll={true} tenantView={true} />
+              <EnhancedPaymentHistory limit={5} showViewAll={true} />
             </div>
           </div>
 
