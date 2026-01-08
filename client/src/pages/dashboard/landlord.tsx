@@ -208,7 +208,9 @@ export default function LandlordDashboard() {
     queryKey: ["/api/properties"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/properties");
-      return await response.json();
+      const result = await response.json();
+      // Ensure we return an array - API may return direct array or {data: []}
+      return Array.isArray(result) ? result : (result.data || []);
     },
     retry: false,
   });
@@ -270,7 +272,9 @@ export default function LandlordDashboard() {
     queryKey: ["/api/units"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/units");
-      return await response.json();
+      const result = await response.json();
+      // Ensure we return an array - API may return direct array or {data: []}
+      return Array.isArray(result) ? result : (result.data || []);
     },
     retry: false,
   });
@@ -753,7 +757,7 @@ export default function LandlordDashboard() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {payments.slice(0, 3).map((payment: any) => (
+                      {(Array.isArray(payments) ? payments : []).slice(0, 3).map((payment: any) => (
                         <div key={payment.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg" data-testid={`payment-item-${payment.id}`}>
                           <div className="flex items-center space-x-3">
                             <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
@@ -806,7 +810,7 @@ export default function LandlordDashboard() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {maintenanceRequests.slice(0, 3).map((request: any) => (
+                      {(Array.isArray(maintenanceRequests) ? maintenanceRequests : []).slice(0, 3).map((request: any) => (
                         <div key={request.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg" data-testid={`maintenance-item-${request.id}`}>
                           <div className="flex items-center space-x-3">
                             <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
