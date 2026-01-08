@@ -412,6 +412,28 @@ export default function LandlordDashboard() {
     );
   }
 
+  // TEMPORARY: Minimal dashboard to isolate the forEach error
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="bg-white rounded-lg shadow p-6">
+          <h1 className="text-2xl font-bold mb-4">Landlord Dashboard</h1>
+          <p>Dashboard is loading...</p>
+          <p className="text-sm text-gray-600 mt-4">
+            If you see this message, the forEach error is in the dashboard rendering code below this point.
+          </p>
+          <div className="mt-4">
+            <p>Stats Loading: {statsLoading ? 'Yes' : 'No'}</p>
+            <p>Properties Loading: {propertiesLoading ? 'Yes' : 'No'}</p>
+            <p>Stats Data: {dashboardStats ? 'Loaded' : 'Not loaded'}</p>
+            <p>Properties: {properties?.length || 0}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* TEMPORARILY COMMENTED OUT - THE ERROR IS IN THE CODE BELOW
   const sectionHeaders = {
     overview: "Dashboard Overview",
     properties: "Properties",
