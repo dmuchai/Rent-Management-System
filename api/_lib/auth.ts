@@ -74,17 +74,47 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
         .eq('id', user.id)
         .single();
       
-      if (roleError) {
+      // If user doesn't exist in database yet (first login), create them with a default role
+      if (roleError?.code === 'PGRST116') {
+        console.log('📝 User not found in database, creating new user record for:', user.id);
+        
+        // Try to get role from user metadata (for OAuth users who selected a role)
+        const metadataRole = user.user_metadata?.role;
+        const defaultRole: AllowedRole = (metadataRole && ALLOWED_ROLES.includes(metadataRole as AllowedRole)) 
+          ? metadataRole as AllowedRole 
+          : 'landlord';
+        
+        const { data: newUser, error: insertError } = await supabaseAdmin
+          .from('users')
+          .insert({
+            id: user.id,
+            email: user.email,
+            first_name: user.user_metadata?.first_name || user.user_metadata?.full_name?.split(' ')[0] || '',
+            last_name: user.user_metadata?.last_name || user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
+            profile_image_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+            role: defaultRole,
+          })
+          .select('role')
+          .single();
+        
+        if (insertError) {
+          console.error('❌ Failed to create user in database:', insertError.message);
+          return null;
+        }
+        
+        role = newUser.role as AllowedRole;
+        console.log('✅ Created new user with role:', role);
+      } else if (roleError) {
         console.error('❌ Failed to fetch user role from database:', roleError.message);
         return null;
-      }
-      
-      // Validate role against whitelist
-      if (userData?.role && ALLOWED_ROLES.includes(userData.role as AllowedRole)) {
-        role = userData.role as AllowedRole;
       } else {
-        console.error('❌ Invalid or missing role for user:', user.id, 'Role:', userData?.role);
-        return null;
+        // Validate role against whitelist
+        if (userData?.role && ALLOWED_ROLES.includes(userData.role as AllowedRole)) {
+          role = userData.role as AllowedRole;
+        } else {
+          console.error('❌ Invalid or missing role for user:', user.id, 'Role:', userData?.role);
+          return null;
+        }
       }
     } catch (error) {
       console.error('❌ Exception while fetching user role:', error);
