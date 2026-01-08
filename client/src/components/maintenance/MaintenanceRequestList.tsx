@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Card,
   CardContent,
@@ -49,6 +50,11 @@ export default function MaintenanceRequestList({
 
   const { data: requests = [], isLoading, isError, error } = useQuery<MaintenanceRequest[]>({
     queryKey: ["/api/maintenance-requests"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/maintenance-requests");
+      const result = await response.json();
+      return Array.isArray(result) ? result : (result.data || []);
+    },
     retry: false,
   });
 

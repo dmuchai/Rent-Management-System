@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { generatePaymentReceipt } from "@/lib/generateReceipt";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Select,
   SelectContent,
@@ -57,6 +58,11 @@ export default function EnhancedPaymentHistory({
 
   const { data: payments = [], isLoading } = useQuery<Payment[]>({
     queryKey: ["/api/payments"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/payments");
+      const result = await response.json();
+      return Array.isArray(result) ? result : (result.data || []);
+    },
     retry: false,
   });
 
