@@ -250,8 +250,17 @@ export default function LandlordDashboard() {
   const { data: maintenanceRequests = [] } = useQuery({
     queryKey: ["/api/maintenance-requests"],
     queryFn: async () => {
+      console.log('[Dashboard] Fetching maintenance requests...');
       const response = await apiRequest("GET", "/api/maintenance-requests");
-      return await response.json();
+      const result = await response.json();
+      console.log('[Dashboard] Maintenance requests response:', result);
+      console.log('[Dashboard] Result type:', typeof result);
+      console.log('[Dashboard] Is result array?', Array.isArray(result));
+      // API returns { data: [], pagination: {} }, extract the data array
+      const data = result.data || result || [];
+      console.log('[Dashboard] Extracted data:', data);
+      console.log('[Dashboard] Is data array?', Array.isArray(data));
+      return data;
     },
     retry: false,
   });

@@ -68,13 +68,15 @@ class ErrorBoundary extends Component<Props, State> {
                       Error Details
                     </summary>
                     <pre className="mt-2 p-4 bg-gray-100 rounded text-xs overflow-auto max-h-64">
-                      <code>{this.state.error.toString()}</code>
-                      {this.state.errorInfo && (
-                        <>
-                          {"\n\n"}
-                          <code>{this.state.errorInfo.componentStack}</code>
-                        </>
-                      )}
+                      <code>
+                        {String(this.state.error)}
+                        {this.state.errorInfo?.componentStack && (
+                          <>
+                            {"\n\nComponent Stack:\n"}
+                            {String(this.state.errorInfo.componentStack)}
+                          </>
+                        )}
+                      </code>
                     </pre>
                   </details>
                 )}
