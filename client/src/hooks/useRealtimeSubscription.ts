@@ -33,8 +33,17 @@ export function useRealtimeSubscription(
   const queryClient = useQueryClient();
   const enabled = options?.enabled !== undefined ? options.enabled : true;
 
+  // Ensure queryKey is always an array and memoize it safely
+  const safeQueryKey = useMemo(() => {
+    if (!Array.isArray(queryKey)) {
+      console.error('[Realtime] queryKey is not an array:', queryKey);
+      return [];
+    }
+    return queryKey;
+  }, [JSON.stringify(queryKey)]); // Use stringified version for dependency
+
   // Memoize the stringified queryKey to prevent unnecessary effect reruns
-  const stringifiedQueryKey = useMemo(() => JSON.stringify(queryKey), [queryKey]);
+  const stringifiedQueryKey = useMemo(() => JSON.stringify(safeQueryKey), [safeQueryKey.join(',')]);
 
   useEffect(() => {
     // Skip if disabled
