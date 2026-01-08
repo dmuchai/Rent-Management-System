@@ -445,6 +445,12 @@ export default function LandlordDashboard() {
         return (
           <div className="p-6 bg-white rounded-lg">
             <p className="text-green-600">✓ Properties section</p>
+            <p>Properties type: {typeof properties}</p>
+            <p>Properties is array: {Array.isArray(properties) ? 'Yes' : 'No'}</p>
+            <p>Properties length: {Array.isArray(properties) ? properties.length : 'N/A'}</p>
+            <p>Units type: {typeof units}</p>
+            <p>Units is array: {Array.isArray(units) ? 'Yes' : 'No'}</p>
+            <p>Units length: {Array.isArray(units) ? units.length : 'N/A'}</p>
           </div>
         );
 
