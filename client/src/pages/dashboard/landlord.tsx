@@ -263,15 +263,16 @@ export default function LandlordDashboard() {
 
   // 🔄 Enable Realtime subscriptions for instant updates
   // Properties changes affect both /api/properties and /api/dashboard/stats
-  useRealtimeSubscription("properties", ["/api/properties", "/api/dashboard/stats"]);
-  // Tenants changes affect both endpoints
-  useRealtimeSubscription("tenants", ["/api/tenants", "/api/dashboard/stats"]);
-  // Leases changes affect stats
-  useRealtimeSubscription("leases", ["/api/leases", "/api/dashboard/stats"]);
-  // Payments changes affect both endpoints
-  useRealtimeSubscription("payments", ["/api/payments", "/api/dashboard/stats"]);
-  // Units changes affect both units endpoint and dashboard stats (totalUnits, occupiedUnits)
-  useRealtimeSubscription("units", ["/api/units", "/api/dashboard/stats"]);
+  // TEMPORARILY DISABLED FOR DEBUGGING
+  // useRealtimeSubscription("properties", ["/api/properties", "/api/dashboard/stats"]);
+  // // Tenants changes affect both endpoints
+  // useRealtimeSubscription("tenants", ["/api/tenants", "/api/dashboard/stats"]);
+  // // Leases changes affect stats
+  // useRealtimeSubscription("leases", ["/api/leases", "/api/dashboard/stats"]);
+  // // Payments changes affect both endpoints
+  // useRealtimeSubscription("payments", ["/api/payments", "/api/dashboard/stats"]);
+  // // Units changes affect both units endpoint and dashboard stats (totalUnits, occupiedUnits)
+  // useRealtimeSubscription("units", ["/api/units", "/api/dashboard/stats"]);
 
   // Profile update mutation
   const profileUpdateMutation = useMutation({
