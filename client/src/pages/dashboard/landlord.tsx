@@ -412,7 +412,7 @@ export default function LandlordDashboard() {
     );
   }
 
-  // TESTING: Gradually restore dashboard sections to find forEach error
+  // TESTING: Enable full layout structure with simplified overview
   const sectionHeaders = {
     overview: "Dashboard Overview",
     properties: "Properties",
@@ -424,38 +424,84 @@ export default function LandlordDashboard() {
     profile: "Profile Management",
   };
 
-  // Start with just the basic layout - no complex rendering
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-2xl font-bold mb-4">Landlord Dashboard</h1>
-          <p className="text-green-600">✓ Basic layout working</p>
-          <p className="mt-2">Active Section: {activeSection}</p>
-          <div className="mt-4 space-x-2">
-            <button 
-              onClick={() => setActiveSection("overview")}
-              className="px-3 py-1 bg-blue-500 text-white rounded"
-            >
-              Overview
-            </button>
-            <button 
-              onClick={() => setActiveSection("properties")}
-              className="px-3 py-1 bg-green-500 text-white rounded"
-            >
-              Properties
-            </button>
+  const renderMainContent = () => {
+    switch (activeSection) {
+      case "overview":
+        return (
+          <div className="space-y-8">
+            <div className="bg-white rounded-lg p-6">
+              <h2 className="text-xl font-bold mb-4">Welcome back!</h2>
+              <p className="text-green-600">✓ Overview section rendering</p>
+              <div className="mt-4">
+                <p>Total Properties: {dashboardStats?.totalProperties || 0}</p>
+                <p>Total Tenants: {dashboardStats?.totalTenants || 0}</p>
+                <p>Occupancy Rate: {dashboardStats?.occupancyRate || 0}%</p>
+              </div>
+            </div>
           </div>
-          <div className="mt-4">
-            <p>Stats: {JSON.stringify(dashboardStats || {})}</p>
+        );
+
+      case "properties":
+        return (
+          <div className="p-6 bg-white rounded-lg">
+            <p className="text-green-600">✓ Properties section</p>
+          </div>
+        );
+
+      case "tenants":
+      case "leases":
+      case "payments":
+      case "documents":
+      case "reports":
+      case "profile":
+        return <div className="p-6 bg-white rounded-lg">Section: {activeSection}</div>;
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="flex h-screen">
+        <Sidebar 
+          activeSection={activeSection} 
+          onSectionChange={(section) => setActiveSection(section as DashboardSection)}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          isCollapsed={isSidebarCollapsed}
+        />
+        
+        <div className="flex-1 overflow-auto">
+          <Header 
+            title={sectionHeaders[activeSection]}
+            onSectionChange={(section) => setActiveSection(section as DashboardSection)}
+            onMenuClick={() => setIsSidebarOpen(true)}
+            onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            isSidebarCollapsed={isSidebarCollapsed}
+          />
+          
+          <div className="p-4 md:p-6">
+            {renderMainContent()}
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <PropertyForm 
+        open={isPropertyFormOpen}
+        onOpenChange={setIsPropertyFormOpen}
+      />
+      <TenantForm 
+        open={isTenantFormOpen}
+        onOpenChange={setIsTenantFormOpen}
+      />
     </div>
   );
 
   // eslint-disable-next-line no-unreachable
-  const renderMainContent = () => {
+  const oldCode = () => {
+    // Old unreachable code below
     switch (activeSection) {
       case "overview":
         return (
@@ -1581,4 +1627,4 @@ export default function LandlordDashboard() {
       </Dialog>
     </div>
   );
-}
+  }; // End of oldCode function (unreachable - for debugging)
