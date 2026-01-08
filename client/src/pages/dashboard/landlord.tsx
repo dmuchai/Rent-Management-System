@@ -412,7 +412,6 @@ export default function LandlordDashboard() {
     );
   }
 
-  // TESTING: Gradually restore dashboard sections to find forEach error
   const sectionHeaders = {
     overview: "Dashboard Overview",
     properties: "Properties",
@@ -424,37 +423,6 @@ export default function LandlordDashboard() {
     profile: "Profile Management",
   };
 
-  // Start with just the basic layout - no complex rendering
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-2xl font-bold mb-4">Landlord Dashboard</h1>
-          <p className="text-green-600">✓ Basic layout working</p>
-          <p className="mt-2">Active Section: {activeSection}</p>
-          <div className="mt-4 space-x-2">
-            <button 
-              onClick={() => setActiveSection("overview")}
-              className="px-3 py-1 bg-blue-500 text-white rounded"
-            >
-              Overview
-            </button>
-            <button 
-              onClick={() => setActiveSection("properties")}
-              className="px-3 py-1 bg-green-500 text-white rounded"
-            >
-              Properties
-            </button>
-          </div>
-          <div className="mt-4">
-            <p>Stats: {JSON.stringify(dashboardStats || {})}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // eslint-disable-next-line no-unreachable
   const renderMainContent = () => {
     switch (activeSection) {
       case "overview":
