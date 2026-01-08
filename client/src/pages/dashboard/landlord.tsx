@@ -280,17 +280,16 @@ export default function LandlordDashboard() {
   });
 
   // 🔄 Enable Realtime subscriptions for instant updates
-  // TEMPORARILY DISABLED TO DEBUG forEach ERROR
   // Properties changes affect both /api/properties and /api/dashboard/stats
-  // useRealtimeSubscription("properties", ["/api/properties", "/api/dashboard/stats"]);
-  // // Tenants changes affect both endpoints
-  // useRealtimeSubscription("tenants", ["/api/tenants", "/api/dashboard/stats"]);
-  // // Leases changes affect stats
-  // useRealtimeSubscription("leases", ["/api/leases", "/api/dashboard/stats"]);
-  // // Payments changes affect both endpoints
-  // useRealtimeSubscription("payments", ["/api/payments", "/api/dashboard/stats"]);
-  // // Units changes affect both units endpoint and dashboard stats (totalUnits, occupiedUnits)
-  // useRealtimeSubscription("units", ["/api/units", "/api/dashboard/stats"]);
+  useRealtimeSubscription("properties", ["/api/properties", "/api/dashboard/stats"]);
+  // Tenants changes affect both endpoints
+  useRealtimeSubscription("tenants", ["/api/tenants", "/api/dashboard/stats"]);
+  // Leases changes affect stats
+  useRealtimeSubscription("leases", ["/api/leases", "/api/dashboard/stats"]);
+  // Payments changes affect both endpoints
+  useRealtimeSubscription("payments", ["/api/payments", "/api/dashboard/stats"]);
+  // Units changes affect both units endpoint and dashboard stats (totalUnits, occupiedUnits)
+  useRealtimeSubscription("units", ["/api/units", "/api/dashboard/stats"]);
 
   // Profile update mutation
   const profileUpdateMutation = useMutation({
@@ -601,7 +600,7 @@ export default function LandlordDashboard() {
             </div>
 
             {/* Revenue Trend Chart */}
-            {dashboardStats?.revenueTrend && dashboardStats.revenueTrend.length > 0 && (
+            {dashboardStats?.revenueTrend && Array.isArray(dashboardStats.revenueTrend) && dashboardStats.revenueTrend.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center text-lg">
@@ -639,7 +638,7 @@ export default function LandlordDashboard() {
             )}
 
             {/* Expiring Leases Alert */}
-            {dashboardStats?.expiringLeases && dashboardStats.expiringLeases.length > 0 && (
+            {dashboardStats?.expiringLeases && Array.isArray(dashboardStats.expiringLeases) && dashboardStats.expiringLeases.length > 0 && (
               <Card className="border-yellow-200 bg-yellow-50">
                 <CardHeader>
                   <CardTitle className="flex items-center text-lg text-yellow-800">
