@@ -600,42 +600,46 @@ export default function LandlordDashboard() {
             </div>
 
             {/* Revenue Trend Chart */}
-            {dashboardStats?.revenueTrend && Array.isArray(dashboardStats.revenueTrend) && dashboardStats.revenueTrend.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center text-lg">
-                    <i className="fas fa-chart-line mr-2 text-blue-600"></i>
-                    Revenue Trend (Last 6 Months)
-                  </CardTitle>
-                  <CardDescription>Track your monthly revenue performance</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {dashboardStats.revenueTrend.map((item: any, index: number) => {
-                      const monthName = new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                      const revenue = parseFloat(item.revenue);
-                      const maxRevenue = Math.max(...dashboardStats.revenueTrend.map((i: any) => parseFloat(i.revenue)));
-                      const barWidth = maxRevenue > 0 ? (revenue / maxRevenue) * 100 : 0;
-                      
-                      return (
-                        <div key={index} className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">{monthName}</span>
-                            <span className="font-semibold">KES {revenue.toLocaleString()}</span>
+            {dashboardStats?.revenueTrend && Array.isArray(dashboardStats.revenueTrend) && dashboardStats.revenueTrend.length > 0 && (() => {
+              // Calculate max revenue once outside the map to avoid repeated calculations
+              const maxRevenue = Math.max(...dashboardStats.revenueTrend.map((i: any) => parseFloat(i.revenue) || 0));
+              
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center text-lg">
+                      <i className="fas fa-chart-line mr-2 text-blue-600"></i>
+                      Revenue Trend (Last 6 Months)
+                    </CardTitle>
+                    <CardDescription>Track your monthly revenue performance</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {dashboardStats.revenueTrend.map((item: any, index: number) => {
+                        const monthName = new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                        const revenue = parseFloat(item.revenue) || 0;
+                        const barWidth = maxRevenue > 0 ? (revenue / maxRevenue) * 100 : 0;
+                        
+                        return (
+                          <div key={index} className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">{monthName}</span>
+                              <span className="font-semibold">KES {revenue.toLocaleString()}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                              <div 
+                                className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" 
+                                style={{ width: `${barWidth}%` }}
+                              ></div>
+                            </div>
                           </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2.5">
-                            <div 
-                              className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" 
-                              style={{ width: `${barWidth}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             {/* Expiring Leases Alert */}
             {dashboardStats?.expiringLeases && Array.isArray(dashboardStats.expiringLeases) && dashboardStats.expiringLeases.length > 0 && (
