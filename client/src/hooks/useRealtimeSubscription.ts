@@ -33,17 +33,9 @@ export function useRealtimeSubscription(
   const queryClient = useQueryClient();
   const enabled = options?.enabled !== undefined ? options.enabled : true;
 
-  // Ensure queryKey is always an array and memoize it safely
-  const safeQueryKey = useMemo(() => {
-    if (!Array.isArray(queryKey)) {
-      console.error('[Realtime] queryKey is not an array:', queryKey);
-      return [];
-    }
-    return queryKey;
-  }, [JSON.stringify(queryKey)]); // Use stringified version for dependency
-
-  // Memoize the stringified queryKey to prevent unnecessary effect reruns
-  const stringifiedQueryKey = useMemo(() => JSON.stringify(safeQueryKey), [safeQueryKey.join(',')]);
+  // Convert queryKey array to a stable string representation for dependencies
+  // This avoids React's useMemo forEach error when array references change
+  const queryKeyString = Array.isArray(queryKey) ? queryKey.join('|') : '';
 
   useEffect(() => {
     // Skip if disabled
@@ -52,8 +44,11 @@ export function useRealtimeSubscription(
       return;
     }
 
+    // Parse queryKey back from string
+    const parsedQueryKeys = queryKeyString ? queryKeyString.split('|') : [];
+    
     console.log(`[Realtime] Setting up subscription for table: ${tableName}`);
-    console.log(`[Realtime] Query keys to invalidate:`, JSON.parse(stringifiedQueryKey));
+    console.log(`[Realtime] Query keys to invalidate:`, parsedQueryKeys);
     
     // Create a unique channel name for this subscription
     const channelName = `${tableName}_changes`;
@@ -76,19 +71,10 @@ export function useRealtimeSubscription(
               console.log(`[Realtime] Change detected in ${tableName}:`, payload.eventType);
               console.log('[Realtime] Payload:', payload);
               
-              // Invalidate queries using the memoized queryKey array
-              const parsedQueryKey = JSON.parse(stringifiedQueryKey);
-              console.log('[Realtime] Parsed query key:', parsedQueryKey);
-              console.log('[Realtime] Query key type:', typeof parsedQueryKey, Array.isArray(parsedQueryKey));
+              // Invalidate queries using the parsed queryKeys
+              queryClient.invalidateQueries({ queryKey: parsedQueryKeys });
               
-              if (!Array.isArray(parsedQueryKey)) {
-                console.error('[Realtime] ERROR: Query key is not an array!', parsedQueryKey);
-                return;
-              }
-              
-              queryClient.invalidateQueries({ queryKey: parsedQueryKey });
-              
-              console.log(`[Realtime] Invalidated query key: [${parsedQueryKey.join(', ')}]`);
+              console.log(`[Realtime] Invalidated query key: [${parsedQueryKeys.join(', ')}]`);
             } catch (error) {
               console.error('[Realtime] Error in subscription callback:', error);
               console.error('[Realtime] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
@@ -124,7 +110,7 @@ export function useRealtimeSubscription(
         }
       }
     };
-  }, [tableName, stringifiedQueryKey, queryClient, enabled]);
+  }, [tableName, queryKeyString, queryClient, enabled]);
 }
 
 /**
