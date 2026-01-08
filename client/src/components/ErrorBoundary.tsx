@@ -67,17 +67,16 @@ class ErrorBoundary extends Component<Props, State> {
                     <summary className="cursor-pointer text-sm font-medium text-gray-700">
                       Error Details
                     </summary>
-                    <pre className="mt-2 p-4 bg-gray-100 rounded text-xs overflow-auto max-h-64">
-                      <code>
-                        {String(this.state.error)}
-                        {this.state.errorInfo?.componentStack && (
-                          <>
-                            {"\n\nComponent Stack:\n"}
-                            {String(this.state.errorInfo.componentStack)}
-                          </>
-                        )}
-                      </code>
-                    </pre>
+                    <div className="mt-2 p-4 bg-gray-100 rounded text-xs overflow-auto max-h-64">
+                      <p className="font-bold mb-2">Error Message:</p>
+                      <p className="mb-4 text-red-600">{this.state.error.message || String(this.state.error)}</p>
+                      {this.state.error.stack && (
+                        <>
+                          <p className="font-bold mb-2">Stack Trace:</p>
+                          <pre className="whitespace-pre-wrap break-words">{this.state.error.stack}</pre>
+                        </>
+                      )}
+                    </div>
                   </details>
                 )}
               </div>
