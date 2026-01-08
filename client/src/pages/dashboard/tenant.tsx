@@ -91,6 +91,28 @@ export default function TenantDashboard() {
     retry: false,
   });
 
+  // Fetch tenant's active lease with full details
+  const { data: leases = [], isLoading: leasesLoading } = useQuery({
+    queryKey: ["/api/leases"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/leases");
+      const result = await response.json();
+      const leasesData = Array.isArray(result) ? result : (result.data || []);
+      console.log('[Tenant Dashboard] Leases data:', leasesData);
+      console.log('[Tenant Dashboard] Current user:', user);
+      return leasesData;
+    },
+    retry: false,
+  });
+
+  // Get the active lease for the current tenant
+  const activeLease = leases.find((lease: any) => {
+    console.log('[Tenant Dashboard] Checking lease:', lease, 'Tenant ID:', lease.tenant?.id, 'User ID:', user?.id);
+    return lease.isActive && lease.tenant?.id === user?.id;
+  }) || null;
+  
+  console.log('[Tenant Dashboard] Active lease found:', activeLease);
+
   const { data: payments = [], isLoading: paymentsLoading } = useQuery({
     queryKey: ["/api/payments"],
     queryFn: async () => {
@@ -141,7 +163,7 @@ export default function TenantDashboard() {
     );
   }
 
-  const activeLease = dashboardStats?.activeLease;
+  // Calculate next due date and days until due
   const nextDueDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
   const daysUntilDue = Math.ceil((nextDueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
   
@@ -220,7 +242,7 @@ export default function TenantDashboard() {
             subtitle="Monthly payment"
             icon="fas fa-money-bill-wave"
             color="chart-2"
-            loading={statsLoading}
+            loading={leasesLoading}
             data-testid="stat-currentrent"
           />
           <StatsCard
@@ -229,7 +251,7 @@ export default function TenantDashboard() {
             subtitle={`${daysUntilDue} days remaining`}
             icon="fas fa-calendar"
             color={daysUntilDue < 7 ? "destructive" : "chart-4"}
-            loading={statsLoading}
+            loading={leasesLoading}
             data-testid="stat-nextdue"
           />
           <StatsCard
@@ -286,7 +308,7 @@ export default function TenantDashboard() {
                   <CardDescription>Rental unit details and lease information</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {statsLoading ? (
+                  {leasesLoading ? (
                     <div className="flex items-center justify-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
