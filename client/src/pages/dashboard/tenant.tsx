@@ -106,9 +106,15 @@ export default function TenantDashboard() {
   });
 
   // Get the active lease for the current tenant
+  // The API now filters leases by tenant's user_id, so we just need to find the active one
   const activeLease = leases.find((lease: any) => {
-    console.log('[Tenant Dashboard] Checking lease:', lease, 'Tenant ID:', lease.tenant?.id, 'User ID:', user?.id);
-    return lease.isActive && lease.tenant?.id === user?.id;
+    console.log('[Tenant Dashboard] Checking lease:', {
+      leaseId: lease.id,
+      isActive: lease.isActive,
+      tenantEmail: lease.tenant?.email,
+      userEmail: user?.email
+    });
+    return lease.isActive === true;
   }) || null;
   
   console.log('[Tenant Dashboard] Active lease found:', activeLease);

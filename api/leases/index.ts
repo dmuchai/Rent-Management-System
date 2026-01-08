@@ -15,23 +15,28 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         FROM public.units u
         INNER JOIN public.properties p ON u.property_id = p.id
         WHERE l.unit_id = u.id
-        AND p.owner_id = ${auth.userId}
+        AND (p.owner_id = ${auth.userId} OR l.tenant_id IN (
+          SELECT id FROM public.tenants WHERE user_id = ${auth.userId}
+        ))
         AND l.is_active = true
         AND l.end_date < NOW()
       `;
 
-      // Get all leases for landlord's properties with tenant and unit details
+      // Get leases - for landlords: their properties, for tenants: their own leases
       const leases = await sql`
         SELECT 
           l.*,
           t.id as tenant_id, t.first_name, t.last_name, t.email as tenant_email, t.phone as tenant_phone,
           u.id as unit_id, u.unit_number, u.bedrooms, u.bathrooms, u.rent_amount as unit_rent,
-          p.id as property_id, p.name as property_name
+          p.id as property_id, p.name as property_name, p.address as property_address, p.property_type
         FROM public.leases l
         INNER JOIN public.tenants t ON l.tenant_id = t.id
         INNER JOIN public.units u ON l.unit_id = u.id
         INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId}
+        WHERE (
+          p.owner_id = ${auth.userId} 
+          OR t.user_id = ${auth.userId}
+        )
         ORDER BY l.created_at DESC
       `;
 
@@ -59,10 +64,18 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           bedrooms: lease.bedrooms,
           bathrooms: lease.bathrooms,
           rentAmount: lease.unit_rent,
+          property: {
+            id: lease.property_id,
+            name: lease.property_name,
+            address: lease.property_address,
+            propertyType: lease.property_type,
+          }
         },
         property: {
           id: lease.property_id,
           name: lease.property_name,
+          address: lease.property_address,
+          propertyType: lease.property_type,
         }
       }));
 
