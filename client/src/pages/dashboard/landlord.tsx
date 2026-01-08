@@ -193,8 +193,13 @@ export default function LandlordDashboard() {
   const { data: dashboardStats, isLoading: statsLoading } = useQuery({
     queryKey: ["/api/dashboard/stats"],
     queryFn: async () => {
+      console.log('[Dashboard] Fetching dashboard stats...');
       const response = await apiRequest("GET", "/api/dashboard/stats");
-      return await response.json();
+      const data = await response.json();
+      console.log('[Dashboard] Stats data received:', data);
+      console.log('[Dashboard] Stats data type:', typeof data);
+      console.log('[Dashboard] Is stats array?', Array.isArray(data));
+      return data;
     },
     retry: false,
   });
