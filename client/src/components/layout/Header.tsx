@@ -90,7 +90,9 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/payments");
       const result = await response.json();
-      return (result.data || result || []).slice(0, 5);
+      // Ensure we get an array before slicing
+      const dataArray = Array.isArray(result) ? result : (result.data || []);
+      return Array.isArray(dataArray) ? dataArray.slice(0, 5) : [];
     },
     retry: false,
   });
@@ -100,7 +102,9 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
     queryKey: ["/api/maintenance-requests"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/maintenance-requests");
-      return await response.json();
+      const result = await response.json();
+      // Ensure we return an array
+      return Array.isArray(result) ? result : (result.data || []);
     },
     retry: false,
   });
@@ -124,7 +128,9 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
     const threeDaysAgo = new Date();
     threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
     
-    recentPayments.forEach((payment: any) => {
+    // Ensure recentPayments is an array before iterating
+    if (Array.isArray(recentPayments)) {
+      recentPayments.forEach((payment: any) => {
       const paymentDate = new Date(payment.paidDate || payment.createdAt);
       if (paymentDate > threeDaysAgo) {
         const tenantName = payment.tenant ? `${payment.tenant.firstName} ${payment.tenant.lastName}` : 'Tenant';
@@ -142,9 +148,11 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
         });
       }
     });
+    }
 
     // Pending maintenance requests
-    maintenanceRequests.forEach((req: any) => {
+    if (Array.isArray(maintenanceRequests)) {
+      maintenanceRequests.forEach((req: any) => {
       if (req.status === 'pending' || req.status === 'in_progress') {
         const reqDate = new Date(req.createdAt);
         const timeAgo = getTimeAgo(reqDate);
@@ -160,12 +168,14 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
         });
       }
     });
+    }
 
     // Leases expiring in 30 days
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     
-    leases.forEach((lease: any) => {
+    if (Array.isArray(leases)) {
+      leases.forEach((lease: any) => {
       const endDate = new Date(lease.endDate);
       if (endDate <= thirtyDaysFromNow && endDate > new Date() && lease.isActive) {
         const tenantName = lease.tenant ? `${lease.tenant.firstName} ${lease.tenant.lastName}` : 'Tenant';
@@ -182,6 +192,7 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
         });
       }
     });
+    }
 
     // Sort by timestamp (most recent first)
     return notifs.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 10);

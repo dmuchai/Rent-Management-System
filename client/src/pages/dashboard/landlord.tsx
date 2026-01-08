@@ -442,9 +442,30 @@ export default function LandlordDashboard() {
         );
 
       case "properties":
+        console.log('[Properties Section] properties:', properties);
+        console.log('[Properties Section] units:', units);
+        console.log('[Properties Section] properties type:', typeof properties);
+        console.log('[Properties Section] units type:', typeof units);
+        console.log('[Properties Section] properties isArray:', Array.isArray(properties));
+        console.log('[Properties Section] units isArray:', Array.isArray(units));
+        
+        if (!Array.isArray(properties) || !Array.isArray(units)) {
+          return (
+            <div className="p-6 bg-red-50 rounded-lg">
+              <p className="text-red-600 font-bold">⚠️ Data type error detected!</p>
+              <p>Properties type: {typeof properties}</p>
+              <p>Properties is array: {Array.isArray(properties) ? 'Yes' : 'No'}</p>
+              <p>Properties value: {JSON.stringify(properties)}</p>
+              <p>Units type: {typeof units}</p>
+              <p>Units is array: {Array.isArray(units) ? 'Yes' : 'No'}</p>
+              <p>Units value: {JSON.stringify(units)}</p>
+            </div>
+          );
+        }
+        
         return (
           <div className="p-6 bg-white rounded-lg">
-            <p className="text-green-600">✓ Properties section</p>
+            <p className="text-green-600">✓ Properties section - data types validated</p>
             <p>Properties type: {typeof properties}</p>
             <p>Properties is array: {Array.isArray(properties) ? 'Yes' : 'No'}</p>
             <p>Properties length: {Array.isArray(properties) ? properties.length : 'N/A'}</p>
