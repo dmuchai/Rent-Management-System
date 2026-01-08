@@ -28,7 +28,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           l.*,
           t.id as tenant_id, t.first_name, t.last_name, t.email as tenant_email, t.phone as tenant_phone,
           u.id as unit_id, u.unit_number, u.bedrooms, u.bathrooms, u.rent_amount as unit_rent,
-          p.id as property_id, p.name as property_name, p.address as property_address, p.property_type
+          p.id as property_id, p.name as property_name, p.address as property_address, p.property_type, p.image_url as property_image
         FROM public.leases l
         INNER JOIN public.tenants t ON l.tenant_id = t.id
         INNER JOIN public.units u ON l.unit_id = u.id
@@ -69,6 +69,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
             name: lease.property_name,
             address: lease.property_address,
             propertyType: lease.property_type,
+            imageUrl: lease.property_image,
           }
         },
         property: {
@@ -76,6 +77,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           name: lease.property_name,
           address: lease.property_address,
           propertyType: lease.property_type,
+          imageUrl: lease.property_image,
         }
       }));
 

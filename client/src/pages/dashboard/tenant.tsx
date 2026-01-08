@@ -43,6 +43,7 @@ interface DashboardStats {
         name: string;
         address: string;
         propertyType: string;
+        imageUrl?: string;
       };
     };
   } | null;
@@ -321,10 +322,14 @@ export default function TenantDashboard() {
                   ) : activeLease ? (
                     <div className="space-y-4">
                       <img 
-                        src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300" 
-                        alt="Property" 
+                        src={activeLease.unit?.property?.imageUrl || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300"} 
+                        alt={activeLease.unit?.property?.name || "Property"}
                         className="w-full h-48 object-cover rounded-lg"
                         data-testid="img-property"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300";
+                        }}
                       />
                       {activeLease.unit && (
                         <div className="space-y-2">
