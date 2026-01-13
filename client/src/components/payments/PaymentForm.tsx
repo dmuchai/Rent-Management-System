@@ -42,7 +42,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
     defaultValues: {
       leaseId: activeLease?.id || "",
       amount: activeLease ? parseFloat(activeLease.monthlyRent) : 0,
-      description: activeLease ? `${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} Rent` : "",
+      description: activeLease ? "Rent" : "",
       paymentMethod: "mpesa",
     },
   });
@@ -110,28 +110,37 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
               type="number"
               value={form.watch("amount")}
               onChange={(e) => form.setValue("amount", parseFloat(e.target.value) || 0)}
-              readOnly={!!activeLease}
               data-testid="input-payment-amount"
             />
           </div>
 
           <div>
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
+            <Label htmlFor="description">Payment Type</Label>
+            <Select
               value={form.watch("description")}
-              onChange={(e) => form.setValue("description", e.target.value)}
-              data-testid="input-payment-description"
-            />
+              onValueChange={(value) => form.setValue("description", value)}
+            >
+              <SelectTrigger id="description" data-testid="select-payment-description">
+                <SelectValue placeholder="Select payment type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Rent">Rent</SelectItem>
+                <SelectItem value="Deposit">Deposit</SelectItem>
+                <SelectItem value="Maintenance">Maintenance</SelectItem>
+                <SelectItem value="Utility">Utility</SelectItem>
+                <SelectItem value="Late Fee">Late Fee</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
             <Label>Payment Method</Label>
             <div className="space-y-2 mt-2">
               <label className="flex items-center space-x-2">
-                <input 
-                  type="radio" 
-                  name="payment-method" 
+                <input
+                  type="radio"
+                  name="payment-method"
                   value="mpesa"
                   checked={paymentMethod === "mpesa"}
                   onChange={(e) => setPaymentMethod(e.target.value)}
@@ -141,9 +150,9 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                 <span>M-Pesa</span>
               </label>
               <label className="flex items-center space-x-2">
-                <input 
-                  type="radio" 
-                  name="payment-method" 
+                <input
+                  type="radio"
+                  name="payment-method"
                   value="card"
                   checked={paymentMethod === "card"}
                   onChange={(e) => setPaymentMethod(e.target.value)}
@@ -153,9 +162,9 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                 <span>Debit/Credit Card</span>
               </label>
               <label className="flex items-center space-x-2">
-                <input 
-                  type="radio" 
-                  name="payment-method" 
+                <input
+                  type="radio"
+                  name="payment-method"
                   value="bank"
                   checked={paymentMethod === "bank"}
                   onChange={(e) => setPaymentMethod(e.target.value)}
@@ -167,9 +176,9 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
             </div>
           </div>
 
-          <Button 
-            type="submit" 
-            className="w-full" 
+          <Button
+            type="submit"
+            className="w-full"
             size="lg"
             disabled={paymentMutation.isPending}
             data-testid="button-pay-now"
@@ -197,8 +206,8 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
               <div>
                 <Label htmlFor="lease">Tenant/Lease</Label>
-                <Select 
-                  value={form.watch("leaseId")} 
+                <Select
+                  value={form.watch("leaseId")}
                   onValueChange={(value) => form.setValue("leaseId", value)}
                 >
                   <SelectTrigger data-testid="select-lease">
@@ -226,17 +235,27 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
               </div>
 
               <div>
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
+                <Label htmlFor="description">Payment Type</Label>
+                <Select
                   value={form.watch("description")}
-                  onChange={(e) => form.setValue("description", e.target.value)}
-                  data-testid="input-landlord-description"
-                />
+                  onValueChange={(value) => form.setValue("description", value)}
+                >
+                  <SelectTrigger id="description" data-testid="select-landlord-description">
+                    <SelectValue placeholder="Select payment type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Rent">Rent</SelectItem>
+                    <SelectItem value="Deposit">Deposit</SelectItem>
+                    <SelectItem value="Maintenance">Maintenance</SelectItem>
+                    <SelectItem value="Utility">Utility</SelectItem>
+                    <SelectItem value="Late Fee">Late Fee</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full"
                 disabled={paymentMutation.isPending}
                 data-testid="button-record-payment"
