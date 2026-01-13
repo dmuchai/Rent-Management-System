@@ -69,11 +69,13 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
     `;
 
         const billingUser = {
-            email: user.email || "c4c@example.com",
-            phone: tenant?.phone || "",
+            email: user.email || "tenant@example.com",
+            phone: tenant?.phone || "0700000000", // Default phone for testing if missing
             firstName: tenant?.first_name || user.first_name || "Tenant",
             lastName: tenant?.last_name || user.last_name || "User",
         };
+
+        console.log(`[Pesapal] Billing User:`, JSON.stringify(billingUser));
 
         // Create a pending payment record
         const [payment] = await sql`
@@ -82,11 +84,12 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
         status, due_date, payment_type
       )
       VALUES (
-        ${leaseId}, ${amount.toString()}, ${description || "Rent Payment"}, ${paymentMethod},
+        ${leaseId}, ${amount.toString()}, ${description || "Rent Payment"}, ${paymentMethod || 'mpesa'},
         'pending', NOW(), 'rent'
       )
       RETURNING id
     `;
+        console.log(`[Pesapal] Created internal payment record:`, JSON.stringify(payment));
 
         // Construct callback URL
         const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173';
