@@ -8,21 +8,18 @@ import { z } from 'zod';
 // Matches: /api/leases, /api/leases/123
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
-    const { route } = req.query;
-    // Handle both array (Next.js/Vercel default) and string (potential edge case)
-    const routeParam = Array.isArray(route) ? route[0] : route;
-    const id = routeParam || null;
+    const { id } = req.query;
+    const leaseId = id as string || null;
 
     console.log(`[Leases Debug] URL: ${req.url}, Method: ${req.method}`);
     console.log(`[Leases Debug] Query:`, JSON.stringify(req.query));
-    console.log(`[Leases Debug] Route param:`, route);
-    console.log(`[Leases Debug] Extracted ID: ${id}`);
+    console.log(`[Leases Debug] Extracted ID: ${leaseId}`);
 
     const sql = createDbConnection();
 
     try {
         // --- LIST / CREATE (No ID) ---
-        if (!id) {
+        if (!leaseId) {
             if (req.method === 'GET') {
                 return await handleListLeases(req, res, auth, sql);
             }
@@ -34,20 +31,13 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
         // --- GET / UPDATE / DELETE (With ID) ---
         if (req.method === 'DELETE') {
-            return await handleDeleteLease(req, res, auth, sql, id);
+            return await handleDeleteLease(req, res, auth, sql, leaseId);
         }
         if (req.method === 'PUT') {
-            return await handleUpdateLease(req, res, auth, sql, id);
+            return await handleUpdateLease(req, res, auth, sql, leaseId);
         }
-        // Implement GET single lease if needed (currently not in separate file but often useful)
-        // For now, based on existing file structure, only DELETE was in [id].ts. 
-        // Usually GET /:id is expected. I will implement it for completeness or return 405 if strictly following old structure.
-        // Checking old structure: [id].ts only handled DELETE. index.ts handled GET (list) and POST.
-        // I will add GET /:id support as it's standard REST.
         if (req.method === 'GET') {
-            // Optional: meaningful implementation or 405
-            // Let's implement fetch single lease for robustness
-            return await handleGetLease(req, res, auth, sql, id);
+            return await handleGetLease(req, res, auth, sql, leaseId);
         }
 
         return res.status(405).json({ error: 'Method not allowed' });

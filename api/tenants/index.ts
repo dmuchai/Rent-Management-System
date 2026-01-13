@@ -10,21 +10,18 @@ import { emailService } from '../_lib/emailService.js';
 // Route: /api/tenants/[[...route]]
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
-    const { route } = req.query;
-    // Handle both array (Next.js/Vercel default) and string (potential edge case)
-    const routeParam = Array.isArray(route) ? route[0] : route;
-    const id = routeParam || null;
+    const { id } = req.query;
+    const tenantId = id as string || null;
 
     console.log(`[Tenants Debug] URL: ${req.url}, Method: ${req.method}`);
     console.log(`[Tenants Debug] Query:`, JSON.stringify(req.query));
-    console.log(`[Tenants Debug] Route param:`, route);
-    console.log(`[Tenants Debug] Extracted ID: ${id}`);
+    console.log(`[Tenants Debug] Extracted ID: ${tenantId}`);
 
     const sql = createDbConnection();
 
     try {
         // --- LIST / CREATE (No ID) ---
-        if (!id) {
+        if (!tenantId) {
             if (req.method === 'GET') {
                 return await handleListTenants(req, res, auth, sql);
             }
@@ -36,15 +33,15 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
         // --- DELETE / GET / UPDATE (With ID) ---
         if (req.method === 'DELETE') {
-            return await handleDeleteTenant(req, res, auth, sql, id);
+            return await handleDeleteTenant(req, res, auth, sql, tenantId);
         }
         // Implement GET single tenant if needed
         if (req.method === 'GET') {
-            return await handleGetTenant(req, res, auth, sql, id);
+            return await handleGetTenant(req, res, auth, sql, tenantId);
         }
         // Implement PUT if needed (not in original files but good practice)
         if (req.method === 'PUT') {
-            return await handleUpdateTenant(req, res, auth, sql, id);
+            return await handleUpdateTenant(req, res, auth, sql, tenantId);
         }
 
         return res.status(405).json({ error: 'Method not allowed' });
