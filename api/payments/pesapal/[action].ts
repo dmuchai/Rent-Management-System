@@ -13,7 +13,11 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     const method = req.method;
 
     if (action === 'ipn') {
-        return handleIPN(req, res);
+        return await handleIPN(req, res);
+    }
+
+    if (action === 'sync') {
+        return await handleIPN(req, res);
     }
 
     // Authentication required for initiate and register
@@ -140,33 +144,58 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
 async function handleIPN(req: VercelRequest, res: VercelResponse) {
     const sql = createDbConnection();
     try {
-        const { OrderTrackingId, OrderNotificationType, OrderMerchantReference } = req.query;
-        console.log('Pesapal IPN received:', { OrderTrackingId, OrderNotificationType, OrderMerchantReference });
+        // Pesapal V3 can send IPN as GET or POST
+        const data = req.method === 'POST' ? req.body : req.query;
+        const OrderTrackingId = data.OrderTrackingId || data.orderTrackingId;
+        const OrderNotificationType = data.OrderNotificationType || data.orderNotificationType;
+        const OrderMerchantReference = data.OrderMerchantReference || data.orderMerchantReference;
+
+        console.log(`[Pesapal IPN] Received (${req.method}):`, JSON.stringify({
+            OrderTrackingId,
+            OrderNotificationType,
+            OrderMerchantReference,
+            allData: data
+        }));
 
         if (!OrderTrackingId) {
+            console.error('[Pesapal IPN] Error: Missing OrderTrackingId');
             return res.status(400).json({ message: "Missing tracking ID" });
         }
 
         const trackingIdStr = Array.isArray(OrderTrackingId) ? OrderTrackingId[0] : OrderTrackingId;
+        console.log(`[Pesapal IPN] Fetching status for: ${trackingIdStr}`);
+
         const statusResponse = await pesapalService.getTransactionStatus(trackingIdStr);
+        console.log(`[Pesapal IPN] Transaction status:`, JSON.stringify(statusResponse));
 
+        // Map Pesapal status to our DB status
+        // Standardize to lowercase for comparison
+        const psd = (statusResponse.payment_status_description || "").toLowerCase();
         let dbStatus = "pending";
-        if (statusResponse.payment_status_description === "Completed") dbStatus = "completed";
-        else if (statusResponse.payment_status_description === "Failed") dbStatus = "failed";
+        if (psd === "completed") dbStatus = "completed";
+        else if (psd === "failed") dbStatus = "failed";
+        else if (psd === "reversed") dbStatus = "failed";
 
-        if (OrderMerchantReference) {
-            const merchantRefStr = Array.isArray(OrderMerchantReference) ? OrderMerchantReference[0] : OrderMerchantReference;
+        const merchantRefStr = Array.isArray(OrderMerchantReference) ? OrderMerchantReference[0] : OrderMerchantReference;
 
-            await sql`
-        UPDATE public.payments
-        SET 
-          status = ${dbStatus},
-          pesapal_transaction_id = ${statusResponse.confirmation_code},
-          payment_method = ${statusResponse.payment_method || "mpesa"},
-          paid_date = ${dbStatus === "completed" ? new Date() : null}
-        WHERE id = ${merchantRefStr}
-      `;
-        }
+        console.log(`[Pesapal IPN] Updating record. DB Status: ${dbStatus}, MerchantRef: ${merchantRefStr || 'N/A'}`);
+
+        // Update payment record
+        // We try to match by merchant_reference (our internal ID) 
+        // OR by the tracking ID we saved during initiation as a backup
+        await sql`
+      UPDATE public.payments
+      SET 
+        status = ${dbStatus},
+        pesapal_transaction_id = ${statusResponse.confirmation_code || null},
+        payment_method = ${statusResponse.payment_method || "mpesa"},
+        paid_date = ${dbStatus === "completed" ? new Date() : null},
+        updated_at = NOW()
+      WHERE id = ${merchantRefStr || ''} 
+         OR pesapal_order_tracking_id = ${trackingIdStr}
+    `;
+
+        console.log(`[Pesapal IPN] Successfully updated database for ${trackingIdStr}`);
 
         return res.json({
             orderNotificationType: OrderNotificationType,
@@ -176,7 +205,7 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
         });
 
     } catch (error: any) {
-        console.error('Pesapal IPN error:', error);
+        console.error('[Pesapal IPN] Error processing notification:', error);
         return res.status(500).json({ message: "Failed to process IPN", error: error.message || String(error) });
     } finally {
         await sql.end();

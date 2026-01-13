@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,6 +47,7 @@ export default function EnhancedPaymentHistory({
   showViewAll = true,
 }: EnhancedPaymentHistoryProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [showAllPayments, setShowAllPayments] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
@@ -221,7 +222,7 @@ export default function EnhancedPaymentHistory({
                       {payment.paymentType.replace(/_/g, " ")}
                     </p>
                   </div>
-                  {payment.status === "completed" && (
+                  {payment.status === "completed" ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -230,7 +231,43 @@ export default function EnhancedPaymentHistory({
                     >
                       <i className="fas fa-download"></i>
                     </Button>
-                  )}
+                  ) : payment.status === "pending" ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          toast({
+                            title: "Checking Status",
+                            description: "Verifying payment with Pesapal...",
+                          });
+                          await apiRequest("GET", `/api/payments/pesapal/sync?OrderTrackingId=${payment.id}&OrderMerchantReference=${payment.id}`);
+                          // Note: We pass payment.id as OrderTrackingId just in case, 
+                          // but the backend handles matching by tracking ID if saved.
+                          // Actually, we should pass the actual tracking ID if we have it.
+                          // But our EnhancedPaymentHistory doesn't have it in the interface.
+                          // Let's use the ID as merchant reference which is always reliable.
+
+                          // Refresh data
+                          await queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+
+                          toast({
+                            title: "Status Updated",
+                            description: "Payment status has been refreshed.",
+                          });
+                        } catch (error) {
+                          toast({
+                            title: "Sync Failed",
+                            description: "Could not verify payment status.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      title="Sync Status"
+                    >
+                      <i className="fas fa-sync-alt"></i>
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </CardContent>

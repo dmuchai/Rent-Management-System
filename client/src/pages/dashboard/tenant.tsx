@@ -9,7 +9,7 @@ import PaymentForm from "@/components/payments/PaymentForm";
 import EnhancedPaymentHistory from "@/components/payments/EnhancedPaymentHistory";
 import MaintenanceRequestForm from "@/components/maintenance/MaintenanceRequestForm";
 import MaintenanceRequestList from "@/components/maintenance/MaintenanceRequestList";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,6 +65,7 @@ interface DashboardStats {
 export default function TenantDashboard() {
   usePageTitle('Dashboard');
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { user, isAuthenticated, isLoading } = useAuth();
   const [, setLocation] = useLocation();
   const [isMaintenanceFormOpen, setIsMaintenanceFormOpen] = useState(false);
@@ -81,6 +82,42 @@ export default function TenantDashboard() {
       setLocation("/");
     }
   }, [isLoading, isAuthenticated, toast, setLocation]);
+
+  // Handle payment redirect success
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get("payment");
+    const orderTrackingId = params.get("OrderTrackingId");
+
+    if (paymentStatus === "success" && orderTrackingId) {
+      const syncStatus = async () => {
+        try {
+          toast({
+            title: "Payment Successful",
+            description: "Updating your payment status...",
+          });
+
+          await apiRequest("GET", `/api/payments/pesapal/sync?OrderTrackingId=${orderTrackingId}`);
+
+          // Refresh dashboard data
+          queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+
+          toast({
+            title: "Status Updated",
+            description: "Your payment has been reflected on your dashboard.",
+          });
+
+          // Clear query params without full page reload
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (error) {
+          console.error("Failed to sync payment status:", error);
+        }
+      };
+
+      syncStatus();
+    }
+  }, []); // Only run once on mount
 
   const { data: dashboardStats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
@@ -427,7 +464,7 @@ export default function TenantDashboard() {
                         <div key={payment.id} className="flex items-center justify-between p-3 border rounded-lg">
                           <div className="flex items-center space-x-3">
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${payment.status === 'completed' ? 'bg-green-100' :
-                                payment.status === 'failed' ? 'bg-red-100' : 'bg-yellow-100'
+                              payment.status === 'failed' ? 'bg-red-100' : 'bg-yellow-100'
                               }`}>
                               {payment.status === 'completed' ? (
                                 <CheckCircle className="h-5 w-5 text-green-600" />
