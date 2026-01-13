@@ -113,10 +113,15 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
             throw new Error(`Pesapal order tracking ID missing. Response: ${JSON.stringify(response)}`);
         }
 
+        if (!payment || !payment.id) {
+            console.error('[Pesapal] Payment record creation failed or ID missing');
+            throw new Error('Failed to create internal payment record');
+        }
+
         // Update payment with tracking ID
         await sql`
       UPDATE public.payments
-      SET pesapal_order_tracking_id = ${response.order_tracking_id}
+      SET pesapal_order_tracking_id = ${response.order_tracking_id || null}
       WHERE id = ${payment.id}
     `;
 
