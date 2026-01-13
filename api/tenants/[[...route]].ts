@@ -11,7 +11,9 @@ import { emailService } from '../_lib/emailService.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
     const { route } = req.query;
-    const id = Array.isArray(route) && route.length > 0 ? route[0] : null;
+    // Handle both array (Next.js/Vercel default) and string (potential edge case)
+    const routeParam = Array.isArray(route) ? route[0] : route;
+    const id = routeParam || null;
 
     console.log(`[Tenants Debug] URL: ${req.url}, Method: ${req.method}`);
     console.log(`[Tenants Debug] Query:`, JSON.stringify(req.query));
@@ -63,7 +65,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 async function handleListTenants(req: VercelRequest, res: VercelResponse, auth: any, sql: any) {
     // Get all tenants owned by this landlord
     const tenants = await sql`
-    SELECT 
+    SELECT DISTINCT
       t.id,
       t.landlord_id as "landlordId",
       t.user_id as "userId",
@@ -78,7 +80,11 @@ async function handleListTenants(req: VercelRequest, res: VercelResponse, auth: 
       t.created_at as "createdAt",
       t.updated_at as "updatedAt"
     FROM public.tenants t
-    WHERE t.landlord_id = ${auth.userId}
+    LEFT JOIN public.leases l ON t.id = l.tenant_id
+    LEFT JOIN public.units u ON l.unit_id = u.id
+    LEFT JOIN public.properties p ON u.property_id = p.id
+    WHERE t.landlord_id = ${auth.userId} 
+       OR p.owner_id = ${auth.userId}
     ORDER BY t.created_at DESC
   `;
 

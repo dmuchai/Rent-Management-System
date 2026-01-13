@@ -9,7 +9,9 @@ import { z } from 'zod';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
     const { route } = req.query;
-    const id = Array.isArray(route) && route.length > 0 ? route[0] : null;
+    // Handle both array (Next.js/Vercel default) and string (potential edge case)
+    const routeParam = Array.isArray(route) ? route[0] : route;
+    const id = routeParam || null;
 
     console.log(`[Leases Debug] URL: ${req.url}, Method: ${req.method}`);
     console.log(`[Leases Debug] Query:`, JSON.stringify(req.query));
