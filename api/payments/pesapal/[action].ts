@@ -93,6 +93,7 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
         const callbackUrl = `${baseUrl}/dashboard?payment=success`;
 
         // Initiate request to Pesapal
+        console.log(`[Pesapal] Submitting order for payment ID: ${payment.id}`);
         const paymentRequest = {
             amount: amount,
             description: description || "Rent Payment",
@@ -105,6 +106,12 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
         };
 
         const response = await pesapalService.submitOrderRequest(paymentRequest);
+        console.log(`[Pesapal] Order submission response:`, JSON.stringify(response));
+
+        if (!response || !response.order_tracking_id) {
+            console.error('[Pesapal] order_tracking_id missing from response');
+            throw new Error(`Pesapal order tracking ID missing. Response: ${JSON.stringify(response)}`);
+        }
 
         // Update payment with tracking ID
         await sql`
