@@ -129,12 +129,10 @@ export class PesapalService {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      console.error(`[Pesapal Service] Failed to submit order: ${response.status} ${response.statusText}`, errorBody);
       throw new Error(`Failed to submit order request: ${response.status} ${response.statusText}`);
     }
 
     const data: PesapalSubmitOrderResponse = await response.json();
-    console.log(`[Pesapal Service] Order Request Response Body:`, JSON.stringify(data));
     return data;
   }
 

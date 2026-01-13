@@ -13,10 +13,6 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     const { id } = req.query;
     const tenantId = id as string || null;
 
-    console.log(`[Tenants Debug] URL: ${req.url}, Method: ${req.method}`);
-    console.log(`[Tenants Debug] Query:`, JSON.stringify(req.query));
-    console.log(`[Tenants Debug] Extracted ID: ${tenantId}`);
-
     const sql = createDbConnection();
 
     try {

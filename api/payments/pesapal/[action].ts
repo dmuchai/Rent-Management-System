@@ -12,8 +12,6 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     const { action } = req.query;
     const method = req.method;
 
-    console.log(`Pesapal Action: ${action}, Method: ${method}`);
-
     if (action === 'ipn') {
         return handleIPN(req, res);
     }
@@ -75,8 +73,6 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
             lastName: tenant?.last_name || user.last_name || "User",
         };
 
-        console.log(`[Pesapal] Billing User:`, JSON.stringify(billingUser));
-
         // Create a pending payment record
         const [payment] = await sql`
       INSERT INTO public.payments (
@@ -89,14 +85,12 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
       )
       RETURNING id
     `;
-        console.log(`[Pesapal] Created internal payment record:`, JSON.stringify(payment));
 
         // Construct callback URL
         const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173';
         const callbackUrl = `${baseUrl}/dashboard?payment=success`;
 
         // Initiate request to Pesapal
-        console.log(`[Pesapal] Submitting order for payment ID: ${payment.id}`);
         const paymentRequest = {
             amount: amount,
             description: description || "Rent Payment",
@@ -109,7 +103,6 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
         };
 
         const response = await pesapalService.submitOrderRequest(paymentRequest);
-        console.log(`[Pesapal] Order submission response:`, JSON.stringify(response));
 
         if (!response || !response.order_tracking_id) {
             console.error('[Pesapal] order_tracking_id missing from response');
