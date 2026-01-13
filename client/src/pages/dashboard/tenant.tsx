@@ -18,12 +18,12 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { apiRequest } from "@/lib/queryClient";
-import { 
-  Calendar, 
-  Home, 
-  FileText, 
-  AlertCircle, 
-  CheckCircle, 
+import {
+  Calendar,
+  Home,
+  FileText,
+  AlertCircle,
+  CheckCircle,
   Clock,
   Download,
   Bell,
@@ -117,7 +117,7 @@ export default function TenantDashboard() {
     });
     return lease.isActive === true;
   }) || null;
-  
+
   console.log('[Tenant Dashboard] Active lease found:', activeLease);
 
   const { data: payments = [], isLoading: paymentsLoading } = useQuery({
@@ -173,7 +173,7 @@ export default function TenantDashboard() {
   // Calculate next due date and days until due
   const nextDueDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
   const daysUntilDue = Math.ceil((nextDueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-  
+
   // Calculate lease progress
   const leaseProgress = activeLease ? (() => {
     const start = new Date(activeLease.startDate).getTime();
@@ -208,7 +208,7 @@ export default function TenantDashboard() {
   return (
     <div className="min-h-screen bg-background">
       <Header title="Tenant Dashboard" showSidebar={false} />
-      
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section with Alerts */}
         <div className="mb-8">
@@ -321,8 +321,8 @@ export default function TenantDashboard() {
                     </div>
                   ) : activeLease ? (
                     <div className="space-y-4">
-                      <img 
-                        src={activeLease.unit?.property?.imageUrl || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300"} 
+                      <img
+                        src={activeLease.unit?.property?.imageUrl || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300"}
                         alt={activeLease.unit?.property?.name || "Property"}
                         className="w-full h-48 object-cover rounded-lg"
                         data-testid="img-property"
@@ -426,11 +426,13 @@ export default function TenantDashboard() {
                       {payments.slice(0, 3).map((payment: any) => (
                         <div key={payment.id} className="flex items-center justify-between p-3 border rounded-lg">
                           <div className="flex items-center space-x-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              payment.status === 'completed' ? 'bg-green-100' : 'bg-yellow-100'
-                            }`}>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${payment.status === 'completed' ? 'bg-green-100' :
+                                payment.status === 'failed' ? 'bg-red-100' : 'bg-yellow-100'
+                              }`}>
                               {payment.status === 'completed' ? (
                                 <CheckCircle className="h-5 w-5 text-green-600" />
+                              ) : payment.status === 'failed' ? (
+                                <AlertCircle className="h-5 w-5 text-red-600" />
                               ) : (
                                 <Clock className="h-5 w-5 text-yellow-600" />
                               )}
@@ -442,13 +444,16 @@ export default function TenantDashboard() {
                               </p>
                             </div>
                           </div>
-                          <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'}>
+                          <Badge variant={
+                            payment.status === 'completed' ? 'default' :
+                              payment.status === 'failed' ? 'destructive' : 'secondary'
+                          }>
                             {payment.status}
                           </Badge>
                         </div>
                       ))}
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         className="w-full mt-4"
                         onClick={() => setActiveTab("payments")}
                       >
@@ -468,7 +473,7 @@ export default function TenantDashboard() {
                     <CardTitle>Maintenance Requests</CardTitle>
                     <CardDescription>Recent service requests</CardDescription>
                   </div>
-                  <Button 
+                  <Button
                     size="sm"
                     onClick={() => setIsMaintenanceFormOpen(true)}
                   >
@@ -493,14 +498,14 @@ export default function TenantDashboard() {
                           </div>
                           <Badge variant={
                             request.status === 'completed' ? 'default' :
-                            request.status === 'in_progress' ? 'secondary' : 'outline'
+                              request.status === 'in_progress' ? 'secondary' : 'outline'
                           }>
                             {request.status}
                           </Badge>
                         </div>
                       ))}
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         className="w-full mt-4"
                         onClick={() => setActiveTab("maintenance")}
                       >
@@ -574,9 +579,9 @@ export default function TenantDashboard() {
                 ) : (
                   <div className="grid md:grid-cols-2 gap-4">
                     {documents.map((document: any) => (
-                      <div 
-                        key={document.id} 
-                        className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow" 
+                      <div
+                        key={document.id}
+                        className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"
                         data-testid={`document-item-${document.id}`}
                       >
                         <div className="flex items-center space-x-3">
