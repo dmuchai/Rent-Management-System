@@ -51,14 +51,16 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
     mutationFn: async (data: PaymentFormData) => {
       if (tenantView) {
         // Initiate Pesapal payment for tenant
-        return await apiRequest("POST", "/api/payments/pesapal/initiate", data);
+        const res = await apiRequest("POST", "/api/payments/pesapal/initiate", data);
+        return await res.json();
       } else {
         // Record payment for landlord
-        return await apiRequest("POST", "/api/payments", {
+        const res = await apiRequest("POST", "/api/payments", {
           ...data,
           status: "completed",
           paidDate: new Date(),
         });
+        return await res.json();
       }
     },
     onSuccess: (response: any) => {
