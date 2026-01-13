@@ -29,18 +29,6 @@
   ],
   "rewrites": [
     {
-      "source": "/api/payments/:id",
-      "destination": "/api/payments/[id]"
-    },
-    {
-      "source": "/api/tenants/:id",
-      "destination": "/api/tenants/[id]"
-    },
-    {
-      "source": "/api/leases/:id",
-      "destination": "/api/leases/[id]"
-    },
-    {
       "source": "/api/units/:id",
       "destination": "/api/units/[id]"
     },
