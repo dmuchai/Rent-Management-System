@@ -91,8 +91,23 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
     `;
 
         // Construct callback URL
-        const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5173';
-        const callbackUrl = `${baseUrl}/dashboard?payment=success`;
+        // Priority: PESAPAL_CALLBACK_URL > APP_URL > VERCEL_URL (if not protected) > stable production domain
+        let baseUrl = 'https://property-manager-ke.vercel.app';
+
+        if (process.env.PESAPAL_CALLBACK_URL) {
+            baseUrl = process.env.PESAPAL_CALLBACK_URL;
+        } else if (process.env.APP_URL) {
+            baseUrl = process.env.APP_URL;
+        } else if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
+            // Only use VERCEL_URL if it's not a protected preview domain
+            baseUrl = `https://${process.env.VERCEL_URL}`;
+        } else if (process.env.NODE_ENV === 'development') {
+            baseUrl = 'http://localhost:5173';
+        }
+
+        const callbackUrl = baseUrl.endsWith('/dashboard')
+            ? `${baseUrl}?payment=success`
+            : `${baseUrl}/dashboard?payment=success`;
 
         // Initiate request to Pesapal
         const paymentRequest = {
@@ -218,7 +233,14 @@ async function handleRegister(req: VercelRequest, res: VercelResponse, auth: any
             return res.status(503).json({ message: "Pesapal credentials not configured" });
         }
 
-        const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://property-manager-ke.vercel.app';
+        // Consistent baseUrl logic
+        let baseUrl = 'https://property-manager-ke.vercel.app';
+        if (process.env.APP_URL) {
+            baseUrl = process.env.APP_URL;
+        } else if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
+            baseUrl = `https://${process.env.VERCEL_URL}`;
+        }
+
         const ipnUrl = `${baseUrl}/api/payments/pesapal/ipn`;
 
         const response = await pesapalService.registerIPN(ipnUrl);
