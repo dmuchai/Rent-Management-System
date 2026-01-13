@@ -6,16 +6,17 @@ import { z } from 'zod';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   const sql = createDbConnection();
-  
+
   try {
     if (req.method === 'GET') {
       // Parse pagination parameters
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
       const status = req.query.status as string | undefined;
 
-      // Get all payments for landlord's properties
+      // Get payments based on role
       let payments;
-      if (status) {
+      if (auth.role === 'tenant') {
+        // For tenants, get their own payments
         payments = await sql`
           SELECT 
             pm.*,
@@ -27,11 +28,13 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           INNER JOIN public.tenants t ON l.tenant_id = t.id
           INNER JOIN public.units u ON l.unit_id = u.id
           INNER JOIN public.properties p ON u.property_id = p.id
-          WHERE p.owner_id = ${auth.userId} AND pm.status = ${status}
+          WHERE t.user_id = ${auth.userId}
+          ${status ? sql`AND pm.status = ${status}` : sql``}
           ORDER BY pm.created_at DESC
           LIMIT ${limit}
         `;
       } else {
+        // For landlords, get payments for their properties
         payments = await sql`
           SELECT 
             pm.*,
@@ -44,6 +47,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           INNER JOIN public.units u ON l.unit_id = u.id
           INNER JOIN public.properties p ON u.property_id = p.id
           WHERE p.owner_id = ${auth.userId}
+          ${status ? sql`AND pm.status = ${status}` : sql``}
           ORDER BY pm.created_at DESC
           LIMIT ${limit}
         `;
@@ -113,7 +117,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       } else if (leases[0].owner_id !== auth.userId) {
         return res.status(403).json({ error: 'Access denied', details: null });
       }
-      
+
       const [payment] = await sql`
         INSERT INTO public.payments (lease_id, amount, due_date, paid_date, payment_method, payment_type, status, description)
         VALUES (
@@ -134,12 +138,12 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
     if (req.method === 'DELETE') {
       const paymentIdParam = req.query.id;
-      
+
       // Validate and extract paymentId
       if (!paymentIdParam || Array.isArray(paymentIdParam)) {
         return res.status(400).json({ error: 'Payment ID is required', details: null });
       }
-      
+
       const paymentId = paymentIdParam;
 
       // Use a transaction to prevent race conditions
@@ -171,12 +175,12 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         `;
       });
 
-      return res.status(200).json({ 
+      return res.status(200).json({
         message: 'Payment deleted successfully',
         id: paymentId
       });
     }
-    
+
     return res.status(405).json({ error: 'Method not allowed', details: null });
   } catch (error: any) {
     console.error('Error processing payment request:', {
@@ -189,14 +193,14 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     if (error.message === 'PAYMENT_NOT_FOUND') {
       return res.status(404).json({ error: 'Payment not found or unauthorized', details: null });
     }
-    
+
     if (error.message === 'PAYMENT_COMPLETED') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Cannot delete completed payment',
         details: 'Completed payments cannot be deleted for audit purposes'
       });
     }
-    
+
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid input', details: error.errors });
     } else {

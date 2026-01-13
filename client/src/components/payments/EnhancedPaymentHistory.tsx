@@ -233,23 +233,21 @@ export default function EnhancedPaymentHistory({
                     </Button>
                   ) : payment.status === "pending" ? (
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      onClick={async () => {
+                      className="text-xs flex items-center gap-2 border-yellow-200 hover:border-yellow-400 hover:bg-yellow-50 text-yellow-700 h-8"
+                      onClick={async (e) => {
+                        e.stopPropagation();
                         try {
                           toast({
                             title: "Checking Status",
                             description: "Verifying payment with Pesapal...",
                           });
                           await apiRequest("GET", `/api/payments/pesapal/sync?OrderTrackingId=${payment.id}&OrderMerchantReference=${payment.id}`);
-                          // Note: We pass payment.id as OrderTrackingId just in case, 
-                          // but the backend handles matching by tracking ID if saved.
-                          // Actually, we should pass the actual tracking ID if we have it.
-                          // But our EnhancedPaymentHistory doesn't have it in the interface.
-                          // Let's use the ID as merchant reference which is always reliable.
 
                           // Refresh data
                           await queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+                          await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
 
                           toast({
                             title: "Status Updated",
@@ -266,6 +264,7 @@ export default function EnhancedPaymentHistory({
                       title="Sync Status"
                     >
                       <i className="fas fa-sync-alt"></i>
+                      <span>Sync</span>
                     </Button>
                   ) : null}
                 </div>
