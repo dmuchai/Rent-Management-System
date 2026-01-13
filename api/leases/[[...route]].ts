@@ -11,7 +11,10 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     const { route } = req.query;
     const id = Array.isArray(route) && route.length > 0 ? route[0] : null;
 
-    console.log(`Leases Handler: Method=${req.method}, ID=${id}`);
+    console.log(`[Leases Debug] URL: ${req.url}, Method: ${req.method}`);
+    console.log(`[Leases Debug] Query:`, JSON.stringify(req.query));
+    console.log(`[Leases Debug] Route param:`, route);
+    console.log(`[Leases Debug] Extracted ID: ${id}`);
 
     const sql = createDbConnection();
 
