@@ -91,23 +91,13 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
     `;
 
         // Construct callback URL
-        // Priority: PESAPAL_CALLBACK_URL > APP_URL > VERCEL_URL (if not protected) > stable production domain
-        let baseUrl = 'https://property-manager-ke.vercel.app';
+        // Dynamically detect host to stay on the same domain (maintains session)
+        const host = req.headers.host || 'property-manager-ke.vercel.app';
+        const protocol = (req.headers['x-forwarded-proto'] as string) || (host.includes('localhost') ? 'http' : 'https');
+        const baseUrl = `${protocol}://${host}`;
 
-        if (process.env.PESAPAL_CALLBACK_URL) {
-            baseUrl = process.env.PESAPAL_CALLBACK_URL;
-        } else if (process.env.APP_URL) {
-            baseUrl = process.env.APP_URL;
-        } else if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
-            // Only use VERCEL_URL if it's not a protected preview domain
-            baseUrl = `https://${process.env.VERCEL_URL}`;
-        } else if (process.env.NODE_ENV === 'development') {
-            baseUrl = 'http://localhost:5173';
-        }
-
-        const callbackUrl = baseUrl.endsWith('/dashboard')
-            ? `${baseUrl}?payment=success`
-            : `${baseUrl}/dashboard?payment=success`;
+        const callbackUrl = `${baseUrl}/dashboard?payment=success`;
+        console.log(`[Pesapal] Generated callbackUrl: ${callbackUrl}`);
 
         // Initiate request to Pesapal
         const paymentRequest = {
@@ -181,24 +171,31 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
         console.log(`[Pesapal IPN] Fetching status for: ${trackingIdStr}`);
 
         const statusResponse = await pesapalService.getTransactionStatus(trackingIdStr);
-        console.log(`[Pesapal IPN] Transaction status:`, JSON.stringify(statusResponse));
+        console.log(`[Pesapal IPN] Transaction status response:`, JSON.stringify(statusResponse));
 
         // Map Pesapal status to our DB status
-        // Standardize to lowercase for comparison
+        // Use status_code as primary indicator if available
+        // V3 codes: 1=Completed, 0=Pending, 2=Failed, 3=Reversed
+        const statusCode = statusResponse.payment_status_code || statusResponse.status_code;
         const psd = (statusResponse.payment_status_description || "").toLowerCase();
+
         let dbStatus = "pending";
-        if (psd === "completed") dbStatus = "completed";
-        else if (psd === "failed") dbStatus = "failed";
-        else if (psd === "reversed") dbStatus = "failed";
+        if (statusCode === 1 || statusCode === "1" || psd === "completed") {
+            dbStatus = "completed";
+        } else if (statusCode === 2 || statusCode === "2" || psd === "failed") {
+            dbStatus = "failed";
+        } else if (statusCode === 3 || statusCode === "3" || psd === "reversed") {
+            dbStatus = "failed";
+        }
 
         const merchantRefStr = Array.isArray(OrderMerchantReference) ? OrderMerchantReference[0] : OrderMerchantReference;
 
-        console.log(`[Pesapal IPN] Updating record. DB Status: ${dbStatus}, MerchantRef: ${merchantRefStr || 'N/A'}`);
+        console.log(`[Pesapal IPN] Updating record. DB Status: ${dbStatus}, MerchantRef: ${merchantRefStr || 'N/A'}, TrackingID: ${trackingIdStr}`);
 
         // Update payment record
         // We try to match by merchant_reference (our internal ID) 
         // OR by the tracking ID we saved during initiation as a backup
-        await sql`
+        const updateResult = await sql`
       UPDATE public.payments
       SET 
         status = ${dbStatus},
@@ -208,9 +205,14 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
         updated_at = NOW()
       WHERE id = ${merchantRefStr || ''} 
          OR pesapal_order_tracking_id = ${trackingIdStr}
+      RETURNING id
     `;
 
-        console.log(`[Pesapal IPN] Successfully updated database for ${trackingIdStr}`);
+        console.log(`[Pesapal IPN] Database update result: ${updateResult.length} rows affected. IDs: ${JSON.stringify(updateResult.map(r => r.id))}`);
+
+        if (updateResult.length === 0) {
+            console.error(`[Pesapal IPN] CRITICAL: No payment record found to update for MerchantRef: ${merchantRefStr} or TrackingID: ${trackingIdStr}`);
+        }
 
         return res.json({
             orderNotificationType: OrderNotificationType,
