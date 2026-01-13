@@ -46,10 +46,10 @@ export class PesapalService {
   private tokenCache: { token: string; expiryDate: Date } | null = null;
 
   constructor() {
-    this.baseUrl = process.env.NODE_ENV === "production" 
+    this.baseUrl = process.env.NODE_ENV === "production"
       ? "https://pay.pesapal.com/v3/api/"
       : "https://cybqa.pesapal.com/pesapalv3/api/";
-    
+
     this.consumerKey = process.env.PESAPAL_CONSUMER_KEY || "";
     this.consumerSecret = process.env.PESAPAL_CONSUMER_SECRET || "";
     this.ipnId = process.env.PESAPAL_IPN_ID || "";
@@ -88,7 +88,7 @@ export class PesapalService {
     }
 
     const data: PesapalAuthResponse = await response.json();
-    
+
     // Cache the token with 5-minute expiry (tokens expire after 5 minutes)
     this.tokenCache = {
       token: data.token,
@@ -132,6 +132,7 @@ export class PesapalService {
     }
 
     const data: PesapalSubmitOrderResponse = await response.json();
+    console.log(`[Pesapal Service] Order Request Response Body:`, JSON.stringify(data));
     return data;
   }
 
