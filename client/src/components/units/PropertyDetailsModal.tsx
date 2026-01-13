@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin, Home, Plus, Users, FileText } from "lucide-react";
 import UnitForm from "./UnitForm";
 import UnitTable from "./UnitTable";
-import { Unit } from "@/../../shared/schema";
+import LeaseTable from "@/components/leases/LeaseTable";
+import { Unit, Lease } from "@/../../shared/schema";
 
 interface PropertyDetailsModalProps {
   open: boolean;
@@ -35,15 +36,37 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
     queryKey: [`/api/units`, propertyId],
     queryFn: async (): Promise<Unit[]> => {
       const response = await apiRequest("GET", `/api/units?propertyId=${propertyId}`);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch units: ${response.status} ${response.statusText}`);
       }
-      
+
       return await response.json() as Unit[];
     },
     enabled: !!propertyId && open,
   });
+
+  // Fetch leases for this property (client-side filtering for now)
+  const { data: allLeases = [], isLoading: activeLeasesLoading } = useQuery({
+    queryKey: ["/api/leases"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/leases");
+      const result = await response.json();
+      return Array.isArray(result) ? result : [];
+    },
+    enabled: open,
+  });
+
+  const propertyLeases = allLeases
+    .filter((lease: any) => units.some((u: Unit) => u.id === lease.unitId))
+    .map((lease: any) => ({
+      ...lease,
+      // Ensure property name is available for the table column by injecting the property object
+      unit: {
+        ...(lease.unit || {}),
+        property: property
+      }
+    }));
 
   const handleEditUnit = (unit: Unit) => {
     setEditingUnit(unit);
@@ -176,20 +199,27 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
                   </Button>
                 </div>
 
-                <UnitTable 
-                  propertyId={propertyId} 
-                  onEditUnit={handleEditUnit} 
+                <UnitTable
+                  propertyId={propertyId}
+                  onEditUnit={handleEditUnit}
                 />
               </TabsContent>
 
               <TabsContent value="leases" className="space-y-4">
-                <div className="text-center py-8">
-                  <FileText className="mx-auto h-16 w-16 text-gray-300 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Lease Management</h3>
-                  <p className="text-gray-500">
-                    Lease management for this property will be available here.
-                  </p>
-                </div>
+                {activeLeasesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : (
+                  <LeaseTable
+                    leases={propertyLeases}
+                    loading={activeLeasesLoading}
+                    onViewLease={(lease) => {
+                      // Optional: handle view lease details
+                      console.log("View lease", lease);
+                    }}
+                  />
+                )}
               </TabsContent>
 
               <TabsContent value="financials" className="space-y-4">
@@ -206,14 +236,15 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
             </Tabs>
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Unit Form Modal */}
-      <UnitForm
+      < UnitForm
         open={showUnitForm}
         onOpenChange={handleCloseUnitForm}
         propertyId={propertyId}
-        unit={editingUnit || undefined}
+        unit={editingUnit || undefined
+        }
       />
     </>
   );
