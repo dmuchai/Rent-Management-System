@@ -482,7 +482,7 @@ export class SupabaseStorage {
     if (!data) return undefined;
 
     // Convert snake_case to camelCase for consistency
-    const tenant = {
+    return {
       id: data.id,
       userId: data.user_id,
       firstName: data.first_name,
@@ -492,9 +492,34 @@ export class SupabaseStorage {
       emergencyContact: data.emergency_contact,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
-    };
+    } as Tenant;
+  }
 
-    return tenant as Tenant;
+  async getTenantByUserId(userId: string): Promise<Tenant | undefined> {
+    const { data, error } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (error) {
+      console.log('getTenantByUserId error:', error);
+      return undefined;
+    }
+
+    if (!data) return undefined;
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      firstName: data.first_name,
+      lastName: data.last_name,
+      email: data.email,
+      phone: data.phone,
+      emergencyContact: data.emergency_contact,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    } as Tenant;
   }
 
   async createTenant(tenant: InsertTenant, landlordId?: string): Promise<Tenant> {

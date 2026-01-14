@@ -47,12 +47,29 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
     },
   });
 
+  const { data: tenantProfile } = useQuery<any>({
+    queryKey: ["/api/tenants/me"],
+    enabled: tenantView,
+  });
+
   const paymentMutation = useMutation({
-    mutationFn: async (data: PaymentFormData) => {
+    mutationFn: async (data: PaymentFormData & { phoneNumber?: string }) => {
       if (tenantView) {
-        // Initiate Pesapal payment for tenant
-        const res = await apiRequest("POST", "/api/payments/pesapal/initiate", data);
-        return await res.json();
+        if (paymentMethod === "mpesa_direct") {
+          const res = await apiRequest("POST", "/api/payments/mpesa/push", {
+            ...data,
+            phoneNumber: data.phoneNumber || tenantProfile?.phone || "",
+          });
+          return await res.json();
+        } else {
+          // Initiate Pesapal payment for tenant
+          const res = await apiRequest("POST", "/api/payments/pesapal/initiate", {
+            ...data,
+            paymentMethod: paymentMethod === "mpesa" ? "mpesa" :
+              paymentMethod === "card" ? "card" : "bank"
+          });
+          return await res.json();
+        }
       } else {
         // Record payment for landlord
         const res = await apiRequest("POST", "/api/payments", {
@@ -64,15 +81,23 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
       }
     },
     onSuccess: (response: any) => {
-      if (tenantView && response?.redirectUrl) {
-        // Redirect to Pesapal for payment
-        window.location.href = response.redirectUrl;
+      if (tenantView) {
+        if (paymentMethod === "mpesa_direct") {
+          toast({
+            title: "STK Push Sent",
+            description: "Please check your phone for the M-PESA PIN prompt.",
+          });
+          form.reset();
+        } else if (response?.redirectUrl) {
+          // Redirect to Pesapal for payment
+          window.location.href = response.redirectUrl;
+        }
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
         queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
         toast({
           title: "Success",
-          description: tenantView ? "Redirecting to payment..." : "Payment recorded successfully",
+          description: "Payment recorded successfully",
         });
         form.reset();
       }
@@ -138,42 +163,68 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
 
           <div>
             <Label>Payment Method</Label>
-            <div className="space-y-2 mt-2">
-              <label className="flex items-center space-x-2">
+            <div className="space-y-3 mt-2">
+              <label className={`flex items-center space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${paymentMethod === "mpesa_direct" ? "border-chart-2 bg-chart-2/5" : "hover:bg-muted"}`}>
+                <input
+                  type="radio"
+                  name="payment-method"
+                  value="mpesa_direct"
+                  checked={paymentMethod === "mpesa_direct"}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="text-chart-2"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2">
+                    <i className="fas fa-bolt text-chart-2"></i>
+                    <span className="font-medium">Direct M-PESA (STK Push)</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Prompt appears on your phone automatically</p>
+                </div>
+              </label>
+
+              {paymentMethod === "mpesa_direct" && (
+                <div className="pl-8 space-y-2">
+                  <Label htmlFor="phoneNumber" className="text-xs">M-PESA Phone Number</Label>
+                  <Input
+                    id="phoneNumber"
+                    placeholder="e.g. 0712345678"
+                    defaultValue={tenantProfile?.phone || ""}
+                    onChange={(e) => form.setValue("phoneNumber" as any, e.target.value)}
+                    className="h-8"
+                  />
+                </div>
+              )}
+
+              <label className={`flex items-center space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${paymentMethod === "mpesa" ? "border-primary bg-primary/5" : "hover:bg-muted"}`}>
                 <input
                   type="radio"
                   name="payment-method"
                   value="mpesa"
                   checked={paymentMethod === "mpesa"}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  data-testid="radio-mpesa"
                 />
-                <i className="fas fa-mobile-alt text-chart-2"></i>
-                <span>M-Pesa</span>
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2">
+                    <i className="fas fa-mobile-alt text-chart-2"></i>
+                    <span className="font-medium">M-PESA (via Pesapal)</span>
+                  </div>
+                </div>
               </label>
-              <label className="flex items-center space-x-2">
+
+              <label className={`flex items-center space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${paymentMethod === "card" ? "border-primary bg-primary/5" : "hover:bg-muted"}`}>
                 <input
                   type="radio"
                   name="payment-method"
                   value="card"
                   checked={paymentMethod === "card"}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  data-testid="radio-card"
                 />
-                <i className="fas fa-credit-card text-primary"></i>
-                <span>Debit/Credit Card</span>
-              </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  name="payment-method"
-                  value="bank"
-                  checked={paymentMethod === "bank"}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  data-testid="radio-bank"
-                />
-                <i className="fas fa-university text-chart-4"></i>
-                <span>Bank Transfer</span>
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2">
+                    <i className="fas fa-credit-card text-primary"></i>
+                    <span className="font-medium">Debit/Credit Card</span>
+                  </div>
+                </div>
               </label>
             </div>
           </div>
@@ -185,7 +236,8 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
             disabled={paymentMutation.isPending}
             data-testid="button-pay-now"
           >
-            {paymentMutation.isPending ? "Processing..." : "Pay Now via Pesapal"}
+            {paymentMutation.isPending ? "Processing..." :
+              paymentMethod === "mpesa_direct" ? "Send STK Push" : "Pay Now via Pesapal"}
           </Button>
 
           <p className="text-xs text-muted-foreground text-center">
