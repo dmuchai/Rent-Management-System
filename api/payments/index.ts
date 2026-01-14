@@ -12,6 +12,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       // Parse pagination parameters
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
       const status = req.query.status as string | undefined;
+      const leaseId = req.query.leaseId as string | undefined;
+      const tenantId = req.query.tenantId as string | undefined;
 
       // Get payments based on role
       let payments;
@@ -30,6 +32,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           INNER JOIN public.properties p ON u.property_id = p.id
           WHERE t.user_id = ${auth.userId}
           ${status ? sql`AND pm.status = ${status}` : sql``}
+          ${leaseId ? sql`AND pm.lease_id = ${leaseId}` : sql``}
           ORDER BY pm.created_at DESC
           LIMIT ${limit}
         `;
@@ -48,6 +51,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           INNER JOIN public.properties p ON u.property_id = p.id
           WHERE p.owner_id = ${auth.userId}
           ${status ? sql`AND pm.status = ${status}` : sql``}
+          ${leaseId ? sql`AND pm.lease_id = ${leaseId}` : sql``}
+          ${tenantId ? sql`AND l.tenant_id = ${tenantId}` : sql``}
           ORDER BY pm.created_at DESC
           LIMIT ${limit}
         `;

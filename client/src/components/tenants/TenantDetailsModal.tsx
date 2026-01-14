@@ -50,19 +50,15 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
     enabled: open && !!tenant,
   });
 
-  // Compute stable lease IDs for payments query key
-  const leaseIds = leases.map(l => l.id).sort().join(",");
-
   // Fetch tenant's payments (via leases)
   const { data: payments = [], isLoading: paymentsLoading } = useQuery<Payment[]>({
-    queryKey: ["/api/payments", tenant?.id, leaseIds],
+    queryKey: ["/api/payments", tenant?.id],
     queryFn: async () => {
-      const response = await apiRequest("GET", "/api/payments");
-      const allPayments = await response.json();
-      const tenantLeaseIds = leases.map(l => l.id);
-      return allPayments.filter((payment: Payment) => tenantLeaseIds.includes(payment.leaseId));
+      const response = await apiRequest("GET", `/api/payments?tenantId=${tenant?.id}`);
+      const result = await response.json();
+      return Array.isArray(result) ? result : (result.data || []);
     },
-    enabled: open && !!tenant && leaseIds.length > 0,
+    enabled: open && !!tenant,
   });
 
   // Fetch all properties and units to show property/unit names
@@ -97,7 +93,7 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
   const getStatusBadge = () => {
     if (!tenant) return null;
     const status = tenant.accountStatus || 'pending_invitation';
-    
+
     switch (status) {
       case 'active':
         return (
@@ -165,314 +161,314 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
     <Dialog open={open} onOpenChange={onOpenChange}>
       {!tenant ? null : (
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <DialogTitle className="text-2xl">
-                {tenant.firstName} {tenant.lastName}
-              </DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">{tenant.email}</p>
+          <DialogHeader>
+            <div className="flex items-start justify-between">
+              <div>
+                <DialogTitle className="text-2xl">
+                  {tenant.firstName} {tenant.lastName}
+                </DialogTitle>
+                <p className="text-sm text-muted-foreground mt-1">{tenant.email}</p>
+              </div>
+              {getStatusBadge()}
             </div>
-            {getStatusBadge()}
-          </div>
-        </DialogHeader>
+          </DialogHeader>
 
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="leases">Lease History</TabsTrigger>
-            <TabsTrigger value="payments">Payment History</TabsTrigger>
-          </TabsList>
+          <Tabs defaultValue="overview" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="leases">Lease History</TabsTrigger>
+              <TabsTrigger value="payments">Payment History</TabsTrigger>
+            </TabsList>
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-4">
-            {/* Quick Info Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Total Paid</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">KES {totalPaid.toLocaleString()}</p>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">KES {totalPending.toLocaleString()}</p>
-                </CardContent>
-              </Card>
+            {/* Overview Tab */}
+            <TabsContent value="overview" className="space-y-4">
+              {/* Quick Info Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Total Paid</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">KES {totalPaid.toLocaleString()}</p>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Total Leases</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">{leases.length}</p>
-                </CardContent>
-              </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">KES {totalPending.toLocaleString()}</p>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Total Payments</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">{payments.length}</p>
-                </CardContent>
-              </Card>
-            </div>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Total Leases</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">{leases.length}</p>
+                  </CardContent>
+                </Card>
 
-            {/* Contact Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Contact Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <Mail className="h-4 w-4 mt-1 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium">Email</p>
-                    <p className="text-sm text-muted-foreground">{tenant.email}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Phone className="h-4 w-4 mt-1 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium">Phone</p>
-                    <p className="text-sm text-muted-foreground">{tenant.phone || '—'}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-4 w-4 mt-1 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium">Emergency Contact</p>
-                    <p className="text-sm text-muted-foreground">{tenant.emergencyContact || '—'}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Total Payments</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">{payments.length}</p>
+                  </CardContent>
+                </Card>
+              </div>
 
-            {/* Current Lease */}
-            {activeLease && (
+              {/* Contact Information */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Home className="h-5 w-5" />
-                    Current Lease
+                    <User className="h-5 w-5" />
+                    Contact Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Mail className="h-4 w-4 mt-1 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Email</p>
+                      <p className="text-sm text-muted-foreground">{tenant.email}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Phone className="h-4 w-4 mt-1 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Phone</p>
+                      <p className="text-sm text-muted-foreground">{tenant.phone || '—'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-4 w-4 mt-1 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Emergency Contact</p>
+                      <p className="text-sm text-muted-foreground">{tenant.emergencyContact || '—'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Current Lease */}
+              {activeLease && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Home className="h-5 w-5" />
+                      Current Lease
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm font-medium">Property</p>
+                        <p className="text-sm text-muted-foreground">{getPropertyName(activeLease)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Unit</p>
+                        <p className="text-sm text-muted-foreground">{getUnitNumber(activeLease)}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Lease Period</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDate(activeLease.startDate)} - {formatDate(activeLease.endDate)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Monthly Rent</p>
+                        <p className="text-sm text-muted-foreground">
+                          KES {(() => {
+                            const rent = parseFloat(activeLease.monthlyRent as any);
+                            return (isNaN(rent) ? 0 : rent).toLocaleString();
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Account Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    Account Information
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm font-medium">Property</p>
-                      <p className="text-sm text-muted-foreground">{getPropertyName(activeLease)}</p>
+                      <p className="text-sm font-medium">Account Status</p>
+                      <div className="mt-1">{getStatusBadge()}</div>
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Unit</p>
-                      <p className="text-sm text-muted-foreground">{getUnitNumber(activeLease)}</p>
+                      <p className="text-sm font-medium">Joined Date</p>
+                      <p className="text-sm text-muted-foreground">{formatDate(tenant.createdAt)}</p>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium">Lease Period</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDate(activeLease.startDate)} - {formatDate(activeLease.endDate)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Monthly Rent</p>
-                      <p className="text-sm text-muted-foreground">
-                        KES {(() => {
-                          const rent = parseFloat(activeLease.monthlyRent as any);
-                          return (isNaN(rent) ? 0 : rent).toLocaleString();
-                        })()}
-                      </p>
-                    </div>
+                    {tenant.invitationSentAt && (
+                      <div>
+                        <p className="text-sm font-medium">Invitation Sent</p>
+                        <p className="text-sm text-muted-foreground">{formatDate(tenant.invitationSentAt)}</p>
+                      </div>
+                    )}
+                    {tenant.invitationAcceptedAt && (
+                      <div>
+                        <p className="text-sm font-medium">Invitation Accepted</p>
+                        <p className="text-sm text-muted-foreground">{formatDate(tenant.invitationAcceptedAt)}</p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
-            )}
+            </TabsContent>
 
-            {/* Account Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Account Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium">Account Status</p>
-                    <div className="mt-1">{getStatusBadge()}</div>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Joined Date</p>
-                    <p className="text-sm text-muted-foreground">{formatDate(tenant.createdAt)}</p>
-                  </div>
-                  {tenant.invitationSentAt && (
-                    <div>
-                      <p className="text-sm font-medium">Invitation Sent</p>
-                      <p className="text-sm text-muted-foreground">{formatDate(tenant.invitationSentAt)}</p>
+            {/* Lease History Tab */}
+            <TabsContent value="leases" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Lease History ({leases.length})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {leasesLoading ? (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                     </div>
-                  )}
-                  {tenant.invitationAcceptedAt && (
-                    <div>
-                      <p className="text-sm font-medium">Invitation Accepted</p>
-                      <p className="text-sm text-muted-foreground">{formatDate(tenant.invitationAcceptedAt)}</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Lease History Tab */}
-          <TabsContent value="leases" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Lease History ({leases.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {leasesLoading ? (
-                  <div className="flex justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                  </div>
-                ) : leases.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No lease records found</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Property</TableHead>
-                          <TableHead>Unit</TableHead>
-                          <TableHead>Start Date</TableHead>
-                          <TableHead>End Date</TableHead>
-                          <TableHead>Monthly Rent</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                    <TableBody>
-                      {leases.map((lease) => (
-                        <TableRow key={lease.id}>
-                          <TableCell>{getPropertyName(lease)}</TableCell>
-                          <TableCell>{getUnitNumber(lease)}</TableCell>
-                          <TableCell>{formatDate(lease.startDate)}</TableCell>
-                          <TableCell>{formatDate(lease.endDate)}</TableCell>
-                          <TableCell className="font-medium">
-                            KES {(() => {
-                              const rent = parseFloat(lease.monthlyRent as any);
-                              return (isNaN(rent) ? 0 : rent).toLocaleString();
-                            })()}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={lease.isActive ? 'default' : 'secondary'}>
-                              {lease.isActive ? 'Active' : 'Inactive'}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Payment History Tab */}
-          <TabsContent value="payments" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Payment History ({payments.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {paymentsLoading ? (
-                  <div className="flex justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                  </div>
-                ) : payments.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No payment records found</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Method</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                    <TableBody>
-                      {payments.map((payment) => {
-                        const safeAmount = (() => {
-                          const parsed = parseFloat(payment.amount as any);
-                          return isNaN(parsed) ? 0 : parsed;
-                        })();
-                        
-                        return (
-                          <TableRow key={payment.id}>
-                            <TableCell>
-                              {formatDate((payment as any).paidDate || payment.createdAt)}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              KES {safeAmount.toLocaleString()}
-                            </TableCell>
-                            <TableCell>{(payment as any).paymentMethod || '—'}</TableCell>
-                            <TableCell>
-                              <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'}>
-                                {payment.status}
-                              </Badge>
-                            </TableCell>
+                  ) : leases.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No lease records found</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Property</TableHead>
+                            <TableHead>Unit</TableHead>
+                            <TableHead>Start Date</TableHead>
+                            <TableHead>End Date</TableHead>
+                            <TableHead>Monthly Rent</TableHead>
+                            <TableHead>Status</TableHead>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                        </TableHeader>
+                        <TableBody>
+                          {leases.map((lease) => (
+                            <TableRow key={lease.id}>
+                              <TableCell>{getPropertyName(lease)}</TableCell>
+                              <TableCell>{getUnitNumber(lease)}</TableCell>
+                              <TableCell>{formatDate(lease.startDate)}</TableCell>
+                              <TableCell>{formatDate(lease.endDate)}</TableCell>
+                              <TableCell className="font-medium">
+                                KES {(() => {
+                                  const rent = parseFloat(lease.monthlyRent as any);
+                                  return (isNaN(rent) ? 0 : rent).toLocaleString();
+                                })()}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={lease.isActive ? 'default' : 'secondary'}>
+                                  {lease.isActive ? 'Active' : 'Inactive'}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-            {/* Payment Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Payment History Tab */}
+            <TabsContent value="payments" className="space-y-4">
               <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Total Paid</CardTitle>
+                <CardHeader>
+                  <CardTitle>Payment History ({payments.length})</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-xl font-bold text-green-600">KES {totalPaid.toLocaleString()}</p>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Pending Payments</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xl font-bold text-orange-600">KES {totalPending.toLocaleString()}</p>
+                  {paymentsLoading ? (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    </div>
+                  ) : payments.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No payment records found</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Amount</TableHead>
+                            <TableHead>Method</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {payments.map((payment) => {
+                            const safeAmount = (() => {
+                              const parsed = parseFloat(payment.amount as any);
+                              return isNaN(parsed) ? 0 : parsed;
+                            })();
+
+                            return (
+                              <TableRow key={payment.id}>
+                                <TableCell>
+                                  {formatDate((payment as any).paidDate || payment.createdAt)}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  KES {safeAmount.toLocaleString()}
+                                </TableCell>
+                                <TableCell>{(payment as any).paymentMethod || '—'}</TableCell>
+                                <TableCell>
+                                  <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'}>
+                                    {payment.status}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Completed Payments</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xl font-bold">{payments.filter(p => p.status === 'completed').length}</p>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
+              {/* Payment Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Total Paid</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xl font-bold text-green-600">KES {totalPaid.toLocaleString()}</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Pending Payments</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xl font-bold text-orange-600">KES {totalPending.toLocaleString()}</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Completed Payments</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xl font-bold">{payments.filter(p => p.status === 'completed').length}</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
       )}
     </Dialog>
   );
