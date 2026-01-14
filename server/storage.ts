@@ -375,6 +375,45 @@ export class SupabaseStorage {
     // TODO: Implement Supabase query
   }
 
+  async getAllActiveLeases(): Promise<Lease[]> {
+    const { data, error } = await supabase
+      .from("leases")
+      .select("*")
+      .eq("is_active", true);
+    if (error) throw error;
+
+    // Convert snake_case to camelCase
+    return (data || []).map(d => ({
+      id: d.id,
+      tenantId: d.tenant_id,
+      unitId: d.unit_id,
+      startDate: d.start_date,
+      endDate: d.end_date,
+      monthlyRent: d.monthly_rent,
+      securityDeposit: d.security_deposit,
+      leaseDocumentUrl: d.lease_document_url,
+      isActive: d.is_active,
+      createdAt: d.created_at,
+      updatedAt: d.updated_at,
+    })) as Lease[];
+  }
+
+  async hasRentPaymentForPeriod(leaseId: string, month: number, year: number): Promise<boolean> {
+    const startDate = new Date(year, month - 1, 1).toISOString();
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
+
+    const { data, error } = await supabase
+      .from("payments")
+      .select("id")
+      .eq("lease_id", leaseId)
+      .eq("payment_type", "rent")
+      .gte("due_date", startDate)
+      .lte("due_date", endDate);
+
+    if (error) throw error;
+    return (data?.length || 0) > 0;
+  }
+
   // Maintenance request operations
   async getMaintenanceRequestsByOwnerId(ownerId: string): Promise<MaintenanceRequest[]> {
     // TODO: Implement Supabase query
@@ -1043,6 +1082,10 @@ export interface IStorage {
   enqueueEmail(email: InsertEmailQueue): Promise<EmailQueueItem>;
   getPendingEmails(limit?: number): Promise<EmailQueueItem[]>;
   updateEmailStatus(id: string, update: Partial<EmailQueueItem>): Promise<EmailQueueItem>;
+
+  // Invoicing operations
+  getAllActiveLeases(): Promise<Lease[]>;
+  hasRentPaymentForPeriod(leaseId: string, month: number, year: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1250,6 +1293,28 @@ export class DatabaseStorage implements IStorage {
 
   async deleteLease(id: string): Promise<void> {
     await db.delete(leases).where(eq(leases.id, id));
+  }
+
+  async getAllActiveLeases(): Promise<Lease[]> {
+    return await db.select().from(leases).where(eq(leases.isActive, true));
+  }
+
+  async hasRentPaymentForPeriod(leaseId: string, month: number, year: number): Promise<boolean> {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const existingPayments = await db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.leaseId, leaseId),
+          eq(payments.paymentType, "rent"),
+          between(payments.dueDate, startDate, endDate)
+        )
+      );
+
+    return existingPayments.length > 0;
   }
 
   // Payment operations

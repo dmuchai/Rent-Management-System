@@ -1708,6 +1708,24 @@ export async function registerRoutes(app: Express) {
     }
   });
 
+  app.get("/api/cron/generate-invoices", async (req: any, res: any) => {
+    // Shared secret for security
+    const authHeader = req.headers.authorization;
+    const CRON_SECRET = process.env.CRON_SECRET;
+
+    if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const { runAutomatedInvoicing } = await import("./workers/invoicingWorker");
+      const result = await runAutomatedInvoicing();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Keep the POST version as well just in case
   app.post("/api/payments/pesapal/ipn", async (req: any, res: any) => {
     // Same logic as GET
