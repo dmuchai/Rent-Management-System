@@ -41,7 +41,7 @@ export class MpesaService {
         }
 
         const auth = Buffer.from(`${this.consumerKey}:${this.consumerSecret}`).toString("base64");
-        const response = await fetch(`${this.baseUrl}oauth/v1/generate?grant_type=client_credentials`, {
+        const response = await fetch(`${this.baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
             headers: {
                 Authorization: `Basic ${auth}`,
             },
