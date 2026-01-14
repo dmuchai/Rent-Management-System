@@ -23,6 +23,7 @@ interface Payment {
   paymentType: string;
   status: string;
   description?: string;
+  pesapalOrderTrackingId?: string;
   createdAt: string;
   tenant: {
     firstName: string;
@@ -243,7 +244,8 @@ export default function EnhancedPaymentHistory({
                             title: "Checking Status",
                             description: "Verifying payment with Pesapal...",
                           });
-                          await apiRequest("GET", `/api/payments/pesapal/sync?OrderTrackingId=${payment.id}&OrderMerchantReference=${payment.id}`);
+                          const trackingId = payment.pesapalOrderTrackingId || payment.id;
+                          await apiRequest("GET", `/api/payments/pesapal/sync?OrderTrackingId=${trackingId}&OrderMerchantReference=${payment.id}`);
 
                           // Refresh data
                           await queryClient.invalidateQueries({ queryKey: ["/api/payments"] });

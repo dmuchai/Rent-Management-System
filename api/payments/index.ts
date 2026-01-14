@@ -64,6 +64,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         paymentType: payment.payment_type,
         status: payment.status,
         description: payment.description,
+        pesapalOrderTrackingId: payment.pesapal_order_tracking_id,
         createdAt: payment.created_at,
         tenant: {
           id: payment.tenant_id,

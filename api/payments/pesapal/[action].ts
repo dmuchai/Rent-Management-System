@@ -162,16 +162,48 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
             allData: data
         }));
 
-        if (!OrderTrackingId) {
-            console.error('[Pesapal IPN] Error: Missing OrderTrackingId');
-            return res.status(400).json({ message: "Missing tracking ID" });
+        let trackingIdStr = Array.isArray(OrderTrackingId) ? OrderTrackingId[0] : OrderTrackingId;
+        const merchantRefStr = Array.isArray(OrderMerchantReference) ? OrderMerchantReference[0] : OrderMerchantReference;
+
+        console.log(`[Pesapal IPN] Initial tracking ID: ${trackingIdStr}, MerchantRef: ${merchantRefStr}`);
+
+        // Robust tracking ID resolution
+        // If the trackingId looks like our internal ID (which is a UUID), 
+        // OR if the first attempt fails, we should try to fetch the REAL tracking ID from our DB
+        let statusResponse;
+        try {
+            statusResponse = await pesapalService.getTransactionStatus(trackingIdStr);
+
+            // If Pesapal returns an error about invalid ID, we need to resolve it
+            if (statusResponse.error && statusResponse.error.code === 'invalid_order_tracking_id') {
+                console.log(`[Pesapal IPN] Received invalid_order_tracking_id for ${trackingIdStr}, attempting to resolve from DB...`);
+                const [resolvedPayment] = await sql`
+                    SELECT pesapal_order_tracking_id FROM public.payments 
+                    WHERE id = ${trackingIdStr} OR id = ${merchantRefStr || ''}
+                    LIMIT 1
+                `;
+
+                if (resolvedPayment?.pesapal_order_tracking_id) {
+                    console.log(`[Pesapal IPN] Resolved real tracking ID: ${resolvedPayment.pesapal_order_tracking_id}`);
+                    trackingIdStr = resolvedPayment.pesapal_order_tracking_id;
+                    statusResponse = await pesapalService.getTransactionStatus(trackingIdStr);
+                } else {
+                    console.error(`[Pesapal IPN] Could not resolve tracking ID from DB for ${trackingIdStr}`);
+                    return res.status(404).json({ message: "Could not resolve tracking ID" });
+                }
+            }
+        } catch (error: any) {
+            console.error('[Pesapal IPN] Error during status fetch:', error);
+            throw error;
         }
 
-        const trackingIdStr = Array.isArray(OrderTrackingId) ? OrderTrackingId[0] : OrderTrackingId;
-        console.log(`[Pesapal IPN] Fetching status for: ${trackingIdStr}`);
+        console.log(`[Pesapal IPN] Final transaction status response:`, JSON.stringify(statusResponse));
 
-        const statusResponse = await pesapalService.getTransactionStatus(trackingIdStr);
-        console.log(`[Pesapal IPN] Transaction status response:`, JSON.stringify(statusResponse));
+        // Skip update if there's still an error in the response
+        if (statusResponse.error) {
+            console.error(`[Pesapal IPN] Pesapal API returned error: ${JSON.stringify(statusResponse.error)}`);
+            return res.status(400).json({ message: "Pesapal API error", details: statusResponse.error });
+        }
 
         // Map Pesapal status to our DB status
         // Use status_code as primary indicator if available
@@ -187,8 +219,6 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
         } else if (statusCode === 3 || statusCode === "3" || psd === "reversed") {
             dbStatus = "failed";
         }
-
-        const merchantRefStr = Array.isArray(OrderMerchantReference) ? OrderMerchantReference[0] : OrderMerchantReference;
 
         console.log(`[Pesapal IPN] Updating record. DB Status: ${dbStatus}, MerchantRef: ${merchantRefStr || 'N/A'}, TrackingID: ${trackingIdStr}`);
 

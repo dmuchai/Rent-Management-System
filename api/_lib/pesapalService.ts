@@ -25,6 +25,12 @@ interface PesapalTransactionStatusResponse {
   account_number: string;
   payment_status_code: string;
   currency: string;
+  error?: {
+    error_type: string;
+    code: string;
+    message: string;
+  };
+  status?: string;
 }
 
 interface PaymentRequest {
