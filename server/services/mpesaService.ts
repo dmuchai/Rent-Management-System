@@ -28,11 +28,11 @@ export class MpesaService {
             ? "https://api.safaricom.co.ke"
             : "https://sandbox.safaricom.co.ke").replace(/\/$/, "");
 
-        this.consumerKey = process.env.MPESA_CONSUMER_KEY || "";
-        this.consumerSecret = process.env.MPESA_CONSUMER_SECRET || "";
-        this.passkey = process.env.MPESA_PASSKEY || "";
-        this.shortcode = process.env.MPESA_SHORTCODE || "";
-        this.callbackUrl = process.env.MPESA_CALLBACK_URL || "";
+        this.consumerKey = (process.env.MPESA_CONSUMER_KEY || "").trim();
+        this.consumerSecret = (process.env.MPESA_CONSUMER_SECRET || "").trim();
+        this.passkey = (process.env.MPESA_PASSKEY || "").trim();
+        this.shortcode = (process.env.MPESA_SHORTCODE || "").trim();
+        this.callbackUrl = (process.env.MPESA_CALLBACK_URL || "").trim();
     }
 
     private async getAccessToken(): Promise<string> {
@@ -41,7 +41,12 @@ export class MpesaService {
         }
 
         const auth = Buffer.from(`${this.consumerKey}:${this.consumerSecret}`).toString("base64");
-        const response = await fetch(`${this.baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
+        const tokenUrl = `${this.baseUrl}/oauth/v1/generate?grant_type=client_credentials`;
+
+        console.log(`[M-PESA Debug] Fetching token from: ${tokenUrl}`);
+        console.log(`[M-PESA Debug] Auth Header: Basic ${auth.slice(0, 10)}...`);
+
+        const response = await fetch(tokenUrl, {
             headers: {
                 Authorization: `Basic ${auth}`,
             },
@@ -54,6 +59,8 @@ export class MpesaService {
         }
 
         const data: MpesaAuthResponse = await response.json();
+        console.log(`[M-PESA Debug] Token received. Expires in: ${data.expires_in}s`);
+
         this.tokenCache = {
             token: data.access_token,
             expiry: Date.now() + (parseInt(data.expires_in) - 60) * 1000,
@@ -85,11 +92,15 @@ export class MpesaService {
             PartyB: this.shortcode,
             PhoneNumber: formattedPhone,
             CallBackURL: this.callbackUrl,
-            AccountReference: accountReference,
-            TransactionDesc: transactionDesc,
+            AccountReference: accountReference.slice(0, 12), // Safaricom limit is 12 characters
+            TransactionDesc: transactionDesc.slice(0, 20), // Safaricom limit is 20 characters
         };
 
-        const response = await fetch(`${this.baseUrl}/mpesa/stkpush/v1/processrequest`, {
+        const pushUrl = `${this.baseUrl}/mpesa/stkpush/v1/processrequest`;
+        console.log(`[M-PESA Debug] Initiating STK Push to: ${pushUrl}`);
+        console.log(`[M-PESA Debug] Payload:`, JSON.stringify({ ...payload, Password: '***' }));
+
+        const response = await fetch(pushUrl, {
             method: "POST",
             headers: {
                 Authorization: `Bearer ${token}`,
@@ -99,8 +110,17 @@ export class MpesaService {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`M-PESA STK Push failed: ${errorData.errorMessage || response.statusText}`);
+            const errorData = await response.json().catch(() => ({}));
+            const errorMsg = errorData.errorMessage || response.statusText;
+            console.error(`[M-PESA Error] STK Push failed (${response.status}):`, errorMsg, JSON.stringify(errorData));
+
+            // If token is invalid, clear cache so next retry gets a fresh one
+            if (response.status === 401 || errorMsg.includes("Invalid Access Token")) {
+                console.warn("[M-PESA Debug] Clearing token cache due to auth failure");
+                this.tokenCache = null;
+            }
+
+            throw new Error(`M-PESA STK Push failed: ${errorMsg}`);
         }
 
         return await response.json();
