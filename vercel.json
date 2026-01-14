@@ -61,5 +61,15 @@
     "api/**/*.ts": {
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/process-emails",
+      "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/generate-invoices",
+      "schedule": "0 0 1 * *"
+    }
+  ]
 }
