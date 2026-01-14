@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -52,6 +52,12 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
     queryKey: ["/api/tenants/me"],
     enabled: tenantView,
   });
+
+  useEffect(() => {
+    if (tenantProfile?.phone) {
+      form.setValue("phoneNumber", tenantProfile.phone);
+    }
+  }, [tenantProfile, form.setValue]);
 
   const paymentMutation = useMutation({
     mutationFn: async (data: PaymentFormData & { phoneNumber?: string }) => {
@@ -189,11 +195,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                   <Input
                     id="phoneNumber"
                     placeholder="e.g. 0712345678"
-                    defaultValue={tenantProfile?.phone || ""}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      form.setValue("phoneNumber", value);
-                    }}
+                    {...form.register("phoneNumber")}
                     className="h-8"
                   />
                 </div>

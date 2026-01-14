@@ -37,6 +37,10 @@
       "destination": "/api/payments/pesapal/[action]"
     },
     {
+      "source": "/api/tenants/me",
+      "destination": "/api/tenants/me"
+    },
+    {
       "source": "/api/tenants/:id",
       "destination": "/api/tenants"
     },
