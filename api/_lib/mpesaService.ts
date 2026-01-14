@@ -23,7 +23,8 @@ export class MpesaService {
     private tokenCache: { token: string; expiry: number } | null = null;
 
     constructor() {
-        this.baseUrl = (process.env.NODE_ENV === "production"
+        const env = process.env.MPESA_ENV || "sandbox";
+        this.baseUrl = (env === "production"
             ? "https://api.safaricom.co.ke"
             : "https://sandbox.safaricom.co.ke").replace(/\/$/, "");
 
