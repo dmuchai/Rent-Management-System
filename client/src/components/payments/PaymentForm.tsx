@@ -18,6 +18,7 @@ const paymentFormSchema = z.object({
   amount: z.number().min(1, "Amount must be greater than 0"),
   description: z.string().min(1, "Description is required"),
   paymentMethod: z.string().optional(),
+  phoneNumber: z.string().optional(),
 });
 
 type PaymentFormData = z.infer<typeof paymentFormSchema>;
@@ -189,7 +190,10 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                     id="phoneNumber"
                     placeholder="e.g. 0712345678"
                     defaultValue={tenantProfile?.phone || ""}
-                    onChange={(e) => form.setValue("phoneNumber" as any, e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      form.setValue("phoneNumber", value);
+                    }}
                     className="h-8"
                   />
                 </div>
