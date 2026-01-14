@@ -300,7 +300,7 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
                     );
 
                     await sql`
-                        INSERT INTO public.email_queue (to, subject, html_content, text_content, metadata)
+                        INSERT INTO public.email_queue ("to", subject, html_content, text_content, metadata)
                         VALUES 
                             (${tenantEmailOptions.to}, ${tenantEmailOptions.subject}, ${tenantEmailOptions.html}, ${tenantEmailOptions.text ?? null}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: updateResult[0].id, recipient: 'tenant' })}),
                             (${landlordEmailOptions.to}, ${landlordEmailOptions.subject}, ${landlordEmailOptions.html}, ${landlordEmailOptions.text ?? null}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: updateResult[0].id, recipient: 'landlord' })})
