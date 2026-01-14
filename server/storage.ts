@@ -9,7 +9,7 @@ export class SupabaseStorage {
       .eq("property_id", propertyId)
       .order("unit_number", { ascending: true });
     if (error) throw error;
-    
+
     // Convert snake_case to camelCase for frontend
     const units = data?.map((unit: any) => ({
       id: unit.id,
@@ -23,7 +23,7 @@ export class SupabaseStorage {
       createdAt: unit.created_at,
       updatedAt: unit.updated_at,
     })) || [];
-    
+
     return units as Unit[];
   }
   async getUnitById(id: string): Promise<Unit | undefined> {
@@ -32,14 +32,14 @@ export class SupabaseStorage {
       .select("*")
       .eq("id", id)
       .single();
-    
+
     if (error) {
       console.log('getUnitById error:', error);
       return undefined;
     }
-    
+
     if (!data) return undefined;
-    
+
     // Convert snake_case to camelCase for frontend
     const unit = {
       id: data.id,
@@ -53,7 +53,7 @@ export class SupabaseStorage {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-    
+
     return unit as Unit;
   }
   async createUnit(unit: InsertUnit): Promise<Unit> {
@@ -67,21 +67,21 @@ export class SupabaseStorage {
       rent_amount: unit.rentAmount,
       is_occupied: unit.isOccupied || false,
     };
-    
+
     console.log('Inserting unit data to Supabase:', unitData);
     const { data, error } = await supabase
       .from("units")
       .insert(unitData)
       .select()
       .single();
-    
+
     if (error) {
       console.error('Supabase unit creation error:', error);
       throw error;
     }
-    
+
     console.log('Supabase unit created:', data);
-    
+
     // Convert snake_case to camelCase for frontend
     const mappedUnit = {
       id: data.id,
@@ -95,13 +95,13 @@ export class SupabaseStorage {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-    
+
     return mappedUnit as Unit;
   }
   async updateUnit(id: string, unit: Partial<InsertUnit>): Promise<Unit> {
     // Map camelCase to snake_case for Supabase
     const updateData: any = {};
-    
+
     if (unit.propertyId !== undefined) updateData.property_id = unit.propertyId;
     if (unit.unitNumber !== undefined) updateData.unit_number = unit.unitNumber;
     if (unit.bedrooms !== undefined) updateData.bedrooms = unit.bedrooms;
@@ -109,9 +109,9 @@ export class SupabaseStorage {
     if (unit.size !== undefined) updateData.size = unit.size;
     if (unit.rentAmount !== undefined) updateData.rent_amount = unit.rentAmount;
     if (unit.isOccupied !== undefined) updateData.is_occupied = unit.isOccupied;
-    
+
     updateData.updated_at = new Date().toISOString();
-    
+
     console.log('Updating unit data to Supabase:', updateData);
     const { data, error } = await supabase
       .from("units")
@@ -119,14 +119,14 @@ export class SupabaseStorage {
       .eq("id", id)
       .select()
       .single();
-    
+
     if (error) {
       console.error('Supabase unit update error:', error);
       throw error;
     }
-    
+
     console.log('Supabase unit updated:', data);
-    
+
     // Convert snake_case to camelCase for frontend
     const updatedUnit = {
       id: data.id,
@@ -140,7 +140,7 @@ export class SupabaseStorage {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-    
+
     return updatedUnit as Unit;
   }
   async deleteUnit(id: string): Promise<void> {
@@ -151,7 +151,7 @@ export class SupabaseStorage {
   async getLeasesByOwnerId(ownerId: string): Promise<Lease[]> {
     try {
       console.log('Fetching leases for owner:', ownerId);
-      
+
       // First, get all properties owned by this user
       const { data: properties, error: propertiesError } = await supabase
         .from("properties")
@@ -256,7 +256,7 @@ export class SupabaseStorage {
   async getLeasesByTenantId(tenantId: string): Promise<Lease[]> {
     try {
       console.log('Fetching leases for tenant:', tenantId);
-      
+
       const { data: leases, error } = await supabase
         .from("leases")
         .select("*")
@@ -335,21 +335,21 @@ export class SupabaseStorage {
       lease_document_url: lease.leaseDocumentUrl,
       is_active: lease.isActive,
     };
-    
+
     console.log('Inserting lease data to Supabase:', leaseData);
     const { data, error } = await supabase
       .from("leases")
       .insert(leaseData)
       .select()
       .single();
-    
+
     if (error) {
       console.error('Supabase lease creation error:', error);
       throw error;
     }
-    
+
     console.log('Supabase lease created:', data);
-    
+
     // Convert snake_case to camelCase for frontend
     const createdLease = {
       id: data.id,
@@ -364,7 +364,7 @@ export class SupabaseStorage {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-    
+
     return createdLease as Lease;
   }
   async updateLease(id: string, lease: Partial<InsertLease>): Promise<Lease> {
@@ -397,21 +397,21 @@ export class SupabaseStorage {
   // Tenants CRUD
   async getTenantsByOwnerId(ownerId: string): Promise<Tenant[]> {
     console.log('getTenantsByOwnerId called for owner:', ownerId);
-    
+
     // Use user_id field to find tenants associated with this landlord
     const { data, error } = await supabase
       .from("tenants")
       .select("*")
       .eq("user_id", ownerId)
       .order("created_at", { ascending: true });
-    
+
     if (error) {
       console.log('Error fetching tenants:', error);
       throw error;
     }
-    
+
     console.log('Found tenants:', data?.length || 0);
-    
+
     // Map snake_case database fields to camelCase for frontend
     const mappedTenants = data?.map(tenant => ({
       id: tenant.id,
@@ -424,7 +424,7 @@ export class SupabaseStorage {
       createdAt: tenant.created_at,
       updatedAt: tenant.updated_at
     })) || [];
-    
+
     return mappedTenants as Tenant[];
   }
 
@@ -434,14 +434,14 @@ export class SupabaseStorage {
       .select("*")
       .eq("id", id)
       .single();
-    
+
     if (error) {
       console.log('getTenantById error:', error);
       return undefined;
     }
-    
+
     if (!data) return undefined;
-    
+
     // Convert snake_case to camelCase for consistency
     const tenant = {
       id: data.id,
@@ -454,7 +454,7 @@ export class SupabaseStorage {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-    
+
     return tenant as Tenant;
   }
 
@@ -469,7 +469,7 @@ export class SupabaseStorage {
       phone: tenant.phone,
       emergency_contact: tenant.emergencyContact,
     };
-    
+
     const { data, error } = await supabase
       .from("tenants")
       .insert([dbTenant])
@@ -506,32 +506,32 @@ export class SupabaseStorage {
         .from("tenants")
         .select("id")
         .eq("user_id", ownerId);
-      
+
       if (tenantsError) throw tenantsError;
       if (!tenants || tenants.length === 0) return [];
-      
+
       const tenantIds = tenants.map(t => t.id);
-      
+
       // Get all leases for these tenants
       const { data: leases, error: leasesError } = await supabase
         .from("leases")
         .select("id")
         .in("tenant_id", tenantIds);
-      
+
       if (leasesError) throw leasesError;
       if (!leases || leases.length === 0) return [];
-      
+
       const leaseIds = leases.map(l => l.id);
-      
+
       // Now get all payments for these leases
       const { data: payments, error: paymentsError } = await supabase
         .from("payments")
         .select("*")
         .in("lease_id", leaseIds)
         .order("due_date", { ascending: false });
-      
+
       if (paymentsError) throw paymentsError;
-      
+
       // Map snake_case to camelCase for each payment
       const mappedPayments: Payment[] = (payments || []).map((payment: any) => ({
         id: payment.id,
@@ -549,7 +549,7 @@ export class SupabaseStorage {
         createdAt: payment.created_at,
         updatedAt: payment.updated_at,
       }));
-      
+
       return mappedPayments;
     } catch (error) {
       console.error("Error in getPaymentsByOwnerId:", error);
@@ -564,9 +564,9 @@ export class SupabaseStorage {
       .eq("id", id)
       .single();
     if (error) throw error;
-    
+
     if (!data) return undefined;
-    
+
     // Map snake_case to camelCase
     const payment: Payment = {
       id: data.id,
@@ -584,7 +584,7 @@ export class SupabaseStorage {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-    
+
     return payment;
   }
 
@@ -609,14 +609,14 @@ export class SupabaseStorage {
       .insert([paymentData])
       .select()
       .single();
-    
+
     if (error) {
       console.error('Payment creation error:', error);
       throw error;
     }
-    
+
     console.log('Payment created:', data);
-    
+
     // Convert snake_case to camelCase for frontend
     const createdPayment = {
       id: data.id,
@@ -633,7 +633,7 @@ export class SupabaseStorage {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-    
+
     return createdPayment as Payment;
   }
 
@@ -663,9 +663,9 @@ export class SupabaseStorage {
       .select("*")
       .eq("owner_id", ownerId)
       .order("name", { ascending: true });
-    
+
     if (propertiesError) throw propertiesError;
-    
+
     console.log('Raw property data from DB:', {
       ownerId,
       dataCount: propertiesData?.length || 0,
@@ -708,14 +708,14 @@ export class SupabaseStorage {
       .select("*")
       .eq("id", id)
       .single();
-    
+
     if (error) {
       console.log('getPropertyById error:', error);
       return undefined;
     }
-    
+
     if (!data) return undefined;
-    
+
     // Convert snake_case to camelCase for consistency
     const property = {
       id: data.id,
@@ -729,7 +729,7 @@ export class SupabaseStorage {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-    
+
     return property as Property;
   }
 
@@ -764,7 +764,7 @@ export class SupabaseStorage {
     const updateData: any = {
       updated_at: new Date().toISOString()
     };
-    
+
     if (property.name) updateData.name = property.name;
     if (property.address) updateData.address = property.address;
     if (property.propertyType) updateData.property_type = property.propertyType;
@@ -848,9 +848,9 @@ export class SupabaseStorage {
       .upsert(dbUserData, { onConflict: 'email' })
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     // Map snake_case response back to camelCase
     const user = {
       id: data.id,
@@ -871,7 +871,7 @@ export class SupabaseStorage {
     const dbUserData: any = {
       updated_at: new Date().toISOString(),
     };
-    
+
     if (userData.firstName !== undefined) {
       dbUserData.first_name = userData.firstName;
     }
@@ -895,7 +895,7 @@ export class SupabaseStorage {
       .select()
       .single();
     if (error) throw error;
-    
+
     // Map snake_case response back to camelCase
     const user = {
       id: data.id,
@@ -909,6 +909,35 @@ export class SupabaseStorage {
     };
 
     return user as User;
+  }
+
+  // Email Queue (implemented via direct DB for reliability)
+  async enqueueEmail(email: InsertEmailQueue): Promise<EmailQueueItem> {
+    const [newItem] = await db.insert(emailQueue).values(email).returning();
+    return newItem;
+  }
+
+  async getPendingEmails(limit = 50): Promise<EmailQueueItem[]> {
+    return await db
+      .select()
+      .from(emailQueue)
+      .where(
+        and(
+          sql`${emailQueue.status} IN ('pending', 'failed')`,
+          sql`${emailQueue.retryCount} < 5`
+        )
+      )
+      .orderBy(asc(emailQueue.createdAt))
+      .limit(limit);
+  }
+
+  async updateEmailStatus(id: string, update: Partial<EmailQueueItem>): Promise<EmailQueueItem> {
+    const [updatedItem] = await db
+      .update(emailQueue)
+      .set({ ...update, updatedAt: new Date() })
+      .where(eq(emailQueue.id, id))
+      .returning();
+    return updatedItem;
   }
 }
 import {
@@ -936,6 +965,9 @@ import {
   type InsertMaintenanceRequest,
   type Document,
   type InsertDocument,
+  emailQueue,
+  type EmailQueueItem,
+  type InsertEmailQueue,
 } from "../shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, sql, between } from "drizzle-orm";
@@ -1006,6 +1038,11 @@ export interface IStorage {
   createDocument(document: InsertDocument): Promise<Document>;
   updateDocument(id: string, document: Partial<InsertDocument>): Promise<Document>;
   deleteDocument(id: string): Promise<void>;
+
+  // Email Queue operations
+  enqueueEmail(email: InsertEmailQueue): Promise<EmailQueueItem>;
+  getPendingEmails(limit?: number): Promise<EmailQueueItem[]>;
+  updateEmailStatus(id: string, update: Partial<EmailQueueItem>): Promise<EmailQueueItem>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1039,11 +1076,11 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(users.id, id))
       .returning();
-    
+
     if (!user) {
       throw new Error("User not found");
     }
-    
+
     return user;
   }
 
@@ -1403,11 +1440,11 @@ export class DatabaseStorage implements IStorage {
 
   async getDocumentsByCategory(category: string, relatedId?: string): Promise<Document[]> {
     const conditions = [eq(documents.category, category)];
-    
+
     if (relatedId) {
       conditions.push(eq(documents.relatedId, relatedId));
     }
-    
+
     return await db
       .select()
       .from(documents)
@@ -1436,6 +1473,35 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDocument(id: string): Promise<void> {
     await db.delete(documents).where(eq(documents.id, id));
+  }
+
+  // Email Queue implementation
+  async enqueueEmail(email: InsertEmailQueue): Promise<EmailQueueItem> {
+    const [newItem] = await db.insert(emailQueue).values(email).returning();
+    return newItem;
+  }
+
+  async getPendingEmails(limit = 50): Promise<EmailQueueItem[]> {
+    return await db
+      .select()
+      .from(emailQueue)
+      .where(
+        and(
+          sql`${emailQueue.status} IN ('pending', 'failed')`,
+          sql`${emailQueue.retryCount} < 5`
+        )
+      )
+      .orderBy(asc(emailQueue.createdAt))
+      .limit(limit);
+  }
+
+  async updateEmailStatus(id: string, update: Partial<EmailQueueItem>): Promise<EmailQueueItem> {
+    const [updatedItem] = await db
+      .update(emailQueue)
+      .set({ ...update, updatedAt: new Date() })
+      .where(eq(emailQueue.id, id))
+      .returning();
+    return updatedItem;
   }
 }
 

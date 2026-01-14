@@ -274,11 +274,10 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
                     const landlordName = `${paymentDetails.landlord_fname} ${paymentDetails.landlord_lname}`;
                     const pDate = paymentDetails.paid_date ? new Date(paymentDetails.paid_date) : new Date();
 
-                    console.log(`[Pesapal IPN] Triggering emails for Payment ${updateResult[0].id}`);
+                    console.log(`[Pesapal IPN] Enqueueing emails for Payment ${updateResult[0].id}`);
 
-                    // Send to Tenant
-                    // We don't await here to keep it fast, but we catch errors inside a helper or just wrap them
-                    emailService.sendPaymentConfirmation(
+                    // Compose Tenant Email
+                    const tenantEmailOptions = emailService.composePaymentConfirmation(
                         paymentDetails.tenant_email,
                         tenantName,
                         parseFloat(paymentDetails.amount),
@@ -286,10 +285,10 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
                         paymentDetails.property_name,
                         paymentDetails.unit_number,
                         paymentDetails.pesapal_transaction_id || 'N/A'
-                    ).catch(e => console.error('[Pesapal IPN] Tenant email failed:', e));
+                    );
 
-                    // Send to Landlord
-                    emailService.sendLandlordPaymentNotification(
+                    // Compose Landlord Email
+                    const landlordEmailOptions = emailService.composeLandlordPaymentNotification(
                         paymentDetails.landlord_email,
                         landlordName,
                         tenantName,
@@ -298,7 +297,14 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
                         paymentDetails.property_name,
                         paymentDetails.unit_number,
                         paymentDetails.pesapal_transaction_id || 'N/A'
-                    ).catch(e => console.error('[Pesapal IPN] Landlord email failed:', e));
+                    );
+
+                    await sql`
+                        INSERT INTO public.email_queue (to, subject, html_content, text_content, metadata)
+                        VALUES 
+                            (${tenantEmailOptions.to}, ${tenantEmailOptions.subject}, ${tenantEmailOptions.html}, ${tenantEmailOptions.text ?? null}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: updateResult[0].id, recipient: 'tenant' })}),
+                            (${landlordEmailOptions.to}, ${landlordEmailOptions.subject}, ${landlordEmailOptions.html}, ${landlordEmailOptions.text ?? null}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: updateResult[0].id, recipient: 'landlord' })})
+                    `.catch(e => console.error('[Pesapal IPN] Failed to enqueue emails:', e));
                 }
             } catch (emailErr) {
                 console.error('[Pesapal IPN] Email notification data fetch failed:', emailErr);

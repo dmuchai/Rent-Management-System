@@ -313,7 +313,7 @@ Need help? Contact us at support@landeeandmoony.com
     });
   }
 
-  async sendPaymentConfirmation(
+  composePaymentConfirmation(
     tenantEmail: string,
     tenantName: string,
     amount: number,
@@ -321,7 +321,7 @@ Need help? Contact us at support@landeeandmoony.com
     propertyName: string,
     unitNumber: string,
     confirmationCode: string
-  ): Promise<void> {
+  ): EmailOptions {
     const formattedDate = paymentDate.toLocaleDateString('en-KE', {
       year: 'numeric',
       month: 'long',
@@ -374,12 +374,33 @@ Need help? Contact us at support@landeeandmoony.com
       </div>
     `;
 
-    await this.sendEmail({
+    return {
       to: tenantEmail,
       subject: `Payment Confirmation - ${this.sanitizeSubject(propertyName)} Unit ${this.sanitizeSubject(unitNumber)}`,
       html,
       text: `Dear ${tenantName}, your payment of ${formattedAmount} for ${propertyName} Unit ${unitNumber} has been confirmed. Confirmation code: ${confirmationCode}.`,
-    });
+    };
+  }
+
+  async sendPaymentConfirmation(
+    tenantEmail: string,
+    tenantName: string,
+    amount: number,
+    paymentDate: Date,
+    propertyName: string,
+    unitNumber: string,
+    confirmationCode: string
+  ): Promise<void> {
+    const options = this.composePaymentConfirmation(
+      tenantEmail,
+      tenantName,
+      amount,
+      paymentDate,
+      propertyName,
+      unitNumber,
+      confirmationCode
+    );
+    await this.sendEmail(options);
   }
 
   async sendOverdueNotice(
@@ -460,7 +481,7 @@ Need help? Contact us at support@landeeandmoony.com
     });
   }
 
-  async sendLandlordPaymentNotification(
+  composeLandlordPaymentNotification(
     landlordEmail: string,
     landlordName: string,
     tenantName: string,
@@ -469,7 +490,7 @@ Need help? Contact us at support@landeeandmoony.com
     propertyName: string,
     unitNumber: string,
     confirmationCode: string
-  ): Promise<void> {
+  ): EmailOptions {
     const formattedDate = paymentDate.toLocaleDateString('en-KE', {
       year: 'numeric',
       month: 'long',
@@ -522,12 +543,35 @@ Need help? Contact us at support@landeeandmoony.com
       </div>
     `;
 
-    await this.sendEmail({
+    return {
       to: landlordEmail,
       subject: `💰 Payment Received: ${this.sanitizeSubject(tenantName)} - ${this.sanitizeSubject(propertyName)} Unit ${this.sanitizeSubject(unitNumber)}`,
       html,
       text: `Dear ${landlordName}, a payment of ${formattedAmount} has been received from ${tenantName} for ${propertyName} Unit ${unitNumber}. Confirmation code: ${confirmationCode}.`,
-    });
+    };
+  }
+
+  async sendLandlordPaymentNotification(
+    landlordEmail: string,
+    landlordName: string,
+    tenantName: string,
+    amount: number,
+    paymentDate: Date,
+    propertyName: string,
+    unitNumber: string,
+    confirmationCode: string
+  ): Promise<void> {
+    const options = this.composeLandlordPaymentNotification(
+      landlordEmail,
+      landlordName,
+      tenantName,
+      amount,
+      paymentDate,
+      propertyName,
+      unitNumber,
+      confirmationCode
+    );
+    await this.sendEmail(options);
   }
 }
 

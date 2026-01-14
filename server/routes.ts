@@ -1627,10 +1627,10 @@ export async function registerRoutes(app: Express) {
                 const landlordName = `${landlord.first_name} ${landlord.last_name}`;
                 const pDate = payment.paidDate || new Date();
 
-                console.log(`[Server IPN] Triggering emails for Payment ${payment.id}`);
+                console.log(`[Server IPN] Enqueueing emails for Payment ${payment.id}`);
 
-                // Send to Tenant
-                emailService.sendPaymentConfirmation(
+                // Compose Tenant Email
+                const tenantEmailOptions = emailService.composePaymentConfirmation(
                   tenant.email,
                   tenantName,
                   parseFloat(payment.amount),
@@ -1638,10 +1638,10 @@ export async function registerRoutes(app: Express) {
                   property.name,
                   unit.unit_number,
                   payment.pesapalTransactionId || 'N/A'
-                ).catch(e => console.error('[Server IPN] Tenant email failed:', e));
+                );
 
-                // Send to Landlord
-                emailService.sendLandlordPaymentNotification(
+                // Compose Landlord Email
+                const landlordEmailOptions = emailService.composeLandlordPaymentNotification(
                   landlord.email,
                   landlordName,
                   tenantName,
@@ -1650,7 +1650,24 @@ export async function registerRoutes(app: Express) {
                   property.name,
                   unit.unit_number,
                   payment.pesapalTransactionId || 'N/A'
-                ).catch(e => console.error('[Server IPN] Landlord email failed:', e));
+                );
+
+                // Enqueue emails
+                await supabaseStorage.enqueueEmail({
+                  to: tenantEmailOptions.to,
+                  subject: tenantEmailOptions.subject,
+                  htmlContent: tenantEmailOptions.html,
+                  textContent: tenantEmailOptions.text,
+                  metadata: { type: 'payment_confirmation', paymentId: payment.id, recipient: 'tenant' }
+                });
+
+                await supabaseStorage.enqueueEmail({
+                  to: landlordEmailOptions.to,
+                  subject: landlordEmailOptions.subject,
+                  htmlContent: landlordEmailOptions.html,
+                  textContent: landlordEmailOptions.text,
+                  metadata: { type: 'payment_confirmation', paymentId: payment.id, recipient: 'landlord' }
+                });
               }
             }
           } catch (emailErr) {
@@ -1669,6 +1686,25 @@ export async function registerRoutes(app: Express) {
     } catch (error) {
       console.error('Pesapal IPN error:', error);
       res.status(500).json({ message: "Failed to process IPN" });
+    }
+  });
+
+  // Cron routes
+  app.get("/api/cron/process-emails", async (req: any, res: any) => {
+    // Shared secret for security
+    const authHeader = req.headers.authorization;
+    const CRON_SECRET = process.env.CRON_SECRET;
+
+    if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const { processEmailQueue } = await import("./workers/emailWorker");
+      const result = await processEmailQueue(20);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 
