@@ -199,8 +199,8 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
 
         console.log(`[Pesapal IPN] Final transaction status response:`, JSON.stringify(statusResponse));
 
-        // Skip update if there's still an error in the response
-        if (statusResponse.error) {
+        // Skip update only if there's a REAL error in the response
+        if (statusResponse.error && (statusResponse.error.code || statusResponse.error.message)) {
             console.error(`[Pesapal IPN] Pesapal API returned error: ${JSON.stringify(statusResponse.error)}`);
             return res.status(400).json({ message: "Pesapal API error", details: statusResponse.error });
         }
