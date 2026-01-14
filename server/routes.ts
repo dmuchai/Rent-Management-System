@@ -11,6 +11,7 @@ import {
 import { db } from "./db";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { emailService } from "./services/emailService";
 import { pesapalService } from "./services/pesapalService";
 
 // Security helper functions for environment variable validation and sanitization
@@ -1592,6 +1593,70 @@ export async function registerRoutes(app: Express) {
           paymentMethod: statusResponse.payment_method || "mpesa",
           paidDate: dbStatus === "completed" ? new Date() : undefined
         });
+
+        // Trigger emails if payment is completed
+        if (dbStatus === "completed") {
+          try {
+            // We need to fetch full details for the email
+            const payment = await supabaseStorage.getPaymentById(OrderMerchantReference as string);
+            if (payment) {
+              const leases = await supabaseStorage.getLeasesByTenantId(payment.leaseId); // This is not quite correct, we need the specific lease
+              // Let's get the specific lease
+              const { data: leaseDetails, error: leaseErr } = await (supabaseStorage as any).supabase
+                .from('leases')
+                .select(`
+                  id,
+                  monthly_rent,
+                  tenant:tenants(id, email, first_name, last_name),
+                  unit:units(
+                    id, 
+                    unit_number,
+                    property:properties(id, name, owner:users(id, email, first_name, last_name))
+                  )
+                `)
+                .eq('id', payment.leaseId)
+                .single();
+
+              if (leaseDetails && !leaseErr) {
+                const tenant = leaseDetails.tenant;
+                const unit = leaseDetails.unit;
+                const property = unit.property;
+                const landlord = property.owner;
+
+                const tenantName = `${tenant.first_name} ${tenant.last_name}`;
+                const landlordName = `${landlord.first_name} ${landlord.last_name}`;
+                const pDate = payment.paidDate || new Date();
+
+                console.log(`[Server IPN] Triggering emails for Payment ${payment.id}`);
+
+                // Send to Tenant
+                emailService.sendPaymentConfirmation(
+                  tenant.email,
+                  tenantName,
+                  parseFloat(payment.amount),
+                  pDate,
+                  property.name,
+                  unit.unit_number,
+                  payment.pesapalTransactionId || 'N/A'
+                ).catch(e => console.error('[Server IPN] Tenant email failed:', e));
+
+                // Send to Landlord
+                emailService.sendLandlordPaymentNotification(
+                  landlord.email,
+                  landlordName,
+                  tenantName,
+                  parseFloat(payment.amount),
+                  pDate,
+                  property.name,
+                  unit.unit_number,
+                  payment.pesapalTransactionId || 'N/A'
+                ).catch(e => console.error('[Server IPN] Landlord email failed:', e));
+              }
+            }
+          } catch (emailErr) {
+            console.error('[Server IPN] Email notification failed:', emailErr);
+          }
+        }
       }
 
       // Return response to Pesapal

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../../_lib/auth.js';
 import { createDbConnection } from '../../_lib/db.js';
 import { pesapalService } from '../../_lib/pesapalService.js';
+import { emailService } from '../../_lib/emailService.js';
 import { z } from 'zod';
 
 // This handler combines Initiate (POST), IPN (GET/POST), and Register (GET)
@@ -242,6 +243,66 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
 
         if (updateResult.length === 0) {
             console.error(`[Pesapal IPN] CRITICAL: No payment record found to update for MerchantRef: ${merchantRefStr} or TrackingID: ${trackingIdStr}`);
+        } else if (dbStatus === 'completed') {
+            // Notification logic after successful payment update
+            try {
+                // Fetch full details for email notifications with joins
+                const [paymentDetails] = await sql`
+                    SELECT 
+                        p.amount,
+                        p.paid_date,
+                        p.pesapal_transaction_id,
+                        t.email as tenant_email,
+                        t.first_name as tenant_fname,
+                        t.last_name as tenant_lname,
+                        u_landlord.email as landlord_email,
+                        u_landlord.first_name as landlord_fname,
+                        u_landlord.last_name as landlord_lname,
+                        prop.name as property_name,
+                        unit.unit_number
+                    FROM public.payments p
+                    JOIN public.leases l ON p.lease_id = l.id
+                    JOIN public.tenants t ON l.tenant_id = t.id
+                    JOIN public.units unit ON l.unit_id = unit.id
+                    JOIN public.properties prop ON unit.property_id = prop.id
+                    JOIN public.users u_landlord ON prop.owner_id = u_landlord.id
+                    WHERE p.id = ${updateResult[0].id}
+                `;
+
+                if (paymentDetails) {
+                    const tenantName = `${paymentDetails.tenant_fname} ${paymentDetails.tenant_lname}`;
+                    const landlordName = `${paymentDetails.landlord_fname} ${paymentDetails.landlord_lname}`;
+                    const pDate = paymentDetails.paid_date ? new Date(paymentDetails.paid_date) : new Date();
+
+                    console.log(`[Pesapal IPN] Triggering emails for Payment ${updateResult[0].id}`);
+
+                    // Send to Tenant
+                    // We don't await here to keep it fast, but we catch errors inside a helper or just wrap them
+                    emailService.sendPaymentConfirmation(
+                        paymentDetails.tenant_email,
+                        tenantName,
+                        parseFloat(paymentDetails.amount),
+                        pDate,
+                        paymentDetails.property_name,
+                        paymentDetails.unit_number,
+                        paymentDetails.pesapal_transaction_id || 'N/A'
+                    ).catch(e => console.error('[Pesapal IPN] Tenant email failed:', e));
+
+                    // Send to Landlord
+                    emailService.sendLandlordPaymentNotification(
+                        paymentDetails.landlord_email,
+                        landlordName,
+                        tenantName,
+                        parseFloat(paymentDetails.amount),
+                        pDate,
+                        paymentDetails.property_name,
+                        paymentDetails.unit_number,
+                        paymentDetails.pesapal_transaction_id || 'N/A'
+                    ).catch(e => console.error('[Pesapal IPN] Landlord email failed:', e));
+                }
+            } catch (emailErr) {
+                console.error('[Pesapal IPN] Email notification data fetch failed:', emailErr);
+            }
         }
 
         return res.json({

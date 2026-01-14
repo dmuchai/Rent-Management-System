@@ -41,7 +41,7 @@ export class EmailService {
 
     try {
       const parsedUrl = new URL(url);
-      
+
       // Only allow http and https protocols
       if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
         console.warn(`Rejected unsafe URL scheme: ${parsedUrl.protocol}`);
@@ -73,7 +73,7 @@ export class EmailService {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-    
+
     try {
       const response = await fetch(this.brevoApiUrl, {
         method: 'POST',
@@ -128,13 +128,13 @@ export class EmailService {
     landlordName?: string
   ): Promise<void> {
     const invitationLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/accept-invitation?token=${encodeURIComponent(invitationToken)}`;
-    
+
     // Escape all user-provided inputs
     const escapedTenantName = this.escapeHtml(tenantName);
     const escapedLandlordName = landlordName ? this.escapeHtml(landlordName) : null;
     const escapedPropertyName = propertyName ? this.escapeHtml(propertyName) : null;
     const escapedUnitNumber = unitNumber ? this.escapeHtml(unitNumber) : null;
-    
+
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
@@ -257,7 +257,7 @@ Need help? Contact us at support@landeeandmoony.com
     const escapedTenantName = this.escapeHtml(tenantName);
     const escapedPropertyName = this.escapeHtml(propertyName);
     const escapedUnitNumber = this.escapeHtml(unitNumber);
-    
+
     // Validate payment link to ensure only safe URLs
     const safePaymentLink = this.validateUrl(paymentLink);
 
@@ -406,7 +406,7 @@ Need help? Contact us at support@landeeandmoony.com
     const escapedTenantName = this.escapeHtml(tenantName);
     const escapedPropertyName = this.escapeHtml(propertyName);
     const escapedUnitNumber = this.escapeHtml(unitNumber);
-    
+
     // Validate payment link to ensure only safe URLs
     const safePaymentLink = this.validateUrl(paymentLink);
 
@@ -457,6 +457,76 @@ Need help? Contact us at support@landeeandmoony.com
       subject: `OVERDUE: Rent Payment - ${this.sanitizeSubject(propertyName)} Unit ${this.sanitizeSubject(unitNumber)}`,
       html,
       text: `Dear ${tenantName}, your rent payment of ${formattedAmount} for ${propertyName} Unit ${unitNumber} was due on ${formattedDate} and is now overdue.`,
+    });
+  }
+
+  async sendLandlordPaymentNotification(
+    landlordEmail: string,
+    landlordName: string,
+    tenantName: string,
+    amount: number,
+    paymentDate: Date,
+    propertyName: string,
+    unitNumber: string,
+    confirmationCode: string
+  ): Promise<void> {
+    const formattedDate = paymentDate.toLocaleDateString('en-KE', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const formattedAmount = new Intl.NumberFormat('en-KE', {
+      style: 'currency',
+      currency: 'KES',
+    }).format(amount);
+
+    // Escape all user-provided inputs
+    const escapedLandlordName = this.escapeHtml(landlordName);
+    const escapedTenantName = this.escapeHtml(tenantName);
+    const escapedPropertyName = this.escapeHtml(propertyName);
+    const escapedUnitNumber = this.escapeHtml(unitNumber);
+    const escapedConfirmationCode = this.escapeHtml(confirmationCode);
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
+        </div>
+        
+        <h2 style="color: #3B82F6;">New Payment Received</h2>
+        
+        <p>Dear ${escapedLandlordName},</p>
+        
+        <p>A new payment has been received for your property.</p>
+        
+        <div style="background-color: #F0FDF4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3B82F6;">
+          <h3 style="margin-top: 0; color: #3B82F6;">Transaction Details</h3>
+          <p><strong>Property:</strong> ${escapedPropertyName}</p>
+          <p><strong>Unit:</strong> ${escapedUnitNumber}</p>
+          <p><strong>Tenant:</strong> ${escapedTenantName}</p>
+          <p><strong>Amount:</strong> ${formattedAmount}</p>
+          <p><strong>Date:</strong> ${formattedDate}</p>
+          <p><strong>Confirmation Code:</strong> ${escapedConfirmationCode}</p>
+        </div>
+        
+        <p>Log in to your dashboard to view more details and export receipts.</p>
+        
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+          <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
+            © 2026 Landee & Moony. All rights reserved.<br>
+            The #1 Property Management System in Kenya
+          </p>
+        </div>
+      </div>
+    `;
+
+    await this.sendEmail({
+      to: landlordEmail,
+      subject: `💰 Payment Received: ${this.sanitizeSubject(tenantName)} - ${this.sanitizeSubject(propertyName)} Unit ${this.sanitizeSubject(unitNumber)}`,
+      html,
+      text: `Dear ${landlordName}, a payment of ${formattedAmount} has been received from ${tenantName} for ${propertyName} Unit ${unitNumber}. Confirmation code: ${confirmationCode}.`,
     });
   }
 }
