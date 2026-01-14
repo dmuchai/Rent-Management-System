@@ -59,7 +59,8 @@ export class MpesaService {
         }
 
         const data: MpesaAuthResponse = await response.json();
-        console.log(`[M-PESA Debug] Token received. Expires in: ${data.expires_in}s`);
+        console.log(`[M-PESA Debug] Token received (length: ${data.access_token.length}). Prefix: ${data.access_token.slice(0, 10)}...`);
+        console.log(`[M-PESA Debug] Expires in: ${data.expires_in}s`);
 
         this.tokenCache = {
             token: data.access_token,
@@ -92,8 +93,8 @@ export class MpesaService {
             PartyB: this.shortcode,
             PhoneNumber: formattedPhone,
             CallBackURL: this.callbackUrl,
-            AccountReference: accountReference.slice(0, 12), // Safaricom limit is 12 characters
-            TransactionDesc: transactionDesc.slice(0, 20), // Safaricom limit is 20 characters
+            AccountReference: accountReference.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12),
+            TransactionDesc: "RentPayment",
         };
 
         const pushUrl = `${this.baseUrl}/mpesa/stkpush/v1/processrequest`;
@@ -103,8 +104,10 @@ export class MpesaService {
         const response = await fetch(pushUrl, {
             method: "POST",
             headers: {
-                Authorization: `Bearer ${token}`,
+                Authorization: `Bearer ${token.trim()}`,
                 "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "LandeeAndMoony/1.0.0",
             },
             body: JSON.stringify(payload),
         });
