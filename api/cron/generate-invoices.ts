@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { runAutomatedInvoicing } from '../../server/workers/invoicingWorker';
+import { runAutomatedInvoicing } from '../../server/workers/invoicingWorker.js';
 
 /**
  * Vercel Cron handler to generate monthly invoices.

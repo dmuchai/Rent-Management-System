@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { processEmailQueue } from '../../server/workers/emailWorker';
+import { processEmailQueue } from '../../server/workers/emailWorker.js';
 
 /**
  * Vercel Cron handler to process the email queue.
