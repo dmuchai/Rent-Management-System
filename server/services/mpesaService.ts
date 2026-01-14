@@ -23,9 +23,9 @@ export class MpesaService {
     private tokenCache: { token: string; expiry: number } | null = null;
 
     constructor() {
-        this.baseUrl = process.env.NODE_ENV === "production"
-            ? "https://api.safaricom.co.ke/"
-            : "https://sandbox.safaricom.co.ke/";
+        this.baseUrl = (process.env.NODE_ENV === "production"
+            ? "https://api.safaricom.co.ke"
+            : "https://sandbox.safaricom.co.ke").replace(/\/$/, "");
 
         this.consumerKey = process.env.MPESA_CONSUMER_KEY || "";
         this.consumerSecret = process.env.MPESA_CONSUMER_SECRET || "";
@@ -47,7 +47,9 @@ export class MpesaService {
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to get M-PESA access token: ${response.statusText}`);
+            const errorText = await response.text();
+            console.error(`[M-PESA Error] Token generation failed (${response.status}):`, errorText);
+            throw new Error(`Failed to get M-PESA access token: ${response.status} ${response.statusText}`);
         }
 
         const data: MpesaAuthResponse = await response.json();
@@ -61,7 +63,7 @@ export class MpesaService {
 
     async initiateStkPush(phoneNumber: string, amount: number, accountReference: string, transactionDesc: string): Promise<StkPushResponse> {
         const token = await this.getAccessToken();
-        const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14);
+        const timestamp = new Date(new Date().getTime() + (3 * 60 * 60 * 1000)).toISOString().replace(/[-:T.Z]/g, "").slice(0, 14); // EAT (GMT+3)
         const password = Buffer.from(`${this.shortcode}${this.passkey}${timestamp}`).toString("base64");
 
         // Format phone number to 254XXXXXXXXX
@@ -86,7 +88,7 @@ export class MpesaService {
             TransactionDesc: transactionDesc,
         };
 
-        const response = await fetch(`${this.baseUrl}mpesa/stkpush/v1/processrequest`, {
+        const response = await fetch(`${this.baseUrl}/mpesa/stkpush/v1/processrequest`, {
             method: "POST",
             headers: {
                 Authorization: `Bearer ${token}`,
