@@ -3,7 +3,7 @@
 // POST /api/auth?action=register - Register new user
 // POST /api/auth?action=verify-email - Verify email with token
 // POST /api/auth?action=forgot-password - Send password reset email
-      return res.status(200).json({ message: 'Logged out successfully' });
+      // ...existing code...
     }
 
     // POST /api/auth?action=reset-password - Reset password with token
