@@ -14,7 +14,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { rateLimit, getClientIp, RATE_LIMITS } from './_lib/rate-limit.js';
-import { emailService } from '../server/services/emailService.js';
+import { emailService } from './_lib/emailService.js';
 import crypto from 'crypto';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
