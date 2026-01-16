@@ -10,6 +10,7 @@ import "./debug"; // Import debug config to check API configuration
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import VerifyEmail from "@/pages/verify-email";
 import LandlordDashboard from "@/pages/dashboard/landlord";
 import TenantDashboard from "@/pages/dashboard/tenant";
 import AuthCallback from "@/pages/auth-callback";
@@ -32,7 +33,7 @@ function Router() {
           setLocation('/select-role');
           return;
         }
-        
+
         // If authenticated and on landing/login page, redirect to dashboard
         if (location === "/" || location === "/login") {
           setLocation("/dashboard");
@@ -59,6 +60,7 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/accept-invitation" component={AcceptInvitation} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
