@@ -30,6 +30,7 @@ function validatePassword(password: string): { isValid: boolean; failedRequireme
 }
 
 export default function ResetPassword() {
+  console.log('[ResetPassword] Component rendered');
   usePageTitle('Reset Password');
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -39,14 +40,21 @@ export default function ResetPassword() {
   const { toast } = useToast();
 
   useEffect(() => {
+    console.log('[ResetPassword] useEffect running');
+    console.log('[ResetPassword] window.location.hash:', window.location.hash);
     // Check if we have a recovery token in the URL
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const type = hashParams.get('type');
     const accessToken = hashParams.get('access_token');
-    
     console.log('[ResetPassword] Hash params:', Object.fromEntries(hashParams.entries()));
     console.log('[ResetPassword] Type:', type);
-    console.log('[ResetPassword] Has access token:', !!accessToken);
+    console.log('[ResetPassword] Access token:', accessToken);
+    if (!type) {
+      console.warn('[ResetPassword] No type param in hash!');
+    }
+    if (!accessToken) {
+      console.warn('[ResetPassword] No access_token param in hash!');
+    }
     
     // Validate we have the required recovery parameters
     if (type !== 'recovery') {
