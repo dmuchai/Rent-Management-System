@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -11,6 +12,7 @@ import MaintenanceRequestForm from "@/components/maintenance/MaintenanceRequestF
 import MaintenanceRequestList from "@/components/maintenance/MaintenanceRequestList";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -279,44 +281,40 @@ export default function TenantDashboard() {
         )}
 
         {/* Quick Stats Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <StatsCard
-            title="Current Rent"
-            value={activeLease ? `KES ${parseFloat(activeLease.monthlyRent).toLocaleString()}` : "N/A"}
-            subtitle="Monthly payment"
-            icon="fas fa-money-bill-wave"
-            color="chart-2"
-            loading={leasesLoading}
-            data-testid="stat-currentrent"
-          />
-          <StatsCard
-            title="Next Due Date"
-            value={nextDueDate.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' })}
-            subtitle={`${daysUntilDue} days remaining`}
-            icon="fas fa-calendar"
-            color={daysUntilDue < 7 ? "destructive" : "chart-4"}
-            loading={leasesLoading}
-            data-testid="stat-nextdue"
-          />
-          <StatsCard
-            title="Total Paid"
-            value={`KES ${totalPaid.toLocaleString()}`}
-            subtitle={`${completedPayments} payments made`}
-            icon="fas fa-check-circle"
-            color="primary"
-            loading={paymentsLoading}
-            data-testid="stat-totalpaid"
-          />
-          <StatsCard
-            title="Maintenance"
-            value={maintenanceRequests.length}
-            subtitle={`${pendingMaintenance} pending`}
-            icon="fas fa-tools"
-            color={pendingMaintenance > 0 ? "destructive" : "chart-4"}
-            loading={maintenanceLoading}
-            data-testid="stat-maintenance"
-          />
-        </div>
+        <motion.div
+          className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            visible: { transition: { staggerChildren: 0.1 } }
+          }}
+        >
+          {[
+            { title: "Current Rent", value: activeLease ? `KES ${parseFloat(activeLease.monthlyRent).toLocaleString()}` : "N/A", subtitle: "Monthly payment", icon: "fas fa-money-bill-wave", color: "chart-2" as const, testId: "stat-currentrent", loading: leasesLoading },
+            { title: "Next Due Date", value: nextDueDate.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }), subtitle: `${daysUntilDue} days remaining`, icon: "fas fa-calendar", color: daysUntilDue < 7 ? "destructive" as const : "chart-4" as const, testId: "stat-nextdue", loading: leasesLoading },
+            { title: "Total Paid", value: `KES ${totalPaid.toLocaleString()}`, subtitle: `${completedPayments} payments made`, icon: "fas fa-check-circle", color: "primary" as const, testId: "stat-totalpaid", loading: paymentsLoading },
+            { title: "Maintenance", value: maintenanceRequests.length, subtitle: `${pendingMaintenance} pending`, icon: "fas fa-tools", color: pendingMaintenance > 0 ? "destructive" as const : "chart-4" as const, testId: "stat-maintenance", loading: maintenanceLoading }
+          ].map((stat, idx) => (
+            <motion.div
+              key={idx}
+              variants={{
+                hidden: { opacity: 0, y: 20 },
+                visible: { opacity: 1, y: 0 }
+              }}
+              whileHover={{ y: -5, transition: { duration: 0.2 } }}
+            >
+              <StatsCard
+                title={stat.title}
+                value={stat.value}
+                subtitle={stat.subtitle}
+                icon={stat.icon}
+                color={stat.color}
+                loading={stat.loading}
+                data-testid={stat.testId}
+              />
+            </motion.div>
+          ))}
+        </motion.div>
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -341,9 +339,14 @@ export default function TenantDashboard() {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
-            <div className="grid lg:grid-cols-2 gap-6">
+            <motion.div
+              className="grid lg:grid-cols-2 gap-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
               {/* Property Information Card */}
-              <Card>
+              <Card className="overflow-hidden">
                 <CardHeader>
                   <CardTitle className="flex items-center">
                     <Home className="h-5 w-5 mr-2" />
@@ -353,27 +356,43 @@ export default function TenantDashboard() {
                 </CardHeader>
                 <CardContent>
                   {leasesLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <div className="space-y-4">
+                      <Skeleton className="w-full h-48 rounded-lg" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-6 w-48" />
+                        <Skeleton className="h-4 w-64" />
+                        <Skeleton className="h-6 w-24" />
+                      </div>
+                      <div className="space-y-3 pt-4 border-t">
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-full" />
+                      </div>
                     </div>
                   ) : activeLease ? (
                     <div className="space-y-4">
-                      <img
-                        src={activeLease.unit?.property?.imageUrl || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300"}
-                        alt={activeLease.unit?.property?.name || "Property"}
-                        className="w-full h-48 object-cover rounded-lg"
-                        data-testid="img-property"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300";
-                        }}
-                      />
+                      <div className="overflow-hidden rounded-lg">
+                        <motion.img
+                          whileHover={{ scale: 1.05 }}
+                          transition={{ duration: 0.4 }}
+                          src={activeLease.unit?.property?.imageUrl || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300"}
+                          alt={activeLease.unit?.property?.name || "Property"}
+                          className="w-full h-48 object-cover"
+                          data-testid="img-property"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300";
+                          }}
+                        />
+                      </div>
                       {activeLease.unit && (
                         <div className="space-y-2">
                           <h4 className="font-semibold text-lg">{activeLease.unit.property.name}</h4>
                           <p className="text-sm text-muted-foreground">{activeLease.unit.property.address}</p>
-                          <Badge>{activeLease.unit.property.propertyType}</Badge>
-                          <Badge variant="outline">Unit {activeLease.unit.unitNumber}</Badge>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge>{activeLease.unit.property.propertyType}</Badge>
+                            <Badge variant="outline">Unit {activeLease.unit.unitNumber}</Badge>
+                          </div>
                         </div>
                       )}
                       <div className="space-y-3 pt-4 border-t">
@@ -443,7 +462,7 @@ export default function TenantDashboard() {
                   )}
                 </CardContent>
               </Card>
-            </div>
+            </motion.div>
 
             {/* Recent Activity */}
             <div className="grid lg:grid-cols-2 gap-6">
@@ -455,8 +474,19 @@ export default function TenantDashboard() {
                 </CardHeader>
                 <CardContent>
                   {paymentsLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                    <div className="space-y-4">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <Skeleton className="w-10 h-10 rounded-lg" />
+                            <div className="space-y-2">
+                              <Skeleton className="h-4 w-24" />
+                              <Skeleton className="h-3 w-32" />
+                            </div>
+                          </div>
+                          <Skeleton className="h-6 w-16" />
+                        </div>
+                      ))}
                     </div>
                   ) : payments.length > 0 ? (
                     <div className="space-y-3">

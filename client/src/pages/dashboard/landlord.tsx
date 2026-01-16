@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -22,6 +24,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { API_BASE_URL } from "@/lib/config";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -43,14 +46,14 @@ function validatePassword(password: string): { isValid: boolean; failedRequireme
   const hasLowerCase = /[a-z]/.test(password);
   const hasNumber = /\d/.test(password);
   const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-  
+
   const failedRequirements = [];
-  if (!minLength) failedRequirements.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           push("at least 8 characters");
+  if (!minLength) failedRequirements.push("at least 8 characters");
   if (!hasUpperCase) failedRequirements.push("at least one uppercase letter");
   if (!hasLowerCase) failedRequirements.push("at least one lowercase letter");
   if (!hasNumber) failedRequirements.push("at least one number");
   if (!hasSpecialChar) failedRequirements.push("at least one special character");
-  
+
   return {
     isValid: failedRequirements.length === 0,
     failedRequirements
@@ -59,7 +62,8 @@ function validatePassword(password: string): { isValid: boolean; failedRequireme
 
 export default function LandlordDashboard() {
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
-  
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
+
   // Dynamic page title based on active section
   const sectionTitles: Record<DashboardSection, string> = {
     overview: 'Dashboard',
@@ -72,7 +76,7 @@ export default function LandlordDashboard() {
     profile: 'Profile'
   };
   usePageTitle(sectionTitles[activeSection]);
-  
+
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
   const queryClient = useQueryClient();
@@ -86,7 +90,7 @@ export default function LandlordDashboard() {
   const [isPaymentFormOpen, setIsPaymentFormOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  
+
   // State for editing leases
   const [editingLease, setEditingLease] = useState<Lease | null>(null);
   const [viewingLease, setViewingLease] = useState<Lease | null>(null);
@@ -144,12 +148,12 @@ export default function LandlordDashboard() {
     ]);
 
     const [supabaseResult, apiResult] = results;
-    
+
     // Log individual failures for debugging
     if (supabaseResult.status === 'rejected') {
       console.error('Supabase signOut failed:', supabaseResult.reason);
     }
-    
+
     let apiSuccess = false;
     if (apiResult.status === 'rejected') {
       console.error('API logout failed:', apiResult.reason);
@@ -167,7 +171,7 @@ export default function LandlordDashboard() {
     if (apiSuccess) {
       toast({
         title: "Logged out successfully",
-        description: supabaseResult.status === 'rejected' 
+        description: supabaseResult.status === 'rejected'
           ? "Logged out (local cleanup had issues, but you're signed out)."
           : "You have been logged out. Redirecting to login...",
       });
@@ -191,14 +195,14 @@ export default function LandlordDashboard() {
   };
 
   const { data: dashboardStats, isLoading: statsLoading } = useQuery({
-    queryKey: ["/api/dashboard/stats"],
+    queryKey: ["/api/dashboard/stats", selectedPropertyId],
     queryFn: async () => {
-      console.log('[Dashboard] Fetching dashboard stats...');
-      const response = await apiRequest("GET", "/api/dashboard/stats");
+      console.log('[Dashboard] Fetching dashboard stats for property:', selectedPropertyId);
+      const url = selectedPropertyId !== "all"
+        ? `/api/dashboard/stats?propertyId=${selectedPropertyId}`
+        : "/api/dashboard/stats";
+      const response = await apiRequest("GET", url);
       const data = await response.json();
-      console.log('[Dashboard] Stats data received:', data);
-      console.log('[Dashboard] Stats data type:', typeof data);
-      console.log('[Dashboard] Is stats array?', Array.isArray(data));
       return data;
     },
     retry: false,
@@ -323,7 +327,7 @@ export default function LandlordDashboard() {
     },
     onSuccess: () => {
       toast({
-        title: "Success", 
+        title: "Success",
         description: "Password changed successfully!",
       });
       setIsPasswordChangeOpen(false);
@@ -340,12 +344,12 @@ export default function LandlordDashboard() {
 
   // Payment recording mutation
   const recordPaymentMutation = useMutation({
-    mutationFn: async (data: { 
-      leaseId: string; 
-      amount: string; 
+    mutationFn: async (data: {
+      leaseId: string;
+      amount: string;
       dueDate: string;
       paidDate?: string;
-      paymentMethod: string; 
+      paymentMethod: string;
       paymentType?: string;
       status?: string;
       description?: string;
@@ -415,7 +419,7 @@ export default function LandlordDashboard() {
   const sectionHeaders = {
     overview: "Dashboard Overview",
     properties: "Properties",
-    tenants: "Tenants", 
+    tenants: "Tenants",
     leases: "Lease Management",
     payments: "Payment Management",
     documents: "Document Management",
@@ -441,11 +445,11 @@ export default function LandlordDashboard() {
                   <div className="flex items-center space-x-4 text-sm text-gray-500">
                     <span className="flex items-center">
                       <i className="fas fa-calendar mr-1"></i>
-                      {new Date().toLocaleDateString('en-US', { 
-                        weekday: 'long', 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
+                      {new Date().toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
                       })}
                     </span>
                     <Badge variant="secondary" className="bg-green-100 text-green-700">
@@ -455,21 +459,21 @@ export default function LandlordDashboard() {
                   </div>
                 </div>
                 <div className="hidden md:flex items-center space-x-3">
-                  <Button 
+                  <Button
                     onClick={() => setIsPropertyFormOpen(true)}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     <i className="fas fa-plus mr-2"></i>
                     Add Property
                   </Button>
-                  <Button 
+                  <Button
                     onClick={() => setIsTenantFormOpen(true)}
                     variant="outline"
                   >
                     <i className="fas fa-user-plus mr-2"></i>
                     Add Tenant
                   </Button>
-                  <Button 
+                  <Button
                     onClick={handleLogout}
                     variant="outline"
                     className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
@@ -481,61 +485,94 @@ export default function LandlordDashboard() {
               </div>
             </div>
 
+            {/* Dashboard Controls */}
+            <motion.div
+              className="flex flex-col md:flex-row md:items-center justify-between gap-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="property-filter" className="text-sm font-medium text-gray-700">Filter by Property:</Label>
+                <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
+                  <SelectTrigger id="property-filter" className="w-[200px] bg-white">
+                    <SelectValue placeholder="All Properties" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Properties</SelectItem>
+                    {properties.map((p: any) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedPropertyId !== "all" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedPropertyId("all")}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Badge variant="outline" className="text-gray-500 py-1">
+                  <i className="fas fa-sync-alt mr-2 text-xs animate-spin-slow"></i>
+                  Live Data
+                </Badge>
+              </div>
+            </motion.div>
+
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-              <StatsCard
-                title="Total Properties"
-                value={dashboardStats?.totalProperties || 0}
-                subtitle={`${dashboardStats?.totalUnits || 0} units`}
-                icon="fas fa-building"
-                color="primary"
-                loading={statsLoading}
-                data-testid="stat-properties"
-              />
-              <StatsCard
-                title="Active Tenants"
-                value={dashboardStats?.totalTenants || 0}
-                subtitle="Occupied units"
-                icon="fas fa-users"
-                color="chart-2"
-                loading={statsLoading}
-                data-testid="stat-tenants"
-              />
-              <StatsCard
-                title="Occupancy Rate"
-                value={`${dashboardStats?.occupancyRate || 0}%`}
-                subtitle={`${dashboardStats?.occupiedUnits || 0}/${dashboardStats?.totalUnits || 0} occupied`}
-                icon="fas fa-chart-pie"
-                color="chart-2"
-                loading={statsLoading}
-                data-testid="stat-occupancy"
-              />
-              <StatsCard
-                title="Monthly Revenue"
-                value={`KES ${parseFloat(dashboardStats?.monthlyRevenue || 0).toLocaleString()}`}
-                subtitle="This month"
-                icon="fas fa-money-bill-wave"
-                color="chart-4"
-                loading={statsLoading}
-                data-testid="stat-revenue"
-              />
-              <StatsCard
-                title="Overdue Payments"
-                value={dashboardStats?.overduePayments || 0}
-                subtitle={dashboardStats?.overduePayments > 0 ? "Requires attention" : "All current"}
-                icon="fas fa-exclamation-triangle"
-                color={dashboardStats?.overduePayments > 0 ? "destructive" : "chart-2"}
-                loading={statsLoading}
-                data-testid="stat-overdue"
-              />
-            </div>
+            <motion.div
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6"
+              initial="hidden"
+              animate="visible"
+              variants={{
+                visible: { transition: { staggerChildren: 0.1 } }
+              }}
+            >
+              {[
+                { title: "Total Properties", value: dashboardStats?.totalProperties || 0, subtitle: `${dashboardStats?.totalUnits || 0} units`, icon: "fas fa-building", color: "primary" as const, testId: "stat-properties" },
+                { title: "Active Tenants", value: dashboardStats?.totalTenants || 0, subtitle: "Occupied units", icon: "fas fa-users", color: "chart-2" as const, testId: "stat-tenants" },
+                { title: "Occupancy Rate", value: `${dashboardStats?.occupancyRate || 0}%`, subtitle: `${dashboardStats?.occupiedUnits || 0}/${dashboardStats?.totalUnits || 0} occupied`, icon: "fas fa-chart-pie", color: "chart-2" as const, testId: "stat-occupancy" },
+                { title: "Monthly Revenue", value: `KES ${parseFloat(dashboardStats?.monthlyRevenue || 0).toLocaleString()}`, subtitle: "This month", icon: "fas fa-money-bill-wave", color: "chart-4" as const, testId: "stat-revenue" },
+                { title: "Overdue Payments", value: dashboardStats?.overduePayments || 0, subtitle: dashboardStats?.overduePayments > 0 ? "Requires attention" : "All current", icon: "fas fa-exclamation-triangle", color: dashboardStats?.overduePayments > 0 ? "destructive" : "chart-2" as const, testId: "stat-overdue" }
+              ].map((stat, idx) => (
+                <motion.div
+                  key={idx}
+                  variants={{
+                    hidden: { opacity: 0, y: 20 },
+                    visible: { opacity: 1, y: 0 }
+                  }}
+                  whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                >
+                  <StatsCard
+                    title={stat.title}
+                    value={stat.value}
+                    subtitle={stat.subtitle}
+                    icon={stat.icon}
+                    color={stat.color}
+                    loading={statsLoading}
+                    data-testid={stat.testId}
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
 
             {/* Quick Actions Grid */}
-            <div className="grid md:grid-cols-3 gap-6">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-blue-200" onClick={() => setActiveSection("properties")}>
+            <motion.div
+              className="grid md:grid-cols-3 gap-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <Card className="hover:shadow-lg transition-all cursor-pointer border-2 hover:border-blue-200 group" onClick={() => setActiveSection("properties")}>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center text-lg">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3 group-hover:scale-110 transition-transform">
                       <i className="fas fa-building text-blue-600"></i>
                     </div>
                     Manage Properties
@@ -549,15 +586,15 @@ export default function LandlordDashboard() {
                     <span className="text-sm text-muted-foreground">
                       {properties.length} properties
                     </span>
-                    <i className="fas fa-arrow-right text-blue-600"></i>
+                    <i className="fas fa-arrow-right text-blue-600 group-hover:translate-x-1 transition-transform"></i>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-green-200" onClick={() => setActiveSection("tenants")}>
+              <Card className="hover:shadow-lg transition-all cursor-pointer border-2 hover:border-green-200 group" onClick={() => setActiveSection("tenants")}>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center text-lg">
-                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3 group-hover:scale-110 transition-transform">
                       <i className="fas fa-users text-green-600"></i>
                     </div>
                     Tenant Management
@@ -571,15 +608,15 @@ export default function LandlordDashboard() {
                     <span className="text-sm text-muted-foreground">
                       {tenants.length} active tenants
                     </span>
-                    <i className="fas fa-arrow-right text-green-600"></i>
+                    <i className="fas fa-arrow-right text-green-600 group-hover:translate-x-1 transition-transform"></i>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-purple-200" onClick={() => setActiveSection("payments")}>
+              <Card className="hover:shadow-lg transition-all cursor-pointer border-2 hover:border-purple-200 group" onClick={() => setActiveSection("payments")}>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center text-lg">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3 group-hover:scale-110 transition-transform">
                       <i className="fas fa-credit-card text-purple-600"></i>
                     </div>
                     Payment Tracking
@@ -593,51 +630,99 @@ export default function LandlordDashboard() {
                     <span className="text-sm text-muted-foreground">
                       {payments.length} transactions
                     </span>
-                    <i className="fas fa-arrow-right text-purple-600"></i>
+                    <i className="fas fa-arrow-right text-purple-600 group-hover:translate-x-1 transition-transform"></i>
                   </div>
                 </CardContent>
               </Card>
-            </div>
+            </motion.div>
 
             {/* Revenue Trend Chart */}
-            {dashboardStats?.revenueTrend && Array.isArray(dashboardStats.revenueTrend) && dashboardStats.revenueTrend.length > 0 && (() => {
-              // Calculate max revenue once outside the map to avoid repeated calculations
-              const maxRevenue = Math.max(...dashboardStats.revenueTrend.map((i: any) => parseFloat(i.revenue) || 0));
-              
+            {statsLoading ? (
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-6 w-48 mb-2" />
+                  <Skeleton className="h-4 w-72" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-[300px] w-full" />
+                </CardContent>
+              </Card>
+            ) : dashboardStats?.revenueTrend && Array.isArray(dashboardStats.revenueTrend) && dashboardStats.revenueTrend.length > 0 && (() => {
+              const chartData = dashboardStats.revenueTrend.map((item: any) => ({
+                name: new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'short' }),
+                revenue: parseFloat(item.revenue) || 0,
+                fullDate: new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+              }));
+
+              // If only one data point, add a dummy zero point to provide scale
+              const processedData = chartData.length === 1
+                ? [{ name: '', revenue: 0 }, ...chartData]
+                : chartData;
+
               return (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center text-lg">
-                      <i className="fas fa-chart-line mr-2 text-blue-600"></i>
-                      Revenue Trend (Last 6 Months)
-                    </CardTitle>
-                    <CardDescription>Track your monthly revenue performance</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {dashboardStats.revenueTrend.map((item: any, index: number) => {
-                        const monthName = new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                        const revenue = parseFloat(item.revenue) || 0;
-                        const barWidth = maxRevenue > 0 ? (revenue / maxRevenue) * 100 : 0;
-                        
-                        return (
-                          <div key={index} className="space-y-1">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">{monthName}</span>
-                              <span className="font-semibold">KES {revenue.toLocaleString()}</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
-                              <div 
-                                className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" 
-                                style={{ width: `${barWidth}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.7 }}
+                >
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center text-lg">
+                        <i className="fas fa-chart-line mr-2 text-blue-600"></i>
+                        Revenue Performance
+                      </CardTitle>
+                      <CardDescription>Track your monthly revenue growth over the last 6 months</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[300px] w-full pt-4">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={processedData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.1} />
+                                <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis
+                              dataKey="name"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: '#64748b' }}
+                              dy={10}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: '#64748b' }}
+                              tickFormatter={(value) => `KSh ${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                borderRadius: '12px',
+                                border: 'none',
+                                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                                padding: '12px'
+                              }}
+                              formatter={(value: any) => [`KES ${value.toLocaleString()}`, 'Revenue']}
+                              labelStyle={{ fontWeight: 'bold', marginBottom: '4px', color: '#1e293b' }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="revenue"
+                              stroke="#2563eb"
+                              strokeWidth={3}
+                              fillOpacity={1}
+                              fill="url(#colorRevenue)"
+                              animationDuration={1500}
+                              activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb' }}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               );
             })()}
 
@@ -658,10 +743,10 @@ export default function LandlordDashboard() {
                     {dashboardStats.expiringLeases.map((lease: any) => {
                       const daysUntilExpiry = Math.ceil((new Date(lease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                       const isUrgent = daysUntilExpiry <= 7;
-                      
+
                       return (
-                        <div 
-                          key={lease.id} 
+                        <div
+                          key={lease.id}
                           className={`flex items-center justify-between p-3 rounded-lg ${isUrgent ? 'bg-red-100 border border-red-200' : 'bg-white border border-yellow-200'}`}
                         >
                           <div className="flex items-center space-x-3 flex-1">
@@ -714,8 +799,8 @@ export default function LandlordDashboard() {
                       );
                     })}
                   </div>
-                  <Button 
-                    className="w-full mt-4" 
+                  <Button
+                    className="w-full mt-4"
                     variant="outline"
                     onClick={() => setActiveSection("leases")}
                   >
@@ -732,8 +817,8 @@ export default function LandlordDashboard() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-3">
                   <CardTitle className="text-lg">Recent Payments</CardTitle>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     onClick={() => setActiveSection("payments")}
                   >
@@ -742,8 +827,19 @@ export default function LandlordDashboard() {
                 </CardHeader>
                 <CardContent>
                   {paymentsLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <div className="space-y-4">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <Skeleton className="w-10 h-10 rounded-lg" />
+                            <div className="space-y-2">
+                              <Skeleton className="h-4 w-24" />
+                              <Skeleton className="h-3 w-32" />
+                            </div>
+                          </div>
+                          <Skeleton className="h-6 w-16" />
+                        </div>
+                      ))}
                     </div>
                   ) : payments.length === 0 ? (
                     <div className="text-center py-8">
@@ -751,7 +847,7 @@ export default function LandlordDashboard() {
                       <p className="text-muted-foreground mb-4" data-testid="text-nopayments">
                         No payments recorded yet
                       </p>
-                      <Button 
+                      <Button
                         onClick={() => setActiveSection("payments")}
                         size="sm"
                       >
@@ -793,8 +889,8 @@ export default function LandlordDashboard() {
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-3">
                   <CardTitle className="text-lg">Maintenance Requests</CardTitle>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     onClick={() => setActiveSection("properties")}
                   >
@@ -828,7 +924,7 @@ export default function LandlordDashboard() {
                             </div>
                           </div>
                           <div className="text-right">
-                            <Badge 
+                            <Badge
                               variant={request.status === 'completed' ? 'default' : 'secondary'}
                               className="text-xs"
                             >
@@ -847,7 +943,7 @@ export default function LandlordDashboard() {
 
       case "properties":
         return (
-          <PropertyGrid 
+          <PropertyGrid
             properties={properties}
             units={units}
             loading={propertiesLoading || unitsLoading}
@@ -860,7 +956,7 @@ export default function LandlordDashboard() {
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-semibold">Tenants</h2>
-              <button 
+              <button
                 className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors w-full sm:w-auto"
                 data-testid="button-addtenant"
                 onClick={() => setIsTenantFormOpen(true)}
@@ -869,9 +965,9 @@ export default function LandlordDashboard() {
               </button>
             </div>
 
-            <TenantTable 
-              tenants={tenants} 
-              loading={tenantsLoading} 
+            <TenantTable
+              tenants={tenants}
+              loading={tenantsLoading}
               onAddTenant={() => setIsTenantFormOpen(true)}
             />
           </div>
@@ -882,7 +978,7 @@ export default function LandlordDashboard() {
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-semibold">Lease Agreements</h2>
-              <button 
+              <button
                 className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors w-full sm:w-auto"
                 data-testid="button-addlease"
                 onClick={() => {
@@ -894,8 +990,8 @@ export default function LandlordDashboard() {
               </button>
             </div>
 
-            <LeaseTable 
-              leases={leases} 
+            <LeaseTable
+              leases={leases}
               loading={leasesLoading}
               onViewLease={(lease) => {
                 setViewingLease(lease);
@@ -914,7 +1010,7 @@ export default function LandlordDashboard() {
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-semibold">Payment Management</h2>
-              <button 
+              <button
                 className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
                 data-testid="button-recordpayment"
                 onClick={() => setIsPaymentFormOpen(true)}
@@ -954,8 +1050,8 @@ export default function LandlordDashboard() {
               />
             </div>
 
-            <PaymentHistory 
-              payments={payments} 
+            <PaymentHistory
+              payments={payments}
               loading={paymentsLoading}
               onViewPayment={(payment) => {
                 // TODO: Implement view payment modal
@@ -1016,7 +1112,7 @@ export default function LandlordDashboard() {
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="border-t pt-4 mt-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1098,23 +1194,23 @@ export default function LandlordDashboard() {
   return (
     <div className="min-h-screen bg-background">
       <div className="flex h-screen">
-        <Sidebar 
-          activeSection={activeSection} 
+        <Sidebar
+          activeSection={activeSection}
           onSectionChange={(section) => setActiveSection(section as DashboardSection)}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
           isCollapsed={isSidebarCollapsed}
         />
-        
+
         <div className="flex-1 overflow-auto">
-          <Header 
+          <Header
             title={sectionHeaders[activeSection]}
             onSectionChange={(section) => setActiveSection(section as DashboardSection)}
             onMenuClick={() => setIsSidebarOpen(true)}
             onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             isSidebarCollapsed={isSidebarCollapsed}
           />
-          
+
           <div className="p-4 md:p-6">
             {renderMainContent()}
           </div>
@@ -1122,19 +1218,19 @@ export default function LandlordDashboard() {
       </div>
 
       {/* Add Property Modal */}
-      <PropertyForm 
+      <PropertyForm
         open={isPropertyFormOpen}
         onOpenChange={setIsPropertyFormOpen}
       />
 
       {/* Add Tenant Modal */}
-      <TenantForm 
+      <TenantForm
         open={isTenantFormOpen}
         onOpenChange={setIsTenantFormOpen}
       />
 
       {/* Add/Edit Lease Modal */}
-      <LeaseForm 
+      <LeaseForm
         open={isLeaseFormOpen}
         onOpenChange={(open) => {
           setIsLeaseFormOpen(open);
@@ -1167,38 +1263,38 @@ export default function LandlordDashboard() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="firstName">First Name</Label>
-                <Input 
-                  id="firstName" 
+                <Input
+                  id="firstName"
                   value={profileForm.firstName}
-                  onChange={(e) => setProfileForm({...profileForm, firstName: e.target.value})}
-                  placeholder="Enter first name" 
+                  onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                  placeholder="Enter first name"
                 />
               </div>
               <div>
                 <Label htmlFor="lastName">Last Name</Label>
-                <Input 
-                  id="lastName" 
+                <Input
+                  id="lastName"
                   value={profileForm.lastName}
-                  onChange={(e) => setProfileForm({...profileForm, lastName: e.target.value})}
-                  placeholder="Enter last name" 
+                  onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                  placeholder="Enter last name"
                 />
               </div>
             </div>
             <div>
               <Label htmlFor="email">Email Address</Label>
-              <Input 
-                id="email" 
-                type="email" 
+              <Input
+                id="email"
+                type="email"
                 value={profileForm.email}
-                onChange={(e) => setProfileForm({...profileForm, email: e.target.value})}
-                placeholder="Enter email address" 
+                onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                placeholder="Enter email address"
               />
             </div>
             <div className="flex justify-end space-x-2 pt-4">
               <Button variant="outline" onClick={() => setIsProfileEditOpen(false)}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={() => {
                   profileUpdateMutation.mutate({
                     firstName: profileForm.firstName,
@@ -1224,24 +1320,24 @@ export default function LandlordDashboard() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="currentPassword">Current Password</Label>
-              <Input 
-                id="currentPassword" 
-                type="password" 
+              <Input
+                id="currentPassword"
+                type="password"
                 value={passwordForm.currentPassword}
-                onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
-                placeholder="Enter current password" 
+                onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                placeholder="Enter current password"
               />
             </div>
             <div>
               <Label htmlFor="newPassword">New Password</Label>
-              <Input 
-                id="newPassword" 
-                type="password" 
+              <Input
+                id="newPassword"
+                type="password"
                 value={passwordForm.newPassword}
-                onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
-                placeholder="Enter new password (min 8 characters)" 
+                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                placeholder="Enter new password (min 8 characters)"
               />
-              
+
               {/* Password Strength Meter */}
               {passwordForm.newPassword && (
                 <div className="mt-2">
@@ -1258,7 +1354,7 @@ export default function LandlordDashboard() {
                       ];
                       const strength = checks.filter(Boolean).length;
                       const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-blue-500', 'bg-green-500'];
-                      
+
                       return Array(5).fill(0).map((_, i) => (
                         <div
                           key={i}
@@ -1294,19 +1390,19 @@ export default function LandlordDashboard() {
             </div>
             <div>
               <Label htmlFor="confirmPassword">Confirm New Password</Label>
-              <Input 
-                id="confirmPassword" 
-                type="password" 
+              <Input
+                id="confirmPassword"
+                type="password"
                 value={passwordForm.confirmPassword}
-                onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
-                placeholder="Confirm new password" 
+                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                placeholder="Confirm new password"
               />
             </div>
             <div className="flex justify-end space-x-2 pt-4">
               <Button variant="outline" onClick={() => setIsPasswordChangeOpen(false)}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={() => {
                   if (passwordForm.newPassword !== passwordForm.confirmPassword) {
                     toast({
@@ -1321,7 +1417,7 @@ export default function LandlordDashboard() {
                   if (!passwordValidation.isValid) {
                     const errorMessage = `Password must contain ${passwordValidation.failedRequirements.join(", ")}.`;
                     toast({
-                      title: "Password Too Weak", 
+                      title: "Password Too Weak",
                       description: errorMessage,
                       variant: "destructive",
                     });
@@ -1353,13 +1449,13 @@ export default function LandlordDashboard() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="lease">Select Lease (Tenant + Property) *</Label>
-              <Select 
-                value={paymentForm.tenantId} 
+              <Select
+                value={paymentForm.tenantId}
                 onValueChange={(value) => {
                   const selectedLease = leases.find((l: any) => l.id === value);
                   if (selectedLease) {
-                    setPaymentForm(prev => ({ 
-                      ...prev, 
+                    setPaymentForm(prev => ({
+                      ...prev,
                       tenantId: value, // Store lease ID here for now
                       amount: selectedLease.monthlyRent || prev.amount,
                       propertyId: selectedLease.unitId || prev.propertyId
@@ -1392,14 +1488,14 @@ export default function LandlordDashboard() {
                 Lease automatically includes tenant, property, and unit details
               </p>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="amount">Payment Amount (KES) *</Label>
-                <Input 
-                  id="amount" 
-                  type="number" 
-                  placeholder="Enter amount" 
+                <Input
+                  id="amount"
+                  type="number"
+                  placeholder="Enter amount"
                   min="0"
                   step="0.01"
                   value={paymentForm.amount}
@@ -1408,20 +1504,20 @@ export default function LandlordDashboard() {
               </div>
               <div>
                 <Label htmlFor="paymentDate">Payment Date *</Label>
-                <Input 
-                  id="paymentDate" 
-                  type="date" 
+                <Input
+                  id="paymentDate"
+                  type="date"
                   value={paymentForm.paymentDate}
                   onChange={(e) => setPaymentForm(prev => ({ ...prev, paymentDate: e.target.value }))}
                 />
               </div>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="paymentMethod">Payment Method *</Label>
-                <Select 
-                  value={paymentForm.paymentMethod} 
+                <Select
+                  value={paymentForm.paymentMethod}
                   onValueChange={(value) => setPaymentForm(prev => ({ ...prev, paymentMethod: value }))}
                 >
                   <SelectTrigger>
@@ -1437,8 +1533,8 @@ export default function LandlordDashboard() {
               </div>
               <div>
                 <Label htmlFor="paymentType">Payment Type *</Label>
-                <Select 
-                  value={paymentForm.paymentType} 
+                <Select
+                  value={paymentForm.paymentType}
                   onValueChange={(value) => setPaymentForm(prev => ({ ...prev, paymentType: value }))}
                 >
                   <SelectTrigger>
@@ -1455,27 +1551,27 @@ export default function LandlordDashboard() {
                 </Select>
               </div>
             </div>
-            
+
             <div>
               <Label htmlFor="reference">Reference/Receipt Number</Label>
-              <Input 
-                id="reference" 
-                placeholder="Enter reference number (optional)" 
+              <Input
+                id="reference"
+                placeholder="Enter reference number (optional)"
                 value={paymentForm.reference}
                 onChange={(e) => setPaymentForm(prev => ({ ...prev, reference: e.target.value }))}
               />
             </div>
-            
+
             <div>
               <Label htmlFor="notes">Payment Notes</Label>
-              <Input 
-                id="notes" 
-                placeholder="Add any notes about this payment (optional)" 
+              <Input
+                id="notes"
+                placeholder="Add any notes about this payment (optional)"
                 value={paymentForm.notes}
                 onChange={(e) => setPaymentForm(prev => ({ ...prev, notes: e.target.value }))}
               />
             </div>
-            
+
             <div className="bg-blue-50 p-4 rounded-lg">
               <h4 className="font-medium text-blue-900 mb-2">💡 Payment Flow Explained:</h4>
               <ul className="text-sm text-blue-800 space-y-1">
@@ -1485,12 +1581,12 @@ export default function LandlordDashboard() {
                 <li>• <strong>Real-Time Updates:</strong> Landlord dashboard updates instantly when payment is recorded</li>
               </ul>
             </div>
-            
+
             <div className="flex justify-end space-x-2 pt-4">
               <Button variant="outline" onClick={() => setIsPaymentFormOpen(false)}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={() => {
                   // Form validation
                   if (!paymentForm.tenantId) {

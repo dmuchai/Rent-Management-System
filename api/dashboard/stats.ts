@@ -10,12 +10,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
   const sql = createDbConnection();
 
+  const { propertyId } = req.query;
+  const propertyIdFilter = propertyId ? sql`AND p.id = ${propertyId as string}` : sql``;
+  // For queries where units or leases are the primary table but joined to property
+  const propertyIdFilterOnUnits = propertyId ? sql`AND u.property_id = ${propertyId as string}` : sql``;
+  const propertyIdFilterOnLeases = propertyId ? sql`AND l.unit_id IN (SELECT id FROM public.units WHERE property_id = ${propertyId as string})` : sql``;
+
   try {
     // Get total properties count
     const propertiesCount = await sql`
       SELECT COUNT(*) as count
-      FROM public.properties
-      WHERE owner_id = ${auth.userId}
+      FROM public.properties p
+      WHERE p.owner_id = ${auth.userId}
+      ${propertyId ? sql`AND p.id = ${propertyId as string}` : sql``}
     `;
     const totalProperties = parseInt(propertiesCount[0]?.count || '0');
 
@@ -27,6 +34,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       INNER JOIN public.units u ON l.unit_id = u.id
       INNER JOIN public.properties p ON u.property_id = p.id
       WHERE p.owner_id = ${auth.userId}
+      ${propertyIdFilter}
     `;
     const totalTenants = parseInt(tenantsCount[0]?.count || '0');
 
@@ -50,6 +58,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       INNER JOIN public.units u ON l.unit_id = u.id
       INNER JOIN public.properties p ON u.property_id = p.id
       WHERE p.owner_id = ${auth.userId}
+      ${propertyIdFilter}
     `;
 
     const totalRevenue = parseFloat(revenueStats[0]?.total_revenue || '0');
@@ -64,6 +73,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       FROM public.units u
       INNER JOIN public.properties p ON u.property_id = p.id
       WHERE p.owner_id = ${auth.userId}
+      ${propertyIdFilter}
     `;
     const totalUnits = parseInt(occupancyStats[0]?.total_units || '0');
     const occupiedUnits = parseInt(occupancyStats[0]?.occupied_units || '0');
@@ -77,6 +87,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       INNER JOIN public.units u ON l.unit_id = u.id
       INNER JOIN public.properties p ON u.property_id = p.id
       WHERE p.owner_id = ${auth.userId}
+      ${propertyIdFilter}
       AND pm.status = 'pending'
       AND pm.due_date < NOW()
     `;
@@ -94,6 +105,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       INNER JOIN public.units u ON l.unit_id = u.id
       INNER JOIN public.properties p ON u.property_id = p.id
       WHERE p.owner_id = ${auth.userId}
+      ${propertyIdFilter}
       AND l.is_active = true
       AND l.end_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'
       ORDER BY l.end_date ASC
@@ -125,6 +137,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       INNER JOIN public.units u ON l.unit_id = u.id
       INNER JOIN public.properties p ON u.property_id = p.id
       WHERE p.owner_id = ${auth.userId}
+      ${propertyIdFilter}
       AND pm.status = 'completed'
       AND COALESCE(pm.paid_date, pm.created_at) >= NOW() - INTERVAL '6 months'
       GROUP BY DATE_TRUNC('month', COALESCE(pm.paid_date, pm.created_at))
@@ -148,7 +161,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       INNER JOIN public.tenants t ON l.tenant_id = t.id
       INNER JOIN public.units u ON l.unit_id = u.id
       INNER JOIN public.properties p ON u.property_id = p.id
-      WHERE p.owner_id = ${auth.userId} AND pm.status = 'completed'
+      WHERE p.owner_id = ${auth.userId} 
+      ${propertyIdFilter}
+      AND pm.status = 'completed'
       ORDER BY COALESCE(pm.paid_date, pm.created_at) DESC
       LIMIT 5
     `;
