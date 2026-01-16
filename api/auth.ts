@@ -3,7 +3,23 @@
 // POST /api/auth?action=register - Register new user
 // POST /api/auth?action=verify-email - Verify email with token
 // POST /api/auth?action=forgot-password - Send password reset email
-// POST /api/auth?action=logout - Logout user
+      return res.status(200).json({ message: 'Logged out successfully' });
+    }
+
+    // POST /api/auth?action=reset-password - Reset password with token
+    if (action === 'reset-password' && req.method === 'POST') {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) return res.status(400).json({ error: 'Token and password required' });
+      if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
+      const { data: user } = await adminSupabase.from('users').select('*').eq('password_reset_token', token).single();
+      if (!user || (user.password_reset_token_expires_at && new Date(user.password_reset_token_expires_at) < new Date())) {
+        return res.status(400).json({ error: 'Invalid or expired reset token' });
+      }
+      await adminSupabase.auth.admin.updateUserById(user.id, { password: newPassword });
+      await adminSupabase.from('users').update({ password_reset_token: null, password_reset_token_expires_at: null }).eq('id', user.id);
+      return res.status(200).json({ message: 'Password reset successfully!' });
+    }
 // POST /api/auth?action=set-session - Set session from OAuth tokens
 // POST /api/auth?action=sync-user - Sync user to public.users table
 // POST /api/auth?action=set-role - Set user role (for new OAuth users)
@@ -285,21 +301,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const { email } = forgotPasswordSchema.parse(req.body);
-      const protocol = req.headers['x-forwarded-proto'] || 'https';
-      const host = req.headers['x-forwarded-host'] || req.headers.host;
-      const origin = `${protocol}://${host}`;
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
-      await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${origin}/reset-password`,
-      });
+      // Check if user exists
+      const { data: user } = await adminSupabase
+        .from('users')
+        .select('id, first_name')
+        .eq('email', email)
+        .single();
+
+      // Always return success to prevent email enumeration
+      if (!user) {
+        return res.status(200).json({
+          message: 'If that email exists in our system, a password reset link has been sent'
+        });
+      }
+
+      // Generate reset token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      // Store token in database
+      await adminSupabase
+        .from('users')
+        .update({
+          password_reset_token: resetToken,
+          password_reset_token_expires_at: resetTokenExpiresAt.toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      // Send branded reset email
+      try {
+        await emailService.sendPasswordResetEmail(
+          email,
+          user.first_name || 'User',
+          resetToken
+        );
+      } catch (emailError) {
+        console.error('Failed to send password reset email:', emailError);
+      }
 
       return res.status(200).json({
         message: 'If that email exists in our system, a password reset link has been sent'
       });
     }
 
-    // POST /api/auth?action=logout - Logout
-    if (action === 'logout' && req.method === 'POST') {
+      return res.status(200).json({ message: 'Logged out successfully' });
+    }
+
+    // POST /api/auth?action=reset-password - Reset password with token
+    if (action === 'reset-password' && req.method === 'POST') {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) return res.status(400).json({ error: 'Token and password required' });
+      if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
+      const { data: user } = await adminSupabase.from('users').select('*').eq('password_reset_token', token).single();
+      if (!user || (user.password_reset_token_expires_at && new Date(user.password_reset_token_expires_at) < new Date())) {
+        return res.status(400).json({ error: 'Invalid or expired reset token' });
+      }
+      await adminSupabase.auth.admin.updateUserById(user.id, { password: newPassword });
+      await adminSupabase.from('users').update({ password_reset_token: null, password_reset_token_expires_at: null }).eq('id', user.id);
+      return res.status(200).json({ message: 'Password reset successfully!' });
+    }
+      return res.status(200).json({ message: "Password reset successfully!" });
+    }
       res.setHeader('Set-Cookie', 'supabase-auth-token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
       return res.status(200).json({ message: 'Logged out successfully' });
     }

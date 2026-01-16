@@ -1,3 +1,91 @@
+  /**
+   * Sends a password reset email to the user with a secure reset link
+   * @param email - The recipient's email address
+   * @param firstName - The recipient's first name
+   * @param resetToken - The password reset token
+   */
+  async sendPasswordResetEmail(
+    email: string,
+    firstName: string,
+    resetToken: string
+  ): Promise<void> {
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+    // Escape user-provided inputs
+    const escapedFirstName = this.escapeHtml(firstName);
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
+        </div>
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; color: white; text-align: center; margin-bottom: 30px;">
+          <h2 style="margin: 0 0 10px 0; font-size: 28px;">Reset Your Password 🔒</h2>
+          <p style="margin: 0; font-size: 16px; opacity: 0.9;">A request to reset your password was received</p>
+        </div>
+        <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
+          <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedFirstName},</h3>
+          <p style="color: #4B5563; line-height: 1.6;">
+            We received a request to reset your password for your Landee & Moony account. If you did not make this request, you can safely ignore this email.
+          </p>
+        </div>
+        <div style="text-align: center; margin: 35px 0;">
+          <a href="${resetLink}" 
+             style="background-color: #3B82F6; color: white; padding: 16px 40px; 
+                    text-decoration: none; border-radius: 8px; display: inline-block;
+                    font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
+            Reset My Password
+          </a>
+          <p style="color: #6B7280; font-size: 14px; margin-top: 15px;">
+            This password reset link expires in 1 hour
+          </p>
+        </div>
+        <div style="background-color: #FEF3C7; padding: 15px; border-radius: 8px; margin-bottom: 25px; border-left: 4px solid #F59E0B;">
+          <p style="color: #92400E; font-size: 14px; margin: 0;">
+            <strong>Security Tip:</strong> Never share your password with anyone. If you did not request a password reset, please ignore this email.
+          </p>
+        </div>
+        <div style="border-top: 2px solid #E5E7EB; padding-top: 20px; margin-top: 30px;">
+          <p style="color: #6B7280; font-size: 14px; line-height: 1.6;">
+            <strong>Need help?</strong><br>
+            If you're having trouble clicking the button, copy and paste this link into your browser:<br>
+            <a href="${resetLink}" style="color: #3B82F6; word-break: break-all;">${resetLink}</a>
+          </p>
+        </div>
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+          <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
+            © 2026 Landee & Moony. All rights reserved.<br>
+            The #1 Property Management System in Kenya
+          </p>
+        </div>
+      </div>
+    `;
+
+    const text = [
+      `Hello ${firstName},`,
+      '',
+      'We received a request to reset your password for your Landee & Moony account. If you did not make this request, you can safely ignore this email.',
+      '',
+      'Reset your password by clicking this link:',
+      resetLink,
+      '',
+      'This password reset link expires in 1 hour.',
+      '',
+      "If you didn't request a password reset, please ignore this email.",
+      '',
+      'Need help? Contact us at support@landeeandmoony.com',
+      '',
+      '© 2026 Landee & Moony - The #1 Property Management System in Kenya'
+    ].join('\n');
+
+    await this.sendEmail({
+      to: email,
+      subject: `🔑 Reset Your Password - Landee & Moony`,
+      html,
+      text,
+    });
+  }
 interface EmailOptions {
   to: string;
   subject: string;
