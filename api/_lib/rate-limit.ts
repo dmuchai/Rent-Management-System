@@ -47,16 +47,16 @@ export function getClientIp(req: VercelRequest): string {
   // Vercel provides the real IP in x-forwarded-for or x-real-ip
   const forwarded = req.headers['x-forwarded-for'];
   const realIp = req.headers['x-real-ip'];
-  
+
   if (typeof forwarded === 'string') {
     // x-forwarded-for can be a comma-separated list, take the first one
     return forwarded.split(',')[0].trim();
   }
-  
+
   if (typeof realIp === 'string') {
     return realIp;
   }
-  
+
   // Fallback to req.socket if available
   return req.socket?.remoteAddress || 'unknown';
 }
@@ -75,11 +75,11 @@ const memoryStore = new Map<string, RateLimitEntry>();
 // Cleanup old entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
-  for (const [key, entry] of memoryStore.entries()) {
+  memoryStore.forEach((entry, key) => {
     if (entry.resetTime < now) {
       memoryStore.delete(key);
     }
-  }
+  });
 }, 5 * 60 * 1000);
 
 function rateLimitInMemory(key: string, limit: number, windowSeconds: number): {
@@ -89,27 +89,27 @@ function rateLimitInMemory(key: string, limit: number, windowSeconds: number): {
 } {
   const now = Date.now();
   const entry = memoryStore.get(key);
-  
+
   if (!entry || entry.resetTime < now) {
     // New window
     memoryStore.set(key, {
       count: 1,
       resetTime: now + windowSeconds * 1000,
     });
-    
+
     return {
       allowed: true,
       remaining: limit - 1,
       resetAt: now + windowSeconds * 1000,
     };
   }
-  
+
   // Increment counter
   entry.count++;
-  
+
   const allowed = entry.count <= limit;
   const remaining = Math.max(0, limit - entry.count);
-  
+
   return {
     allowed,
     remaining,
@@ -144,38 +144,38 @@ interface RateLimitResult {
  */
 export async function rateLimit(config: RateLimitConfig): Promise<RateLimitResult> {
   const { action, ip, limit, windowMs } = config;
-  
+
   // Create unique key for this action + IP combination
   const key = `ratelimit:${action}:${ip}`;
   const windowSeconds = Math.floor(windowMs / 1000);
-  
+
   // Use Upstash Redis if available, otherwise fallback to in-memory
   if (redis) {
     try {
       // Use Redis pipeline for atomic operations
       const pipeline = redis.pipeline();
-      
+
       // Increment counter
       pipeline.incr(key);
-      
+
       // Set expiry (will update TTL on existing keys)
       pipeline.expire(key, windowSeconds);
-      
+
       // Get TTL to calculate reset time
       pipeline.ttl(key);
-      
+
       // Execute pipeline
       const results = await pipeline.exec();
       const count = results[0] as number;
       const ttl = results[2] as number;
-      
+
       const allowed = count <= limit;
       const remaining = Math.max(0, limit - count);
       const resetTime = Date.now() + (ttl > 0 ? ttl * 1000 : windowMs);
       const retryAfter = allowed ? undefined : Math.ceil(ttl);
-      
+
       console.log(`[RateLimit] ${action} from ${ip}: ${count}/${limit} (${allowed ? 'allowed' : 'blocked'})`);
-      
+
       return {
         allowed,
         remaining,
@@ -187,7 +187,7 @@ export async function rateLimit(config: RateLimitConfig): Promise<RateLimitResul
       // Fall through to in-memory fallback
     }
   }
-  
+
   // Fallback to in-memory rate limiting
   const result = rateLimitInMemory(key, limit, windowSeconds);
   return {
@@ -207,7 +207,7 @@ export async function checkRateLimit(
 ): Promise<RateLimitResult> {
   const config = RATE_LIMITS[action];
   const ip = getClientIp(req);
-  
+
   return rateLimit({
     action,
     ip,

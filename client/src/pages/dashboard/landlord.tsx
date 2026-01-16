@@ -554,7 +554,7 @@ export default function LandlordDashboard() {
                     value={stat.value}
                     subtitle={stat.subtitle}
                     icon={stat.icon}
-                    color={stat.color}
+                    color={stat.color as any}
                     loading={statsLoading}
                     data-testid={stat.testId}
                   />

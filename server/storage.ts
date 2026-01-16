@@ -804,7 +804,7 @@ export class SupabaseStorage {
       name: property.name,
       address: property.address,
       property_type: property.propertyType,
-      total_units: property.totalUnits,
+      total_units: 0, // Default to 0, will be updated when units are added
       description: property.description,
       owner_id: property.ownerId,
       // Note: imageUrl excluded as the column doesn't exist in the current database schema
@@ -832,7 +832,7 @@ export class SupabaseStorage {
     if (property.name) updateData.name = property.name;
     if (property.address) updateData.address = property.address;
     if (property.propertyType) updateData.property_type = property.propertyType;
-    if (property.totalUnits) updateData.total_units = property.totalUnits;
+    // totalUnits is auto-calculated, do not update directly
     if (property.description) updateData.description = property.description;
     if (property.ownerId) updateData.owner_id = property.ownerId;
     // Note: imageUrl excluded as the column doesn't exist in the current database schema
@@ -1163,7 +1163,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProperty(property: InsertProperty): Promise<Property> {
-    const [newProperty] = await db.insert(properties).values(property).returning();
+    const [newProperty] = await db.insert(properties).values({
+      ...property,
+      totalUnits: 0, // Default to 0
+    }).returning();
     return newProperty;
   }
 
@@ -1213,6 +1216,7 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select({
         id: tenants.id,
+        landlordId: tenants.landlordId,
         userId: tenants.userId,
         firstName: tenants.firstName,
         lastName: tenants.lastName,
