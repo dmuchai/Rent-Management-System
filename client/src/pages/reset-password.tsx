@@ -119,36 +119,36 @@ export default function ResetPassword() {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
+      // Extract token from URL hash
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+
+      const response = await fetch('/api/auth?action=reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: accessToken,
+          newPassword: newPassword
+        })
       });
 
-      if (error) {
-        console.error('Password update error:', error);
+      const result = await response.json();
+
+      if (!response.ok) {
         toast({
           title: "Error",
-          description: error.message,
+          description: result.error || "Failed to reset password.",
           variant: "destructive",
         });
       } else {
-        console.log('[ResetPassword] ✅ Password updated successfully');
-        
         toast({
           title: "Password Updated!",
           description: "Your password has been successfully reset. Please sign in with your new password.",
         });
-        
-        // Sign out the recovery session to prevent auto-login
-        await supabase.auth.signOut();
-        
-        // Clear the hash from URL and redirect to login with success param
         window.history.replaceState({}, '', '/login?success=password-reset');
-        
-        // Redirect to login page after a short delay
         setTimeout(() => setLocation("/login?success=password-reset"), 2000);
       }
     } catch (error) {
-      console.error('Password reset error:', error);
       toast({
         title: "Error",
         description: "Failed to update password. Please try again.",
