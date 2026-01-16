@@ -3,7 +3,7 @@
 // POST /api/auth?action=register - Register new user
 // POST /api/auth?action=verify-email - Verify email with token
 // POST /api/auth?action=forgot-password - Send password reset email
-// ...existing code...
+// POST /api/auth?action=exchange-code - Exchange PKCE code for session
 // POST /api/auth?action=set-session - Set session from OAuth tokens
 // POST /api/auth?action=sync-user - Sync user to public.users table
 // POST /api/auth?action=set-role - Set user role (for new OAuth users)
@@ -331,8 +331,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-// ...existing code...
-
     // POST /api/auth?action=exchange-code - Exchange PKCE code for session
     if (action === 'exchange-code' && req.method === 'POST') {
       const { code } = req.body;
@@ -650,6 +648,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       return res.status(200).json({ message: 'Password changed successfully' });
+    }
+
+    // POST /api/auth?action=reset-password - Reset password with token
+    if (action === 'reset-password' && req.method === 'POST') {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) {
+        return res.status(400).json({ error: 'Token and new password required' });
+      }
+      if (newPassword.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      }
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
+      // Find user by password_reset_token
+      const { data: user, error: userError } = await adminSupabase
+        .from('users')
+        .select('*')
+        .eq('password_reset_token', token)
+        .single();
+      if (userError || !user) {
+        return res.status(400).json({ error: 'Invalid or expired reset token' });
+      }
+      // Check if token is expired
+      if (user.password_reset_token_expires_at && new Date(user.password_reset_token_expires_at) < new Date()) {
+        return res.status(400).json({ error: 'Reset token has expired. Please request a new one.' });
+      }
+      // Update password in Supabase Auth
+      await adminSupabase.auth.admin.updateUserById(user.id, { password: newPassword });
+      // Clear token from database
+      await adminSupabase
+        .from('users')
+        .update({
+          password_reset_token: null,
+          password_reset_token_expires_at: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+      return res.status(200).json({ message: 'Password reset successfully!' });
     }
 
     return res.status(400).json({ error: 'Invalid action or method' });
