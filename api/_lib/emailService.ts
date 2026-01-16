@@ -17,7 +17,7 @@ export class EmailService {
     firstName: string,
     resetToken: string
   ): Promise<void> {
-    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/reset-password?token=${encodeURIComponent(resetToken)}`;
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/reset-password#type=recovery&access_token=${encodeURIComponent(resetToken)}`;
 
     // Escape user-provided inputs
     const escapedFirstName = this.escapeHtml(firstName);
