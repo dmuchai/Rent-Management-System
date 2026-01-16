@@ -3,23 +3,7 @@
 // POST /api/auth?action=register - Register new user
 // POST /api/auth?action=verify-email - Verify email with token
 // POST /api/auth?action=forgot-password - Send password reset email
-      // ...existing code...
-    }
-
-    // POST /api/auth?action=reset-password - Reset password with token
-    if (action === 'reset-password' && req.method === 'POST') {
-      const { token, newPassword } = req.body;
-      if (!token || !newPassword) return res.status(400).json({ error: 'Token and password required' });
-      if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
-      const { data: user } = await adminSupabase.from('users').select('*').eq('password_reset_token', token).single();
-      if (!user || (user.password_reset_token_expires_at && new Date(user.password_reset_token_expires_at) < new Date())) {
-        return res.status(400).json({ error: 'Invalid or expired reset token' });
-      }
-      await adminSupabase.auth.admin.updateUserById(user.id, { password: newPassword });
-      await adminSupabase.from('users').update({ password_reset_token: null, password_reset_token_expires_at: null }).eq('id', user.id);
-      return res.status(200).json({ message: 'Password reset successfully!' });
-    }
+// ...existing code...
 // POST /api/auth?action=set-session - Set session from OAuth tokens
 // POST /api/auth?action=sync-user - Sync user to public.users table
 // POST /api/auth?action=set-role - Set user role (for new OAuth users)
