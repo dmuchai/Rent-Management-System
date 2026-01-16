@@ -573,6 +573,94 @@ Need help? Contact us at support@landeeandmoony.com
     );
     await this.sendEmail(options);
   }
+
+  async sendVerificationEmail(
+    email: string,
+    firstName: string,
+    verificationToken: string
+  ): Promise<void> {
+    const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/verify-email?token=${encodeURIComponent(verificationToken)}`;
+
+    // Escape user-provided inputs
+    const escapedFirstName = this.escapeHtml(firstName);
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
+        </div>
+        
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; color: white; text-align: center; margin-bottom: 30px;">
+          <h2 style="margin: 0 0 10px 0; font-size: 28px;">Verify Your Email 📧</h2>
+          <p style="margin: 0; font-size: 16px; opacity: 0.9;">One more step to get started</p>
+        </div>
+        
+        <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
+          <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedFirstName},</h3>
+          <p style="color: #4B5563; line-height: 1.6;">
+            Thank you for registering with Landee & Moony! To complete your account setup and start managing your properties, 
+            please verify your email address by clicking the button below.
+          </p>
+        </div>
+        
+        <div style="text-align: center; margin: 35px 0;">
+          <a href="${verificationLink}" 
+             style="background-color: #3B82F6; color: white; padding: 16px 40px; 
+                    text-decoration: none; border-radius: 8px; display: inline-block;
+                    font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
+            Verify My Email
+          </a>
+          <p style="color: #6B7280; font-size: 14px; margin-top: 15px;">
+            This verification link expires in 24 hours
+          </p>
+        </div>
+        
+        <div style="background-color: #FEF3C7; padding: 15px; border-radius: 8px; margin-bottom: 25px; border-left: 4px solid #F59E0B;">
+          <p style="color: #92400E; font-size: 14px; margin: 0;">
+            <strong>Security Tip:</strong> If you didn't create an account with Landee & Moony, please ignore this email.
+          </p>
+        </div>
+        
+        <div style="border-top: 2px solid #E5E7EB; padding-top: 20px; margin-top: 30px;">
+          <p style="color: #6B7280; font-size: 14px; line-height: 1.6;">
+            <strong>Need help?</strong><br>
+            If you're having trouble clicking the button, copy and paste this link into your browser:<br>
+            <a href="${verificationLink}" style="color: #3B82F6; word-break: break-all;">${verificationLink}</a>
+          </p>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+          <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
+            © 2026 Landee & Moony. All rights reserved.<br>
+            The #1 Property Management System in Kenya
+          </p>
+        </div>
+      </div>
+    `;
+
+    const text = `
+Welcome to Landee & Moony, ${firstName}!
+
+Thank you for registering! To complete your account setup, please verify your email address by clicking this link:
+${verificationLink}
+
+This verification link expires in 24 hours.
+
+If you didn't create an account with Landee & Moony, please ignore this email.
+
+Need help? Contact us at support@landeeandmoony.com
+
+© 2026 Landee & Moony - The #1 Property Management System in Kenya
+    `;
+
+    await this.sendEmail({
+      to: email,
+      subject: `🔐 Verify Your Email - Landee & Moony`,
+      html,
+      text,
+    });
+  }
 }
 
 export const emailService = new EmailService();

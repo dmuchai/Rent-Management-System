@@ -29,7 +29,7 @@ export default function Register() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       toast({
@@ -55,16 +55,16 @@ export default function Register() {
         const error = await response.json();
         throw new Error(error.message || "Registration failed");
       }
+      const data = await response.json();
 
       toast({
         title: "Success",
-        description: "Account created successfully! You can now sign in.",
+        description: data.message || "Please check your email to verify your account.",
+        duration: 5000,
       });
 
-      // Redirect to login
-      setTimeout(() => {
-        setLocation("/login");
-      }, 1500);
+      // Don't redirect immediately - user needs to verify email first
+      // Show message for longer
     } catch (error) {
       toast({
         title: "Error",
