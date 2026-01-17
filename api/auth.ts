@@ -632,40 +632,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ message: 'Password changed successfully' });
     }
 
-    // POST /api/auth?action=reset-password - Reset password with token
+    // POST /api/auth?action=reset-password - Reset password using Supabase session
+    // New flow (Supabase built-in recovery):
+    // 1) Frontend receives the magic link and either a code or fragment from Supabase.
+    // 2) Frontend calls `supabase.auth.exchangeCodeForSession(code)` (if using PKCE/code)
+    //    or `supabase.auth.setSession({ access_token, refresh_token })` when receiving a hash.
+    // 3) Frontend should then either call `/api/auth?action=set-session` to set an httpOnly cookie
+    //    or include `access_token` in the POST body below. This handler will accept either a cookie
+    //    `supabase-auth-token` or a body `access_token` and will verify the session before updating the password.
     if (action === 'reset-password' && req.method === 'POST') {
-      const { token, newPassword } = req.body;
-      if (!token || !newPassword) {
-        return res.status(400).json({ error: 'Token and new password required' });
+      const { newPassword, access_token } = req.body;
+
+      if (!newPassword) {
+        return res.status(400).json({ error: 'New password is required' });
       }
+
       if (newPassword.length < 8) {
         return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
+
+      // Prefer token from secure cookie; fall back to access_token in body
+      const token = req.cookies['supabase-auth-token'] || access_token;
+      if (!token) {
+        return res.status(401).json({
+          error: 'Unauthorized. Please exchange the recovery code for a session and provide an access token or set a session cookie before calling this endpoint.'
+        });
+      }
+
+      // Verify session and get user
+      const { data: { user }, error: getUserError } = await supabase.auth.getUser(token);
+      if (getUserError || !user) {
+        console.error('[Auth] reset-password - session validation failed:', getUserError);
+        return res.status(401).json({ error: 'Invalid or expired session. Please request a new password reset.' });
+      }
+
+      // Use the service role key to update the user's password securely
       const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
-      // Find user by password_reset_token
-      const { data: user, error: userError } = await adminSupabase
-        .from('users')
-        .select('*')
-        .eq('password_reset_token', token)
-        .single();
-      if (userError || !user) {
-        return res.status(400).json({ error: 'Invalid or expired reset token' });
+      const { error: updateError } = await adminSupabase.auth.admin.updateUserById(user.id, {
+        password: newPassword,
+      });
+
+      if (updateError) {
+        console.error('[Auth] reset-password - updateUser error:', updateError);
+        return res.status(500).json({ error: 'Failed to update password' });
       }
-      // Check if token is expired
-      if (user.password_reset_token_expires_at && new Date(user.password_reset_token_expires_at) < new Date()) {
-        return res.status(400).json({ error: 'Reset token has expired. Please request a new one.' });
+
+      // Clear any legacy custom reset tokens for this user (best-effort)
+      try {
+        await adminSupabase
+          .from('users')
+          .update({
+            password_reset_token: null,
+            password_reset_token_expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+      } catch (e) {
+        // Non-fatal; just log
+        console.warn('[Auth] reset-password - failed to clear legacy tokens:', e);
       }
-      // Update password in Supabase Auth
-      await adminSupabase.auth.admin.updateUserById(user.id, { password: newPassword });
-      // Clear token from database
-      await adminSupabase
-        .from('users')
-        .update({
-          password_reset_token: null,
-          password_reset_token_expires_at: null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
+
       return res.status(200).json({ message: 'Password reset successfully!' });
     }
 
