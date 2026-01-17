@@ -134,66 +134,35 @@ export default function ResetPassword() {
       const response = await fetch('/api/auth?action=reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: accessToken,
-          newPassword: newPassword
-        })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        toast({
-          title: "Error",
-          description: result.error || "Failed to reset password.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Password Updated!",
-          description: "Your password has been successfully reset. Please sign in with your new password.",
-        });
-        window.history.replaceState({}, '', '/login?success=password-reset');
-        setTimeout(() => setLocation("/login?success=password-reset"), 2000);
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update password. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const passwordValidation = validatePassword(newPassword);
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Reset Your Password</CardTitle>
-          <CardDescription>
-            Enter a new password for your account
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="newPassword">New Password</Label>
-              <div className="relative">
-                <Input
-                  id="newPassword"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                />
-                <button
-                  type="button"
+        useEffect(() => {
+          console.log('[ResetPassword] useEffect running');
+          console.log('[ResetPassword] window.location.hash:', window.location.hash);
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          const type = hashParams.get('type');
+          const accessToken = hashParams.get('access_token');
+          console.log('[ResetPassword] Hash params:', Object.fromEntries(hashParams.entries()));
+          console.log('[ResetPassword] Type:', type);
+          console.log('[ResetPassword] Access token:', accessToken);
+          if (type !== 'recovery') {
+            toast({
+              title: "Invalid Reset Link",
+              description: "This link is invalid or has expired. Please request a new password reset.",
+              variant: "destructive",
+            });
+            setTimeout(() => setLocation("/forgot-password"), 3000);
+            return;
+          }
+          if (!accessToken) {
+            toast({
+              title: "Invalid Reset Link",
+              description: "The reset token is missing. Please request a new password reset.",
+              variant: "destructive",
+            });
+            setTimeout(() => setLocation("/forgot-password"), 3000);
+            return;
+          }
+          // If we get here, show the form (backend will validate token)
+        }, [toast, setLocation]);
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
