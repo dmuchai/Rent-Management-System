@@ -50,8 +50,8 @@ export default function ResetPassword() {
     const code = queryParams.get('code');
     console.log('[ResetPassword] Hash params:', Object.fromEntries(hashParams.entries()));
     console.log('[ResetPassword] Type:', type);
-    console.log('[ResetPassword] Access token:', accessToken);
-    console.log('[ResetPassword] Code:', code);
+    console.log('[ResetPassword] hasAccessToken:', !!accessToken);
+    console.log('[ResetPassword] hasCode:', !!code);
     if (!type) {
       console.warn('[ResetPassword] No type param in hash!');
     }
