@@ -1,12 +1,10 @@
 // Consolidated auth endpoint
 // POST /api/auth?action=login - Email/Password login
 // POST /api/auth?action=register - Register new user
-// POST /api/auth?action=verify-email - Verify email with token
 // POST /api/auth?action=forgot-password - Send password reset email
-// POST /api/auth?action=exchange-code - Exchange PKCE code for session
+// POST /api/auth?action=logout - Logout user
 // POST /api/auth?action=set-session - Set session from OAuth tokens
 // POST /api/auth?action=sync-user - Sync user to public.users table
-// POST /api/auth?action=set-role - Set user role (for new OAuth users)
 // GET  /api/auth?action=user - Get current user
 // GET  /api/auth?action=google - Initiate Google OAuth
 
@@ -14,8 +12,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { rateLimit, getClientIp, RATE_LIMITS } from './_lib/rate-limit.js';
-import { emailService } from './_lib/emailService.js';
-import crypto from 'crypto';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
@@ -32,7 +28,7 @@ const registerSchema = z.object({
   password: z.string().min(8),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
-  role: z.enum(['landlord', 'property_manager']).default('landlord'),
+  role: z.enum(['landlord', 'tenant']).default('landlord'),
 });
 
 const forgotPasswordSchema = z.object({
@@ -46,7 +42,7 @@ const setSessionSchema = z.object({
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { action } = req.query;
-
+  
   // Create Supabase client with PKCE flow for OAuth
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
@@ -67,8 +63,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         provider: 'google',
         options: {
           redirectTo: `${origin}/auth-callback`,
-          queryParams: {
-            access_type: 'offline',
+          queryParams: { 
+            access_type: 'offline', 
             prompt: 'consent'
           },
           skipBrowserRedirect: false,
@@ -97,7 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!rateLimitResult.allowed) {
         console.warn(`Rate limit exceeded for login from IP: ${clientIp}`);
-        return res.status(429).json({
+        return res.status(429).json({ 
           error: 'Too many login attempts. Please try again later.',
           retryAfter: rateLimitResult.retryAfter,
         });
@@ -109,21 +105,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (error || !data.session) {
         return res.status(401).json({ error: 'Invalid credentials' });
-      }
-
-      // Check if user is verified
-      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
-      const { data: userData } = await adminSupabase
-        .from('users')
-        .select('is_verified')
-        .eq('id', data.user.id)
-        .single();
-
-      if (userData && !userData.is_verified) {
-        return res.status(403).json({
-          error: 'Email not verified. Please check your email for the verification link.',
-          code: 'EMAIL_NOT_VERIFIED'
-        });
       }
 
       res.setHeader('Set-Cookie', [
@@ -153,7 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!rateLimitResult.allowed) {
         console.warn(`Rate limit exceeded for registration from IP: ${clientIp}`);
-        return res.status(429).json({
+        return res.status(429).json({ 
           error: 'Too many registration attempts. Please try again later.',
           retryAfter: rateLimitResult.retryAfter,
         });
@@ -162,14 +143,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const userData = registerSchema.parse(req.body);
       const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
-      // Generate verification token
-      const verificationToken = crypto.randomBytes(32).toString('hex');
-      const verificationTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
       const { data, error } = await adminSupabase.auth.admin.createUser({
         email: userData.email,
         password: userData.password,
-        email_confirm: false, // Don't auto-confirm, require verification
+        email_confirm: true,
         user_metadata: {
           firstName: userData.firstName,
           lastName: userData.lastName,
@@ -187,82 +164,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         first_name: userData.firstName,
         last_name: userData.lastName,
         role: userData.role,
-        is_verified: false,
-        verification_token: verificationToken,
-        verification_token_expires_at: verificationTokenExpiresAt.toISOString(),
       });
 
-      // Send verification email
-      try {
-        await emailService.sendVerificationEmail(
-          userData.email,
-          userData.firstName,
-          verificationToken
-        );
-      } catch (emailError) {
-        console.error('Failed to send verification email:', emailError);
-        // Don't fail registration if email fails, user can request resend
-      }
-
-      return res.status(201).json({
-        message: 'Registration successful. Please check your email to verify your account.',
-        requiresVerification: true
-      });
-    }
-
-    // POST /api/auth?action=verify-email - Verify email
-    if (action === 'verify-email' && req.method === 'POST') {
-      const { token } = req.body;
-
-      if (!token) {
-        return res.status(400).json({ error: 'Verification token is required' });
-      }
-
-      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
-
-      // Find user by verification token
-      const { data: user, error: userError } = await adminSupabase
-        .from('users')
-        .select('*')
-        .eq('verification_token', token)
-        .single();
-
-      if (userError || !user) {
-        return res.status(400).json({ error: 'Invalid or expired verification token' });
-      }
-
-      // Check if token is expired
-      if (user.verification_token_expires_at && new Date(user.verification_token_expires_at) < new Date()) {
-        return res.status(400).json({ error: 'Verification token has expired. Please request a new one.' });
-      }
-
-      // Check if already verified
-      if (user.is_verified) {
-        return res.status(200).json({ message: 'Email already verified. You can now log in.' });
-      }
-
-      // Update user as verified
-      const { error: updateError } = await adminSupabase
-        .from('users')
-        .update({
-          is_verified: true,
-          verification_token: null,
-          verification_token_expires_at: null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      if (updateError) {
-        console.error('Verification update error:', updateError);
-        return res.status(500).json({ error: 'Failed to verify email' });
-      }
-
-      // Also confirm email in Supabase Auth
-      await adminSupabase.auth.admin.updateUserById(user.id, {
-        email_confirm: true
-      });
-
-      return res.status(200).json({ message: 'Email verified successfully! You can now log in.' });
+      return res.status(201).json({ message: 'Registration successful' });
     }
 
     // POST /api/auth?action=forgot-password - Forgot password
@@ -278,47 +182,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!rateLimitResult.allowed) {
         console.warn(`Rate limit exceeded for password reset from IP: ${clientIp}`);
-        return res.status(429).json({
+        return res.status(429).json({ 
           error: 'Too many password reset attempts. Please try again later.',
           retryAfter: rateLimitResult.retryAfter,
         });
       }
 
       const { email } = forgotPasswordSchema.parse(req.body);
+      const protocol = req.headers['x-forwarded-proto'] || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      const origin = `${protocol}://${host}`;
 
-      // Use Supabase built-in password recovery email (requires SMTP configured in Supabase)
-      // We call the client-level supabase (anon key) which triggers Supabase to send the email.
-      try {
-        const protocol = req.headers['x-forwarded-proto'] || 'https';
-        const host = req.headers['x-forwarded-host'] || req.headers.host;
-        const origin = `${protocol}://${host}`;
+      await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${origin}/reset-password`,
+      });
 
-        // Supabase will send the recovery email; include redirectTo so the link returns to our frontend
-        // Note: this method intentionally doesn't reveal whether the email exists (prevents enumeration)
-        // Include a hash fragment so Supabase returns a recovery fragment
-        // with `#type=recovery&access_token=...` instead of issuing a PKCE code.
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${origin}/reset-password#type=recovery`
-        });
-
-        if (resetError) {
-          // Log the error for debugging but don't reveal to client
-          console.error('[Auth] Supabase resetPasswordForEmail error:', resetError);
-        }
-      } catch (e) {
-        console.error('[Auth] forgot-password handler error:', e);
-      }
-
-      // Always return success message regardless of outcome to avoid email enumeration
       return res.status(200).json({
         message: 'If that email exists in our system, a password reset link has been sent'
       });
     }
 
+    // POST /api/auth?action=logout - Logout
+    if (action === 'logout' && req.method === 'POST') {
+      res.setHeader('Set-Cookie', 'supabase-auth-token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+      return res.status(200).json({ message: 'Logged out successfully' });
+    }
+
     // POST /api/auth?action=exchange-code - Exchange PKCE code for session
     if (action === 'exchange-code' && req.method === 'POST') {
       const { code } = req.body;
-
+      
       if (!code) {
         return res.status(400).json({ error: 'Authorization code required' });
       }
@@ -340,7 +233,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `supabase-auth-token=${data.session.access_token}; HttpOnly; Path=/; Max-Age=604800; ${process.env.NODE_ENV === 'production' ? 'Secure;' : ''} SameSite=Lax`
       ]);
 
-      return res.status(200).json({
+      return res.status(200).json({ 
         message: 'Session created successfully',
         user: {
           id: data.user.id,
@@ -349,7 +242,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // NOTE: `set-session` endpoint removed — we now rely on client-side session handling.
+    // POST /api/auth?action=set-session - Set session from OAuth
+    if (action === 'set-session' && req.method === 'POST') {
+      const { access_token, refresh_token } = setSessionSchema.parse(req.body);
+
+      const { data, error } = await supabase.auth.setSession({
+        access_token,
+        refresh_token: refresh_token || '',
+      });
+
+      if (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      res.setHeader('Set-Cookie', [
+        `supabase-auth-token=${access_token}; HttpOnly; Path=/; Max-Age=604800; ${process.env.NODE_ENV === 'production' ? 'Secure;' : ''} SameSite=Lax`
+      ]);
+
+      return res.status(200).json({ message: 'Session set successfully' });
+    }
 
     // POST /api/auth?action=sync-user - Sync user to public.users
     if (action === 'sync-user' && req.method === 'POST') {
@@ -371,41 +282,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .single();
 
       if (!existingUser) {
-        // New user - check if they have a role in metadata (email/password registration)
-        // or if they need to select a role (OAuth sign-in)
-        const hasRoleInMetadata = user.user_metadata?.role;
-        const role = hasRoleInMetadata ? user.user_metadata.role : null;
-
         await adminSupabase.from('users').insert({
           id: user.id,
           email: user.email!,
           first_name: user.user_metadata?.firstName || user.user_metadata?.full_name?.split(' ')[0] || '',
           last_name: user.user_metadata?.lastName || user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
-          role: role,
-          is_verified: true, // OAuth users are auto-verified
-        });
-
-        // If no role, user needs to select one
-        if (!role) {
-          return res.status(200).json({
-            message: 'User synced successfully',
-            needsRoleSelection: true
-          });
-        }
-      }
-
-      // Check if existing user has no role (incomplete OAuth registration)
-      if (existingUser && !existingUser.role) {
-        return res.status(200).json({
-          message: 'User synced successfully',
-          needsRoleSelection: true
+          role: user.user_metadata?.role || 'landlord',
         });
       }
 
-      return res.status(200).json({
-        message: 'User synced successfully',
-        needsRoleSelection: false
-      });
+      return res.status(200).json({ message: 'User synced successfully' });
     }
 
     // GET /api/auth?action=user - Get current user
@@ -492,65 +378,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // POST /api/auth?action=set-role - Set user role (for new OAuth users)
-    if (action === 'set-role' && req.method === 'POST') {
-      const token = req.cookies['supabase-auth-token'];
-      if (!token) {
-        return res.status(401).json({ error: 'Unauthorized - please log in' });
-      }
-
-      // Verify user is authenticated
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !user) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      const { role } = req.body;
-
-      if (!role) {
-        return res.status(400).json({ error: 'Role is required' });
-      }
-
-      const validRoles = ['landlord', 'property_manager'];
-      if (!validRoles.includes(role)) {
-        return res.status(400).json({ error: 'Invalid role. Must be landlord or property_manager. Tenants must be invited by a landlord.' });
-      }
-
-      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
-
-      // Check if user exists
-      const { data: existingUser } = await adminSupabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (!existingUser) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      // Only allow setting role if it's currently null (prevent role changes after initial setup)
-      if (existingUser.role !== null) {
-        return res.status(400).json({ error: 'Role has already been set. Please contact support to change your role.' });
-      }
-
-      // Update user role
-      const { error: updateError } = await adminSupabase
-        .from('users')
-        .update({
-          role: role,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      if (updateError) {
-        console.error('Role update error:', updateError);
-        return res.status(500).json({ error: 'Failed to update role' });
-      }
-
-      return res.status(200).json({ message: 'Role set successfully' });
-    }
-
     // POST /api/auth?action=change-password - Change user password
     if (action === 'change-password' && req.method === 'POST') {
       const token = req.cookies['supabase-auth-token'];
@@ -577,7 +404,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!rateLimitResult.allowed) {
         console.warn(`Rate limit exceeded for password change from user: ${user.id} (IP: ${clientIp})`);
-        return res.status(429).json({
+        return res.status(429).json({ 
           error: 'Too many password change attempts. Please try again later.',
           retryAfter: rateLimitResult.retryAfter,
         });
@@ -615,8 +442,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       return res.status(200).json({ message: 'Password changed successfully' });
     }
-
-    // NOTE: `reset-password` server handler removed — password resets are handled end-to-end by Supabase + client.
 
     return res.status(400).json({ error: 'Invalid action or method' });
 

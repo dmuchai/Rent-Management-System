@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { usePageTitle } from "@/hooks/usePageTitle";
+
 // Password validation helper
 function validatePassword(password: string): { isValid: boolean; failedRequirements: string[] } {
   const minLength = password.length >= 8;
@@ -29,7 +30,6 @@ function validatePassword(password: string): { isValid: boolean; failedRequireme
 }
 
 export default function ResetPassword() {
-  console.log('[ResetPassword] Component rendered');
   usePageTitle('Reset Password');
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -39,28 +39,17 @@ export default function ResetPassword() {
   const { toast } = useToast();
 
   useEffect(() => {
-    console.log('[ResetPassword] useEffect running');
-    console.log('[ResetPassword] window.location.hash:', window.location.hash);
-    // Check for recovery parameters in the URL
+    // Check if we have a recovery token in the URL
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
-    const queryParams = new URLSearchParams(window.location.search.substring(1));
     const type = hashParams.get('type');
     const accessToken = hashParams.get('access_token');
-    const refreshToken = hashParams.get('refresh_token');
-    const code = queryParams.get('code');
+    
     console.log('[ResetPassword] Hash params:', Object.fromEntries(hashParams.entries()));
     console.log('[ResetPassword] Type:', type);
-    console.log('[ResetPassword] hasAccessToken:', !!accessToken);
-    console.log('[ResetPassword] hasCode:', !!code);
-    if (!type) {
-      console.warn('[ResetPassword] No type param in hash!');
-    }
-    if (!accessToken) {
-      console.warn('[ResetPassword] No access_token param in hash!');
-    }
+    console.log('[ResetPassword] Has access token:', !!accessToken);
     
     // Validate we have the required recovery parameters
-    if (type && type !== 'recovery') {
+    if (type !== 'recovery') {
       console.error('[ResetPassword] Invalid type:', type, '(expected "recovery")');
       toast({
         title: "Invalid Reset Link",
@@ -71,63 +60,41 @@ export default function ResetPassword() {
       return;
     }
     
-    // If there's a code (PKCE) exchange it for a session, then tell the server to set an httpOnly cookie
-    const completeServerSession = async () => {
+    if (!accessToken) {
+      console.error('[ResetPassword] Missing access token in URL');
+      toast({
+        title: "Invalid Reset Link",
+        description: "The reset token is missing. Please request a new password reset.",
+        variant: "destructive",
+      });
+      setTimeout(() => setLocation("/forgot-password"), 3000);
+      return;
+    }
+    
+    // Validate the session is active with Supabase
+    const validateSession = async () => {
       try {
-        let session: any = null;
-
-        if (code) {
-          console.log('[ResetPassword] Exchanging code for session (client)');
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) {
-            console.error('[ResetPassword] exchangeCodeForSession error:', error);
-            toast({ title: 'Invalid Reset Link', description: 'Could not exchange code for session.', variant: 'destructive' });
-            setTimeout(() => setLocation('/forgot-password'), 3000);
-            return;
-          }
-          session = data.session;
-        } else if (accessToken) {
-          // If access_token is present in the hash, use it directly
-          session = { access_token: accessToken, refresh_token: refreshToken };
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session) {
+          console.error('[ResetPassword] Session validation failed:', error);
+          toast({
+            title: "Session Expired",
+            description: "Your reset link has expired. Please request a new one.",
+            variant: "destructive",
+          });
+          setTimeout(() => setLocation("/forgot-password"), 3000);
         } else {
-          console.warn('[ResetPassword] No code or access_token found in URL');
-          // Let the user continue; they'll be redirected when trying to submit without a session
-          return;
-        }
-
-        // Set session client-side so Supabase client is authenticated
-        const { error: setError } = await supabase.auth.setSession({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-        } as any);
-
-        if (setError) {
-          console.error('[ResetPassword] supabase.auth.setSession failed', setError);
-          toast({ title: 'Session Error', description: 'Failed to establish session. Please request a new reset link.', variant: 'destructive' });
-          setTimeout(() => setLocation('/forgot-password'), 3000);
-          return;
-        }
-
-        console.log('[ResetPassword] ✅ Client session set via supabase.auth.setSession');
-
-        // Clean up the URL (remove code/hash)
-        try {
-          const url = new URL(window.location.href);
-          url.hash = '';
-          url.searchParams.delete('code');
-          window.history.replaceState({}, '', url.toString());
-        } catch (e) {
-          // ignore
+          console.log('[ResetPassword] ✅ Valid recovery session');
         }
       } catch (err) {
-        console.error('[ResetPassword] completeServerSession error:', err);
+        console.error('[ResetPassword] Session check error:', err);
       }
     };
-
-    completeServerSession();
+    
+    validateSession();
   }, [toast, setLocation]);
 
-  const handleResetPassword = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (newPassword !== confirmPassword) {
@@ -150,64 +117,155 @@ export default function ResetPassword() {
     }
 
     setIsLoading(true);
+
     try {
-      // Client-driven flow: use Supabase client to update the user's password.
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
 
       if (error) {
-        console.error('[ResetPassword] supabase.auth.updateUser error:', error);
-        toast({ title: 'Error', description: error.message || 'Failed to reset password.', variant: 'destructive' });
+        console.error('Password update error:', error);
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
       } else {
-        toast({ title: 'Password Updated!', description: 'Your password has been successfully reset. You can now sign in with your new password.' });
+        console.log('[ResetPassword] ✅ Password updated successfully');
+        
+        toast({
+          title: "Password Updated!",
+          description: "Your password has been successfully reset. Please sign in with your new password.",
+        });
+        
+        // Sign out the recovery session to prevent auto-login
+        await supabase.auth.signOut();
+        
+        // Clear the hash from URL and redirect to login with success param
         window.history.replaceState({}, '', '/login?success=password-reset');
-        setTimeout(() => setLocation('/login?success=password-reset'), 2000);
+        
+        // Redirect to login page after a short delay
+        setTimeout(() => setLocation("/login?success=password-reset"), 2000);
       }
-    } catch (err) {
-      console.error('[ResetPassword] Unexpected error:', err);
-      toast({ title: 'Error', description: 'Failed to update password. Please try again.', variant: 'destructive' });
+    } catch (error) {
+      console.error('Password reset error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update password. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
-    }
+  };
 
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-muted px-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Reset Password</CardTitle>
-            <CardDescription>Enter your new password below</CardDescription>
-          </CardHeader>
+  const passwordValidation = validatePassword(newPassword);
 
-          <CardContent className="space-y-4">
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl">Reset Your Password</CardTitle>
+          <CardDescription>
+            Enter a new password for your account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="newPassword">New Password</Label>
-              <Input
-                id="newPassword"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  id="newPassword"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <i className={`fas fa-eye${showPassword ? '-slash' : ''}`}></i>
+                </button>
+              </div>
+              {newPassword && !passwordValidation.isValid && (
+                <div className="text-xs text-destructive space-y-1">
+                  <p className="font-medium">Password must include:</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {passwordValidation.failedRequirements.map((req, i) => (
+                      <li key={i}>{req}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {newPassword && passwordValidation.isValid && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <i className="fas fa-check-circle"></i>
+                  Strong password
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
               <Input
                 id="confirmPassword"
-                type="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                disabled={isLoading}
               />
+              {confirmPassword && newPassword !== confirmPassword && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <i className="fas fa-times-circle"></i>
+                  Passwords don't match
+                </p>
+              )}
+              {confirmPassword && newPassword === confirmPassword && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <i className="fas fa-check-circle"></i>
+                  Passwords match
+                </p>
+              )}
             </div>
 
-            <Button
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={isLoading || !passwordValidation.isValid || newPassword !== confirmPassword}
+            >
+              {isLoading ? (
+                <>
+                  <i className="fas fa-spinner fa-spin mr-2"></i>
+                  Updating Password...
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-lock mr-2"></i>
+                  Reset Password
+                </>
+              )}
+            </Button>
+
+            <Button 
+              type="button"
+              variant="ghost" 
               className="w-full"
-              onClick={handleResetPassword}
+              onClick={() => setLocation("/")}
               disabled={isLoading}
             >
-              {isLoading ? 'Resetting...' : 'Reset Password'}
+              <i className="fas fa-arrow-left mr-2"></i>
+              Back to Sign In
             </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
