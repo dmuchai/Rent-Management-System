@@ -349,25 +349,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // POST /api/auth?action=set-session - Set session from OAuth
-    if (action === 'set-session' && req.method === 'POST') {
-      const { access_token, refresh_token } = setSessionSchema.parse(req.body);
-
-      const { data, error } = await supabase.auth.setSession({
-        access_token,
-        refresh_token: refresh_token || '',
-      });
-
-      if (error) {
-        return res.status(400).json({ error: error.message });
-      }
-
-      res.setHeader('Set-Cookie', [
-        `supabase-auth-token=${access_token}; HttpOnly; Path=/; Max-Age=604800; ${process.env.NODE_ENV === 'production' ? 'Secure;' : ''} SameSite=Lax`
-      ]);
-
-      return res.status(200).json({ message: 'Session set successfully' });
-    }
+    // NOTE: `set-session` endpoint removed — we now rely on client-side session handling.
 
     // POST /api/auth?action=sync-user - Sync user to public.users
     if (action === 'sync-user' && req.method === 'POST') {
@@ -634,68 +616,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ message: 'Password changed successfully' });
     }
 
-    // POST /api/auth?action=reset-password - Reset password using Supabase session
-    // New flow (Supabase built-in recovery):
-    // 1) Frontend receives the magic link and either a code or fragment from Supabase.
-    // 2) Frontend calls `supabase.auth.exchangeCodeForSession(code)` (if using PKCE/code)
-    //    or `supabase.auth.setSession({ access_token, refresh_token })` when receiving a hash.
-    // 3) Frontend should then either call `/api/auth?action=set-session` to set an httpOnly cookie
-    //    or include `access_token` in the POST body below. This handler will accept either a cookie
-    //    `supabase-auth-token` or a body `access_token` and will verify the session before updating the password.
-    if (action === 'reset-password' && req.method === 'POST') {
-      const { newPassword, access_token } = req.body;
-
-      if (!newPassword) {
-        return res.status(400).json({ error: 'New password is required' });
-      }
-
-      if (newPassword.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters' });
-      }
-
-      // Prefer token from secure cookie; fall back to access_token in body
-      const token = req.cookies['supabase-auth-token'] || access_token;
-      if (!token) {
-        return res.status(401).json({
-          error: 'Unauthorized. Please exchange the recovery code for a session and provide an access token or set a session cookie before calling this endpoint.'
-        });
-      }
-
-      // Verify session and get user
-      const { data: { user }, error: getUserError } = await supabase.auth.getUser(token);
-      if (getUserError || !user) {
-        console.error('[Auth] reset-password - session validation failed:', getUserError);
-        return res.status(401).json({ error: 'Invalid or expired session. Please request a new password reset.' });
-      }
-
-      // Use the service role key to update the user's password securely
-      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
-      const { error: updateError } = await adminSupabase.auth.admin.updateUserById(user.id, {
-        password: newPassword,
-      });
-
-      if (updateError) {
-        console.error('[Auth] reset-password - updateUser error:', updateError);
-        return res.status(500).json({ error: 'Failed to update password' });
-      }
-
-      // Clear any legacy custom reset tokens for this user (best-effort)
-      try {
-        await adminSupabase
-          .from('users')
-          .update({
-            password_reset_token: null,
-            password_reset_token_expires_at: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', user.id);
-      } catch (e) {
-        // Non-fatal; just log
-        console.warn('[Auth] reset-password - failed to clear legacy tokens:', e);
-      }
-
-      return res.status(200).json({ message: 'Password reset successfully!' });
-    }
+    // NOTE: `reset-password` server handler removed — password resets are handled end-to-end by Supabase + client.
 
     return res.status(400).json({ error: 'Invalid action or method' });
 

@@ -95,25 +95,20 @@ export default function ResetPassword() {
           return;
         }
 
-        // Send access/refresh token to server to set httpOnly cookie
-        const resp = await fetch('/api/auth?action=set-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-          }),
-        });
+        // Set session client-side so Supabase client is authenticated
+        const { error: setError } = await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        } as any);
 
-        if (!resp.ok) {
-          const body = await resp.json().catch(() => ({}));
-          console.error('[ResetPassword] /api/auth?action=set-session failed', body);
-          toast({ title: 'Session Error', description: body.error || 'Failed to establish session.', variant: 'destructive' });
+        if (setError) {
+          console.error('[ResetPassword] supabase.auth.setSession failed', setError);
+          toast({ title: 'Session Error', description: 'Failed to establish session. Please request a new reset link.', variant: 'destructive' });
           setTimeout(() => setLocation('/forgot-password'), 3000);
           return;
         }
 
-        console.log('[ResetPassword] ✅ Server session set via /api/auth?action=set-session');
+        console.log('[ResetPassword] ✅ Client session set via supabase.auth.setSession');
 
         // Clean up the URL (remove code/hash)
         try {
@@ -156,19 +151,12 @@ export default function ResetPassword() {
 
     setIsLoading(true);
     try {
-      // Server-driven flow: POST newPassword to our API. The server will validate
-      // the session (cookie set earlier by /api/auth?action=set-session) and update the password.
-      const response = await fetch('/api/auth?action=reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newPassword }),
-      });
+      // Client-driven flow: use Supabase client to update the user's password.
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
 
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        console.error('[ResetPassword] reset-password failed:', result);
-        toast({ title: 'Error', description: result.error || 'Failed to reset password.', variant: 'destructive' });
+      if (error) {
+        console.error('[ResetPassword] supabase.auth.updateUser error:', error);
+        toast({ title: 'Error', description: error.message || 'Failed to reset password.', variant: 'destructive' });
       } else {
         toast({ title: 'Password Updated!', description: 'Your password has been successfully reset. You can now sign in with your new password.' });
         window.history.replaceState({}, '', '/login?success=password-reset');
