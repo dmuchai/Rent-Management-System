@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { usePageTitle } from "@/hooks/usePageTitle";
-
 // Password validation helper
 function validatePassword(password: string): { isValid: boolean; failedRequirements: string[] } {
   const minLength = password.length >= 8;
@@ -102,7 +101,7 @@ export default function ResetPassword() {
     validateSession();
   }, [toast, setLocation]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (newPassword !== confirmPassword) {
@@ -134,113 +133,77 @@ export default function ResetPassword() {
       const response = await fetch('/api/auth?action=reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        useEffect(() => {
-          console.log('[ResetPassword] useEffect running');
-          console.log('[ResetPassword] window.location.hash:', window.location.hash);
-          const hashParams = new URLSearchParams(window.location.hash.substring(1));
-          const type = hashParams.get('type');
-          const accessToken = hashParams.get('access_token');
-          console.log('[ResetPassword] Hash params:', Object.fromEntries(hashParams.entries()));
-          console.log('[ResetPassword] Type:', type);
-          console.log('[ResetPassword] Access token:', accessToken);
-          if (type !== 'recovery') {
-            toast({
-              title: "Invalid Reset Link",
-              description: "This link is invalid or has expired. Please request a new password reset.",
-              variant: "destructive",
-            });
-            setTimeout(() => setLocation("/forgot-password"), 3000);
-            return;
-          }
-          if (!accessToken) {
-            toast({
-              title: "Invalid Reset Link",
-              description: "The reset token is missing. Please request a new password reset.",
-              variant: "destructive",
-            });
-            setTimeout(() => setLocation("/forgot-password"), 3000);
-            return;
-          }
-          // If we get here, show the form (backend will validate token)
-        }, [toast, setLocation]);
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <i className={`fas fa-eye${showPassword ? '-slash' : ''}`}></i>
-                </button>
-              </div>
-              {newPassword && !passwordValidation.isValid && (
-                <div className="text-xs text-destructive space-y-1">
-                  <p className="font-medium">Password must include:</p>
-                  <ul className="list-disc list-inside space-y-0.5">
-                    {passwordValidation.failedRequirements.map((req, i) => (
-                      <li key={i}>{req}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {newPassword && passwordValidation.isValid && (
-                <p className="text-xs text-green-600 flex items-center gap-1">
-                  <i className="fas fa-check-circle"></i>
-                  Strong password
-                </p>
-              )}
-            </div>
+        body: JSON.stringify({
+          token: accessToken,
+          newPassword: newPassword
+        })
+      });
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm New Password</Label>
-              <Input
-                id="confirmPassword"
-                type={showPassword ? "text" : "password"}
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-              {confirmPassword && newPassword !== confirmPassword && (
-                <p className="text-xs text-destructive flex items-center gap-1">
-                  <i className="fas fa-times-circle"></i>
-                  Passwords don't match
-                </p>
-              )}
-              {confirmPassword && newPassword === confirmPassword && (
-                <p className="text-xs text-green-600 flex items-center gap-1">
-                  <i className="fas fa-check-circle"></i>
-                  Passwords match
-                </p>
-              )}
-            </div>
+      const result = await response.json();
 
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={isLoading || !passwordValidation.isValid || newPassword !== confirmPassword}
-            >
-              {isLoading ? (
-                <>
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
-                  Updating Password...
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-lock mr-2"></i>
-                  Reset Password
-                </>
-              )}
-            </Button>
+      if (!response.ok) {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to reset password.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Password Updated!",
+          description: "Your password has been successfully reset. Please sign in with your new password.",
+        });
+        window.history.replaceState({}, '', '/login?success=password-reset');
+        setTimeout(() => setLocation("/login?success=password-reset"), 2000);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update password. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
-            <Button 
-              type="button"
-              variant="ghost" 
-              className="w-full"
-              onClick={() => setLocation("/")}
-              disabled={isLoading}
-            >
-              <i className="fas fa-arrow-left mr-2"></i>
-              Back to Sign In
-            </Button>
-          </form>
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-muted px-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Reset Password</CardTitle>
+          <CardDescription>
+            Enter your new password below
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="newPassword">New Password</Label>
+            <Input
+              id="newPassword"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+
+          <Button
+            className="w-full"
+            onClick={handleResetPassword}
+            disabled={isLoading}
+          >
+            {isLoading ? "Resetting..." : "Reset Password"}
+          </Button>
         </CardContent>
       </Card>
     </div>
