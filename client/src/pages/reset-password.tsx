@@ -41,13 +41,17 @@ export default function ResetPassword() {
   useEffect(() => {
     console.log('[ResetPassword] useEffect running');
     console.log('[ResetPassword] window.location.hash:', window.location.hash);
-    // Check if we have a recovery token in the URL
+    // Check for recovery parameters in the URL
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const queryParams = new URLSearchParams(window.location.search.substring(1));
     const type = hashParams.get('type');
     const accessToken = hashParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token');
+    const code = queryParams.get('code');
     console.log('[ResetPassword] Hash params:', Object.fromEntries(hashParams.entries()));
     console.log('[ResetPassword] Type:', type);
     console.log('[ResetPassword] Access token:', accessToken);
+    console.log('[ResetPassword] Code:', code);
     if (!type) {
       console.warn('[ResetPassword] No type param in hash!');
     }
@@ -56,7 +60,7 @@ export default function ResetPassword() {
     }
     
     // Validate we have the required recovery parameters
-    if (type !== 'recovery') {
+    if (type && type !== 'recovery') {
       console.error('[ResetPassword] Invalid type:', type, '(expected "recovery")');
       toast({
         title: "Invalid Reset Link",
@@ -67,59 +71,65 @@ export default function ResetPassword() {
       return;
     }
     
-    if (!accessToken) {
-      console.error('[ResetPassword] Missing access token in URL');
-      toast({
-        title: "Invalid Reset Link",
-        description: "The reset token is missing. Please request a new password reset.",
-        variant: "destructive",
-      });
-      setTimeout(() => setLocation("/forgot-password"), 3000);
-      return;
-    }
-    
-    // If Supabase provided a recovery token in the hash, set the session here.
-    // Supabase will redirect to our frontend with a hash like #type=recovery&access_token=...&refresh_token=...
-    const setRecoverySession = async () => {
+    // If there's a code (PKCE) exchange it for a session, then tell the server to set an httpOnly cookie
+    const completeServerSession = async () => {
       try {
-        const refreshToken = hashParams.get('refresh_token');
-        if (!accessToken) {
-          console.error('[ResetPassword] Missing access token in URL');
-          toast({
-            title: "Invalid Reset Link",
-            description: "The reset token is missing. Please request a new password reset.",
-            variant: "destructive",
-          });
+        let session: any = null;
+
+        if (code) {
+          console.log('[ResetPassword] Exchanging code for session (client)');
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.error('[ResetPassword] exchangeCodeForSession error:', error);
+            toast({ title: 'Invalid Reset Link', description: 'Could not exchange code for session.', variant: 'destructive' });
+            setTimeout(() => setLocation('/forgot-password'), 3000);
+            return;
+          }
+          session = data.session;
+        } else if (accessToken) {
+          // If access_token is present in the hash, use it directly
+          session = { access_token: accessToken, refresh_token: refreshToken };
+        } else {
+          console.warn('[ResetPassword] No code or access_token found in URL');
+          // Let the user continue; they'll be redirected when trying to submit without a session
+          return;
+        }
+
+        // Send access/refresh token to server to set httpOnly cookie
+        const resp = await fetch('/api/auth?action=set-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          }),
+        });
+
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({}));
+          console.error('[ResetPassword] /api/auth?action=set-session failed', body);
+          toast({ title: 'Session Error', description: body.error || 'Failed to establish session.', variant: 'destructive' });
           setTimeout(() => setLocation('/forgot-password'), 3000);
           return;
         }
 
-        // Set the session in the Supabase client
-        const sessionParams: { access_token: string; refresh_token?: string } = {
-          access_token: accessToken,
-        };
-        if (refreshToken) sessionParams.refresh_token = refreshToken;
+        console.log('[ResetPassword] ✅ Server session set via /api/auth?action=set-session');
 
-        const { data, error } = await supabase.auth.setSession(sessionParams as any);
-
-        if (error) {
-          console.error('[ResetPassword] setSession error:', error);
-          toast({
-            title: 'Invalid Reset Link',
-            description: 'The reset link is invalid or has expired. Please request a new one.',
-            variant: 'destructive',
-          });
-          setTimeout(() => setLocation('/forgot-password'), 3000);
-          return;
+        // Clean up the URL (remove code/hash)
+        try {
+          const url = new URL(window.location.href);
+          url.hash = '';
+          url.searchParams.delete('code');
+          window.history.replaceState({}, '', url.toString());
+        } catch (e) {
+          // ignore
         }
-
-        console.log('[ResetPassword] ✅ Supabase recovery session set', data.session);
       } catch (err) {
-        console.error('[ResetPassword] Error setting recovery session:', err);
+        console.error('[ResetPassword] completeServerSession error:', err);
       }
     };
 
-    setRecoverySession();
+    completeServerSession();
   }, [toast, setLocation]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -145,79 +155,71 @@ export default function ResetPassword() {
     }
 
     setIsLoading(true);
-
     try {
-      // Use Supabase client to update the user's password. The recovery session
-      // should already be set from the URL hash via setSession in useEffect.
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      // Server-driven flow: POST newPassword to our API. The server will validate
+      // the session (cookie set earlier by /api/auth?action=set-session) and update the password.
+      const response = await fetch('/api/auth?action=reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword }),
+      });
 
-      if (error) {
-        console.error('[ResetPassword] updateUser error:', error);
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to reset password.',
-          variant: 'destructive',
-        });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        console.error('[ResetPassword] reset-password failed:', result);
+        toast({ title: 'Error', description: result.error || 'Failed to reset password.', variant: 'destructive' });
       } else {
-        toast({
-          title: 'Password Updated!',
-          description: 'Your password has been successfully reset. You can now sign in with your new password.',
-        });
+        toast({ title: 'Password Updated!', description: 'Your password has been successfully reset. You can now sign in with your new password.' });
         window.history.replaceState({}, '', '/login?success=password-reset');
         setTimeout(() => setLocation('/login?success=password-reset'), 2000);
       }
     } catch (err) {
       console.error('[ResetPassword] Unexpected error:', err);
-      toast({
-        title: 'Error',
-        description: 'Failed to update password. Please try again.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to update password. Please try again.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
-  }
+    }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-muted px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Reset Password</CardTitle>
-          <CardDescription>
-            Enter your new password below
-          </CardDescription>
-        </CardHeader>
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Reset Password</CardTitle>
+            <CardDescription>Enter your new password below</CardDescription>
+          </CardHeader>
 
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="newPassword">New Password</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-          </div>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
 
-          <Button
-            className="w-full"
-            onClick={handleResetPassword}
-            disabled={isLoading}
-          >
-            {isLoading ? "Resetting..." : "Reset Password"}
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
+            <Button
+              className="w-full"
+              onClick={handleResetPassword}
+              disabled={isLoading}
+            >
+              {isLoading ? 'Resetting...' : 'Reset Password'}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
 }
