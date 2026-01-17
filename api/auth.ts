@@ -295,8 +295,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // Supabase will send the recovery email; include redirectTo so the link returns to our frontend
         // Note: this method intentionally doesn't reveal whether the email exists (prevents enumeration)
+        // Include a hash fragment so Supabase returns a recovery fragment
+        // with `#type=recovery&access_token=...` instead of issuing a PKCE code.
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${origin}/reset-password`
+          redirectTo: `${origin}/reset-password#type=recovery`
         });
 
         if (resetError) {
