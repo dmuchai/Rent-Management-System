@@ -285,47 +285,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const { email } = forgotPasswordSchema.parse(req.body);
-      const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
-      // Check if user exists
-      const { data: user } = await adminSupabase
-        .from('users')
-        .select('id, first_name')
-        .eq('email', email)
-        .single();
-
-      // Always return success to prevent email enumeration
-      if (!user) {
-        return res.status(200).json({
-          message: 'If that email exists in our system, a password reset link has been sent'
-        });
-      }
-
-      // Generate reset token
-      const resetToken = crypto.randomBytes(32).toString('hex');
-      const resetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-      // Store token in database
-      await adminSupabase
-        .from('users')
-        .update({
-          password_reset_token: resetToken,
-          password_reset_token_expires_at: resetTokenExpiresAt.toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      // Send branded reset email
+      // Use Supabase built-in password recovery email (requires SMTP configured in Supabase)
+      // We call the client-level supabase (anon key) which triggers Supabase to send the email.
       try {
-        await emailService.sendPasswordResetEmail(
-          email,
-          user.first_name || 'User',
-          resetToken
-        );
-      } catch (emailError) {
-        console.error('Failed to send password reset email:', emailError);
+        const protocol = req.headers['x-forwarded-proto'] || 'https';
+        const host = req.headers['x-forwarded-host'] || req.headers.host;
+        const origin = `${protocol}://${host}`;
+
+        // Supabase will send the recovery email; include redirectTo so the link returns to our frontend
+        // Note: this method intentionally doesn't reveal whether the email exists (prevents enumeration)
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${origin}/reset-password`
+        });
+
+        if (resetError) {
+          // Log the error for debugging but don't reveal to client
+          console.error('[Auth] Supabase resetPasswordForEmail error:', resetError);
+        }
+      } catch (e) {
+        console.error('[Auth] forgot-password handler error:', e);
       }
 
+      // Always return success message regardless of outcome to avoid email enumeration
       return res.status(200).json({
         message: 'If that email exists in our system, a password reset link has been sent'
       });

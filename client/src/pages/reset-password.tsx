@@ -78,27 +78,48 @@ export default function ResetPassword() {
       return;
     }
     
-    // Validate the session is active with Supabase
-    const validateSession = async () => {
+    // If Supabase provided a recovery token in the hash, set the session here.
+    // Supabase will redirect to our frontend with a hash like #type=recovery&access_token=...&refresh_token=...
+    const setRecoverySession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error || !session) {
-          console.error('[ResetPassword] Session validation failed:', error);
+        const refreshToken = hashParams.get('refresh_token');
+        if (!accessToken) {
+          console.error('[ResetPassword] Missing access token in URL');
           toast({
-            title: "Session Expired",
-            description: "Your reset link has expired. Please request a new one.",
+            title: "Invalid Reset Link",
+            description: "The reset token is missing. Please request a new password reset.",
             variant: "destructive",
           });
-          setTimeout(() => setLocation("/forgot-password"), 3000);
-        } else {
-          console.log('[ResetPassword] ✅ Valid recovery session');
+          setTimeout(() => setLocation('/forgot-password'), 3000);
+          return;
         }
+
+        // Set the session in the Supabase client
+        const sessionParams: { access_token: string; refresh_token?: string } = {
+          access_token: accessToken,
+        };
+        if (refreshToken) sessionParams.refresh_token = refreshToken;
+
+        const { data, error } = await supabase.auth.setSession(sessionParams as any);
+
+        if (error) {
+          console.error('[ResetPassword] setSession error:', error);
+          toast({
+            title: 'Invalid Reset Link',
+            description: 'The reset link is invalid or has expired. Please request a new one.',
+            variant: 'destructive',
+          });
+          setTimeout(() => setLocation('/forgot-password'), 3000);
+          return;
+        }
+
+        console.log('[ResetPassword] ✅ Supabase recovery session set', data.session);
       } catch (err) {
-        console.error('[ResetPassword] Session check error:', err);
+        console.error('[ResetPassword] Error setting recovery session:', err);
       }
     };
-    
-    validateSession();
+
+    setRecoverySession();
   }, [toast, setLocation]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -126,40 +147,31 @@ export default function ResetPassword() {
     setIsLoading(true);
 
     try {
-      // Extract token from URL hash
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const accessToken = hashParams.get('access_token');
+      // Use Supabase client to update the user's password. The recovery session
+      // should already be set from the URL hash via setSession in useEffect.
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
 
-      const response = await fetch('/api/auth?action=reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: accessToken,
-          newPassword: newPassword
-        })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
+      if (error) {
+        console.error('[ResetPassword] updateUser error:', error);
         toast({
-          title: "Error",
-          description: result.error || "Failed to reset password.",
-          variant: "destructive",
+          title: 'Error',
+          description: error.message || 'Failed to reset password.',
+          variant: 'destructive',
         });
       } else {
         toast({
-          title: "Password Updated!",
-          description: "Your password has been successfully reset. Please sign in with your new password.",
+          title: 'Password Updated!',
+          description: 'Your password has been successfully reset. You can now sign in with your new password.',
         });
         window.history.replaceState({}, '', '/login?success=password-reset');
-        setTimeout(() => setLocation("/login?success=password-reset"), 2000);
+        setTimeout(() => setLocation('/login?success=password-reset'), 2000);
       }
-    } catch (error) {
+    } catch (err) {
+      console.error('[ResetPassword] Unexpected error:', err);
       toast({
-        title: "Error",
-        description: "Failed to update password. Please try again.",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to update password. Please try again.',
+        variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
