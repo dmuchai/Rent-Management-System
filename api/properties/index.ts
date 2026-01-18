@@ -206,7 +206,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           updatedAt: createdProperty.updated_at
         });
     } else {
-      return res.status(405).json({ error: 'Method not allowed' });
+      return res.status(405).json({ message: 'Method not allowed' });
     }
   } catch (error) {
     console.error('Error in properties handler:', error);
