@@ -18,7 +18,17 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 
 export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; user: User; role: string } | null> {
   // Get token from httpOnly cookie set by auth-callback
-  const authToken = req.cookies['supabase-auth-token'];
+  let authToken = req.cookies['supabase-auth-token'];
+
+  // Fallback: allow Authorization: Bearer <token> header for serverless
+  // functions called from the browser when the client holds the session
+  // (we attach the access_token in Authorization via apiRequest).
+  if (!authToken) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      authToken = authHeader.replace('Bearer ', '');
+    }
+  }
   
   // Debug logging (only in non-production or when DEBUG flag is set)
   const isDebugMode = process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production';
@@ -34,9 +44,10 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
   }
   
   if (!authToken) {
-    console.error('❌ Auth verification failed: No auth token cookie found');
+    console.error('❌ Auth verification failed: No auth token cookie or Authorization header found');
     if (isDebugMode) {
       console.error('Available cookie keys:', Object.keys(req.cookies || {}));
+      console.error('Authorization header present:', !!req.headers.authorization);
     }
     return null;
   }
