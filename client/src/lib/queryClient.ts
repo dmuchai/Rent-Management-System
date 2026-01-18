@@ -1,5 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { API_BASE_URL } from "./config";
+import { supabase } from "./supabase";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -17,9 +18,20 @@ export async function apiRequest(
   const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
   
   const headers: Record<string, string> = {};
-  
+  // Attach JSON header when sending a body
   if (data) {
     headers["Content-Type"] = "application/json";
+  }
+
+  // If we have a Supabase session in the browser, attach its access token
+  // as a Bearer token so server endpoints that accept Authorization headers
+  // can validate the user using Supabase.
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  } catch (err) {
+    // If getting the session fails, proceed without Authorization header.
   }
   
   // Using httpOnly cookies for authentication - no need for Bearer token
@@ -40,7 +52,21 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    // Build full URL like apiRequest
+    const rawUrl = queryKey.join("/") as string;
+    const fullUrl = rawUrl.startsWith('http') ? rawUrl : `${API_BASE_URL}${rawUrl}`;
+
+    const headers: Record<string, string> = {};
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+    } catch (err) {
+      // ignore
+    }
+
+    const res = await fetch(fullUrl, {
+      headers,
       credentials: "include",
     });
 
