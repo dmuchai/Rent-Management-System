@@ -29,17 +29,59 @@ export default function ResetPassword() {
     const init = async () => {
       const { data } = await supabase.auth.getSession();
 
-      if (!data.session) {
-        toast({
-          title: "Invalid or expired link",
-          description: "Please request a new password reset.",
-          variant: "destructive",
-        });
-        setTimeout(() => setLocation("/forgot-password"), 2500);
+      // If Supabase already established the recovery session, we're ready.
+      if (data.session) {
+        setReady(true);
         return;
       }
 
-      setReady(true);
+      // Fallback: sometimes the client library doesn't auto-set the session
+      // from the URL fragment. Parse the fragment and call `setSession`.
+      try {
+        const hash = typeof window !== "undefined" ? window.location.hash : "";
+        if (hash && hash.startsWith("#")) {
+          const params = new URLSearchParams(hash.substring(1));
+          const type = params.get("type");
+          const access_token = params.get("access_token");
+          const refresh_token = params.get("refresh_token");
+
+          if (type === "recovery" && access_token) {
+            const { data: setData, error: setError } = await supabase.auth.setSession({
+              access_token: access_token,
+              refresh_token: refresh_token || undefined,
+            } as any);
+
+            if (setError || !setData.session) {
+              toast({
+                title: "Invalid or expired link",
+                description: "Please request a new password reset.",
+                variant: "destructive",
+              });
+              setTimeout(() => setLocation("/forgot-password"), 2500);
+              return;
+            }
+
+            // Clear fragment to prevent reuse and mark ready.
+            try {
+              history.replaceState({}, document.title, window.location.pathname + window.location.search);
+            } catch (e) {
+              // ignore replaceState errors in older browsers
+            }
+
+            setReady(true);
+            return;
+          }
+        }
+      } catch (e) {
+        // ignore parsing errors and fall through to error toast below
+      }
+
+      toast({
+        title: "Invalid or expired link",
+        description: "Please request a new password reset.",
+        variant: "destructive",
+      });
+      setTimeout(() => setLocation("/forgot-password"), 2500);
     };
 
     init();
