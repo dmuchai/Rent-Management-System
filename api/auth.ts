@@ -77,19 +77,50 @@ export default async function handler(
         .single();
 
       if (!existing) {
-        await admin.from("users").insert({
-          id: user.id,
-          email: user.email,
-          first_name:
-            user.user_metadata?.firstName ||
-            user.user_metadata?.full_name?.split(" ")[0] ||
-            "",
-          last_name:
-            user.user_metadata?.lastName ||
-            user.user_metadata?.full_name?.split(" ").slice(1).join(" ") ||
-            "",
-          role: user.user_metadata?.role || "landlord",
-        });
+        // Robust name parsing: prefer explicit metadata fields, fall back
+        // to splitting `full_name` on whitespace and using the first token
+        // as firstName and the rest as lastName.
+        const metadata = user.user_metadata || {};
+        let firstName = "";
+        let lastName = "";
+
+        if (typeof metadata.firstName === "string" && metadata.firstName.trim()) {
+          firstName = metadata.firstName.trim();
+        }
+
+        if (typeof metadata.lastName === "string" && metadata.lastName.trim()) {
+          lastName = metadata.lastName.trim();
+        }
+
+        if (!firstName && !lastName && typeof metadata.full_name === "string") {
+          const tokens = metadata.full_name.trim().split(/\s+/).filter(Boolean);
+          if (tokens.length > 0) {
+            firstName = tokens[0];
+            lastName = tokens.slice(1).join(" ") || "";
+          }
+        }
+
+        // As a final fallback, ensure non-null strings
+        firstName = firstName || "";
+        lastName = lastName || "";
+
+        // Perform insert and handle any error returned by Supabase client
+        const { data: inserted, error: insertErr } = await admin
+          .from("users")
+          .insert({
+            id: user.id,
+            email: user.email,
+            first_name: firstName,
+            last_name: lastName,
+            role: metadata.role || "landlord",
+          })
+          .select("id")
+          .single();
+
+        if (insertErr) {
+          console.error("[Auth] Failed to insert user into public.users:", insertErr);
+          return res.status(500).json({ error: "Failed to sync user" });
+        }
       }
 
       return res.status(200).json({ message: "User synced" });
