@@ -26,12 +26,29 @@ export async function apiRequest(
   // If we have a Supabase session in the browser, attach its access token
   // as a Bearer token so server endpoints that accept Authorization headers
   // can validate the user using Supabase.
+  // Small retry loop: sometimes the OAuth redirect completes and the
+  // Supabase client hasn't yet persisted the session (race condition).
+  // Try briefly for a session to appear before giving up.
+  const getAccessTokenWithRetry = async (attempts = 5, delayMs = 100) => {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (token) return token;
+      } catch (e) {
+        // ignore and retry
+      }
+      // wait before next try
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+    return null;
+  };
+
   try {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
+    const token = await getAccessTokenWithRetry(5, 100);
     if (token) headers["Authorization"] = `Bearer ${token}`;
   } catch (err) {
-    // If getting the session fails, proceed without Authorization header.
+    // ignore
   }
   
   // Using httpOnly cookies for authentication - no need for Bearer token
@@ -58,8 +75,7 @@ export const getQueryFn: <T>(options: {
 
     const headers: Record<string, string> = {};
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      const token = await getAccessTokenWithRetry(5, 100);
       if (token) headers["Authorization"] = `Bearer ${token}`;
     } catch (err) {
       // ignore
