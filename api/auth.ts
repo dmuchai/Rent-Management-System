@@ -130,11 +130,11 @@ export default async function handler(
 
       const { newPassword } = changePasswordSchema.parse(req.body);
 
-      const supabase = getSupabaseClient();
-      const { error } = await supabase.auth.updateUser(
-        { password: newPassword },
-        { accessToken: req.headers.authorization!.replace("Bearer ", "") }
-      );
+      // Use the service role key to perform the password update server-side
+      const admin = getAdminClient();
+      const { error } = await admin.auth.admin.updateUserById(user.id, {
+        password: newPassword,
+      });
 
       if (error) {
         console.error("[Auth] Password update failed:", error);
