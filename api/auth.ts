@@ -216,7 +216,7 @@ export default async function handler(
       const { email } = forgotSchema.parse(req.body || {});
 
       const supabase = getSupabaseClient();
-
+                                                                                                                                        
       // Determine redirect URL for the recovery link. Prefer an explicit
       // environment variable; fall back to a conventional production URL.
       const redirectTo =
@@ -235,6 +235,29 @@ export default async function handler(
       }
 
       return res.status(200).json({ message: "Reset email sent" });
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Logout - clear server-side auth cookies                                 */
+    /* POST /api/auth?action=logout                                            */
+    /* ---------------------------------------------------------------------- */
+    if (action === "logout" && req.method === "POST") {
+      // Clear common Supabase auth cookies the app may set
+      const cookieAttributes = [] as string[];
+      const secure = process.env.NODE_ENV === "production" ? "Secure;" : "";
+
+      // Expire three common cookie names used across the app
+      const cookiesToClear = ["supabase-auth-token", "supabase-refresh-token", "sb-access-token"];
+
+      for (const name of cookiesToClear) {
+        // HttpOnly on server-set cookies
+        cookieAttributes.push(`${name}=; Path=/; Max-Age=0; HttpOnly; ${secure} SameSite=Lax`);
+      }
+
+      // Send Set-Cookie headers to clear them in the browser
+      res.setHeader("Set-Cookie", cookieAttributes);
+
+      return res.status(200).json({ message: "Logged out" });
     }
 
     // Fallback: accept a POST with a JSON body containing `{ email }` even
