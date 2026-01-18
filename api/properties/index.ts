@@ -5,6 +5,11 @@ import { createDbConnection } from '../_lib/db.js';
 import { insertPropertySchema } from '../../shared/schema.js';
 import { z } from 'zod';
 
+// Update schema: omit `ownerId` so clients cannot overwrite ownership
+// during property updates. Use `.partial()` on this schema for PATCH-like
+// behavior on PUT (allowing any subset of fields while preventing ownerId).
+const updatePropertySchema = insertPropertySchema.omit({ ownerId: true });
+
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   const sql = createDbConnection();
 
@@ -68,7 +73,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           return res.status(403).json({ message: 'Access denied' });
         }
 
-        const propertyData = insertPropertySchema.partial().parse(req.body);
+        // Validate update payload but prevent ownerId from being supplied.
+        const propertyData = updatePropertySchema.partial().parse(req.body);
         
         // Auto-calculate totalUnits from actual units count
         const unitsCountResult = await sql`
