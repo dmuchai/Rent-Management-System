@@ -3,95 +3,67 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
-// Password validation helper
-function validatePassword(password: string): { isValid: boolean; failedRequirements: string[] } {
-  const minLength = password.length >= 8;
-  const hasUpperCase = /[A-Z]/.test(password);
-  const hasLowerCase = /[a-z]/.test(password);
-  const hasNumber = /\d/.test(password);
-  const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-  
-  const failedRequirements = [];
-  if (!minLength) failedRequirements.push("at least 8 characters");
-  if (!hasUpperCase) failedRequirements.push("one uppercase letter");
-  if (!hasLowerCase) failedRequirements.push("one lowercase letter");
-  if (!hasNumber) failedRequirements.push("one number");
-  if (!hasSpecialChar) failedRequirements.push("one special character");
-  
+/**
+ * Password validation helper
+ */
+function validatePassword(password: string): {
+  isValid: boolean;
+  failedRequirements: string[];
+} {
+  const failed: string[] = [];
+
+  if (password.length < 8) failed.push("at least 8 characters");
+  if (!/[A-Z]/.test(password)) failed.push("one uppercase letter");
+  if (!/[a-z]/.test(password)) failed.push("one lowercase letter");
+  if (!/\d/.test(password)) failed.push("one number");
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password))
+    failed.push("one special character");
+
   return {
-    isValid: failedRequirements.length === 0,
-    failedRequirements
+    isValid: failed.length === 0,
+    failedRequirements: failed,
   };
 }
 
 export default function ResetPassword() {
-  usePageTitle('Reset Password');
+  usePageTitle("Reset Password");
+
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
+  /**
+   * Validate that we arrived here via a Supabase recovery link.
+   * DO NOT check session here — Supabase validates the token
+   * when updateUser() is called.
+   */
   useEffect(() => {
-    // Check if we have a recovery token in the URL
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
-    const type = hashParams.get('type');
-    const accessToken = hashParams.get('access_token');
-    
-    console.log('[ResetPassword] Hash params:', Object.fromEntries(hashParams.entries()));
-    console.log('[ResetPassword] Type:', type);
-    console.log('[ResetPassword] Has access token:', !!accessToken);
-    
-    // Validate we have the required recovery parameters
-    if (type !== 'recovery') {
-      console.error('[ResetPassword] Invalid type:', type, '(expected "recovery")');
+    const type = hashParams.get("type");
+
+    if (type !== "recovery") {
       toast({
-        title: "Invalid Reset Link",
-        description: "This link is invalid or has expired. Please request a new password reset.",
+        title: "Invalid or expired link",
+        description: "Please request a new password reset.",
         variant: "destructive",
       });
       setTimeout(() => setLocation("/forgot-password"), 3000);
-      return;
     }
-    
-    if (!accessToken) {
-      console.error('[ResetPassword] Missing access token in URL');
-      toast({
-        title: "Invalid Reset Link",
-        description: "The reset token is missing. Please request a new password reset.",
-        variant: "destructive",
-      });
-      setTimeout(() => setLocation("/forgot-password"), 3000);
-      return;
-    }
-    
-    // Validate the session is active with Supabase
-    const validateSession = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error || !session) {
-          console.error('[ResetPassword] Session validation failed:', error);
-          toast({
-            title: "Session Expired",
-            description: "Your reset link has expired. Please request a new one.",
-            variant: "destructive",
-          });
-          setTimeout(() => setLocation("/forgot-password"), 3000);
-        } else {
-          console.log('[ResetPassword] ✅ Valid recovery session');
-        }
-      } catch (err) {
-        console.error('[ResetPassword] Session check error:', err);
-      }
-    };
-    
-    validateSession();
   }, [toast, setLocation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -100,7 +72,7 @@ export default function ResetPassword() {
     if (newPassword !== confirmPassword) {
       toast({
         title: "Passwords don't match",
-        description: "Please make sure both passwords match",
+        description: "Please make sure both passwords match.",
         variant: "destructive",
       });
       return;
@@ -109,8 +81,10 @@ export default function ResetPassword() {
     const validation = validatePassword(newPassword);
     if (!validation.isValid) {
       toast({
-        title: "Weak Password",
-        description: `Password must have: ${validation.failedRequirements.join(', ')}`,
+        title: "Weak password",
+        description: `Password must include: ${validation.failedRequirements.join(
+          ", "
+        )}`,
         variant: "destructive",
       });
       return;
@@ -119,39 +93,38 @@ export default function ResetPassword() {
     setIsLoading(true);
 
     try {
+      /**
+       * This is the ONLY place Supabase validates the recovery token.
+       * If the link is expired or invalid, this call will fail.
+       */
       const { error } = await supabase.auth.updateUser({
-        password: newPassword
+        password: newPassword,
       });
 
       if (error) {
-        console.error('Password update error:', error);
         toast({
-          title: "Error",
+          title: "Reset failed",
           description: error.message,
           variant: "destructive",
         });
-      } else {
-        console.log('[ResetPassword] ✅ Password updated successfully');
-        
-        toast({
-          title: "Password Updated!",
-          description: "Your password has been successfully reset. Please sign in with your new password.",
-        });
-        
-        // Sign out the recovery session to prevent auto-login
-        await supabase.auth.signOut();
-        
-        // Clear the hash from URL and redirect to login with success param
-        window.history.replaceState({}, '', '/login?success=password-reset');
-        
-        // Redirect to login page after a short delay
-        setTimeout(() => setLocation("/login?success=password-reset"), 2000);
+        return;
       }
-    } catch (error) {
-      console.error('Password reset error:', error);
+
+      toast({
+        title: "Password updated",
+        description: "You can now sign in with your new password.",
+      });
+
+      // End the recovery session explicitly
+      await supabase.auth.signOut();
+
+      // Clean URL and redirect
+      window.history.replaceState({}, "", "/login?success=password-reset");
+      setTimeout(() => setLocation("/login?success=password-reset"), 2000);
+    } catch {
       toast({
         title: "Error",
-        description: "Failed to update password. Please try again.",
+        description: "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -165,103 +138,79 @@ export default function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Reset Your Password</CardTitle>
+          <CardTitle className="text-2xl">Reset your password</CardTitle>
           <CardDescription>
             Enter a new password for your account
           </CardDescription>
         </CardHeader>
+
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="newPassword">New Password</Label>
+              <Label htmlFor="newPassword">New password</Label>
               <div className="relative">
                 <Input
                   id="newPassword"
                   type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  required
                   disabled={isLoading}
+                  required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                 >
-                  <i className={`fas fa-eye${showPassword ? '-slash' : ''}`}></i>
+                  <i className={`fas fa-eye${showPassword ? "-slash" : ""}`} />
                 </button>
               </div>
+
               {newPassword && !passwordValidation.isValid && (
-                <div className="text-xs text-destructive space-y-1">
-                  <p className="font-medium">Password must include:</p>
-                  <ul className="list-disc list-inside space-y-0.5">
-                    {passwordValidation.failedRequirements.map((req, i) => (
-                      <li key={i}>{req}</li>
-                    ))}
-                  </ul>
-                </div>
+                <ul className="text-xs text-destructive list-disc list-inside">
+                  {passwordValidation.failedRequirements.map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
               )}
+
               {newPassword && passwordValidation.isValid && (
-                <p className="text-xs text-green-600 flex items-center gap-1">
-                  <i className="fas fa-check-circle"></i>
-                  Strong password
-                </p>
+                <p className="text-xs text-green-600">Strong password</p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <Label htmlFor="confirmPassword">Confirm password</Label>
               <Input
                 id="confirmPassword"
                 type={showPassword ? "text" : "password"}
-                placeholder="••••••••"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                required
                 disabled={isLoading}
+                required
               />
-              {confirmPassword && newPassword !== confirmPassword && (
-                <p className="text-xs text-destructive flex items-center gap-1">
-                  <i className="fas fa-times-circle"></i>
-                  Passwords don't match
-                </p>
-              )}
-              {confirmPassword && newPassword === confirmPassword && (
-                <p className="text-xs text-green-600 flex items-center gap-1">
-                  <i className="fas fa-check-circle"></i>
-                  Passwords match
-                </p>
-              )}
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={isLoading || !passwordValidation.isValid || newPassword !== confirmPassword}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={
+                isLoading ||
+                !passwordValidation.isValid ||
+                newPassword !== confirmPassword
+              }
             >
-              {isLoading ? (
-                <>
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
-                  Updating Password...
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-lock mr-2"></i>
-                  Reset Password
-                </>
-              )}
+              {isLoading ? "Updating password…" : "Reset password"}
             </Button>
 
-            <Button 
+            <Button
               type="button"
-              variant="ghost" 
+              variant="ghost"
               className="w-full"
-              onClick={() => setLocation("/")}
+              onClick={() => setLocation("/login")}
               disabled={isLoading}
             >
-              <i className="fas fa-arrow-left mr-2"></i>
-              Back to Sign In
+              Back to sign in
             </Button>
           </form>
         </CardContent>
