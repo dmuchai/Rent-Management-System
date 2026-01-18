@@ -74,22 +74,19 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const response = await apiRequest("POST", "/api/auth?action=login", {
+      // Perform sign-in directly from the browser so Supabase can manage
+      // the session (browser owns sessions). This avoids a server-side
+      // `/api/auth?action=login` route and is the recommended flow.
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (error) {
         throw new Error(error.message || "Login failed");
       }
 
-      const data = await response.json();
-      
-      toast({
-        title: "Success",
-        description: "Logged in successfully!",
-      });
+      toast({ title: "Success", description: "Logged in successfully!" });
 
       // Invalidate the auth query to force refetch of user data
       await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });

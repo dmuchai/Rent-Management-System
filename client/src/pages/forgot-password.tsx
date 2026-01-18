@@ -24,7 +24,7 @@ export default function ForgotPassword() {
       const res = await import("@/lib/queryClient").then(m => m.apiRequest("POST", "/api/auth?action=forgot-password", { email }));
       const data = await res.json();
 
-      if (response.ok) {
+      if (res.ok) {
         setEmailSent(true);
         toast({
           title: "Check your email",
