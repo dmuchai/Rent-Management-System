@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 export default function AuthCallback() {
@@ -37,7 +38,10 @@ export default function AuthCallback() {
         console.log("[AuthCallback] ✅ OAuth session established");
 
         // Optional: sync user profile in background (non-blocking)
-        fetch("/api/auth?action=sync-user", { method: "POST" }).catch(() => {});
+        // Use `apiRequest` so the current Supabase access token is attached
+        // in the Authorization header. This prevents 401s when the server
+        // validates the bearer token.
+        apiRequest("POST", "/api/auth?action=sync-user").catch(() => {});
 
         // Redirect to app
         setLocation("/dashboard");
