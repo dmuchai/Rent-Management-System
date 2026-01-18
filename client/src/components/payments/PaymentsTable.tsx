@@ -18,14 +18,11 @@ import type { Payment } from '@shared/schema';
 
 // API helper function
 async function fetchPayments(): Promise<Payment[]> {
-  const response = await fetch('/api/payments', {
-    credentials: 'include', // Include auth cookies
-  });
-  
+  const { apiRequest } = await import('@/lib/queryClient');
+  const response = await apiRequest('GET', '/api/payments');
   if (!response.ok) {
     throw new Error('Failed to fetch payments');
   }
-  
   return response.json();
 }
 

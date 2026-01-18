@@ -1,4 +1,4 @@
-import { queryClient } from "./queryClient";
+import { queryClient, apiRequest } from "./queryClient";
 import { clearAuthQueries } from "./auth-keys";
 
 /**
@@ -90,11 +90,13 @@ export async function logout() {
     // Clear authentication cookies
     clearAuthCookies();
     
-    // Call server logout endpoint
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-    });
+    // Call server logout endpoint using apiRequest so Authorization header
+    // and credentials behavior are consistent.
+    try {
+      await apiRequest('POST', '/api/auth?action=logout');
+    } catch (err) {
+      // ignore - we'll still redirect
+    }
     
     // Redirect to home with logout parameter
     window.location.href = '/?logout=true&t=' + Date.now();

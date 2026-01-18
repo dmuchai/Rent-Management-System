@@ -31,10 +31,7 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
     // Run both logout operations concurrently, handling each independently
     const results = await Promise.allSettled([
       supabase.auth.signOut(),
-      fetch(`${API_BASE_URL}/api/auth?action=logout`, {
-        method: "POST",
-        credentials: "include",
-      }),
+      apiRequest("POST", "/api/auth?action=logout"),
     ]);
 
     const [supabaseResult, apiResult] = results;

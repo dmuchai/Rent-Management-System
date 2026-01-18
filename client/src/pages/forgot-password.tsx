@@ -21,13 +21,8 @@ export default function ForgotPassword() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth?action=forgot-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-
-      const data = await response.json();
+      const res = await import("@/lib/queryClient").then(m => m.apiRequest("POST", "/api/auth?action=forgot-password", { email }));
+      const data = await res.json();
 
       if (response.ok) {
         setEmailSent(true);
