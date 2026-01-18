@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { User } from "@shared/schema";
 import { API_BASE_URL } from "@/lib/config";
+import { apiRequest } from "@/lib/queryClient";
 import { AUTH_QUERY_KEYS } from "@/lib/auth-keys";
 
 // Import auth utility to access the same clearing functions
@@ -61,14 +62,11 @@ export function useAuth() {
   const { data: user, isLoading, error } = useQuery<User>({
     queryKey: AUTH_QUERY_KEYS.user,
     queryFn: async (): Promise<User> => {
-      // Using httpOnly cookies for authentication - no need to check localStorage
-      const response = await fetch(`${API_BASE_URL}/api/auth?action=user`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Send httpOnly cookies
-      });
-      
+      // Use apiRequest so the Supabase access token (if present) is attached
+      // via Authorization header. This keeps server-side and client-side
+      // auth validation consistent.
+      const response = await apiRequest("GET", "/api/auth?action=user");
+
       if (!response.ok) {
         throw new Error(`Authentication failed: ${response.status} ${response.statusText}`);
       }
