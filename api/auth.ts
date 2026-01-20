@@ -72,26 +72,7 @@ export default async function handler(
   }
 
   try {
-    // If the caller requests debug info (useful during diagnosis), return
-    // a small, sanitized snapshot of the incoming request.
-    const rawDebug = req.query.debug;
-    const debug = Array.isArray(rawDebug) ? rawDebug[0] : (rawDebug as string | undefined);
-    if (debug) {
-      const sanitizedHeaders: Record<string, string | undefined> = {};
-      for (const [k, v] of Object.entries(req.headers)) {
-        if (k.toLowerCase() === "authorization") continue;
-        sanitizedHeaders[k] = typeof v === "string" ? v : Array.isArray(v) ? v.join(",") : undefined;
-      }
-
-      return res.status(200).json({
-        debug: true,
-        action: action ?? null,
-        method: req.method,
-        url: req.url,
-        query: req.query,
-        headers: sanitizedHeaders,
-      });
-    }
+    
     /* ---------------------------------------------------------------------- */
     /* Sync user to public.users                                               */
     /* POST /api/auth?action=sync-user                                         */
@@ -260,33 +241,7 @@ export default async function handler(
       return res.status(200).json({ message: "Logged out" });
     }
 
-    // Fallback: accept a POST with a JSON body containing `{ email }` even
-    // when `action` was not detected (some runtimes/clients omit query parsing).
-    if ((!action || action === undefined) && req.method === "POST") {
-      try {
-        const maybeEmail = (req.body && (req.body as any).email) || undefined;
-        if (typeof maybeEmail === "string") {
-          const forgotSchema = z.object({ email: z.string().email() });
-          const { email } = forgotSchema.parse({ email: maybeEmail });
-
-          const supabase = getSupabaseClient();
-          const redirectTo =
-            process.env.SUPABASE_RESET_PASSWORD_REDIRECT ||
-            (process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL.replace(/\/$/, "")}/reset-password` :
-              "https://property-manager-ke.vercel.app/reset-password");
-
-          const { data, error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-          if (error) {
-            console.error("[Auth] Failed to send reset email (fallback):", error);
-            return res.status(500).json({ error: "Failed to send reset email" });
-          }
-
-          return res.status(200).json({ message: "Reset email sent" });
-        }
-      } catch (e) {
-        // fall through to invalid route
-      }
-    }
+    
 
     /* ---------------------------------------------------------------------- */
     /* Invalid route                                                           */
