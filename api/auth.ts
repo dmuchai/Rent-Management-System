@@ -220,6 +220,21 @@ export default async function handler(
         .eq("id", user.id)
         .single();
 
+      // Back-fill metadata if missing (enables personalization for existing users)
+      const metadata = user.user_metadata || {};
+      if (profile?.first_name && !metadata.first_name && !metadata.firstName) {
+        await admin.auth.admin.updateUserById(user.id, {
+          user_metadata: {
+            ...metadata,
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            firstName: profile.first_name,
+            lastName: profile.last_name,
+          },
+        });
+        console.log(`[Auth] Self-corrected metadata for user: ${user.id}`);
+      }
+
       return res.status(200).json({
         id: user.id,
         email: user.email,
