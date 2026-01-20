@@ -72,7 +72,7 @@ export default async function handler(
   }
 
   try {
-    
+
     /* ---------------------------------------------------------------------- */
     /* Sync user to public.users                                               */
     /* POST /api/auth?action=sync-user                                         */
@@ -134,9 +134,74 @@ export default async function handler(
           console.error("[Auth] Failed to insert user into public.users:", insertErr);
           return res.status(500).json({ error: "Failed to sync user" });
         }
+      } else {
+        // Back-fill metadata for existing users if missing (enables personalization)
+        const metadata = user.user_metadata || {};
+        if (!metadata.first_name && !metadata.firstName) {
+          const { data: profile } = await admin
+            .from("users")
+            .select("first_name, last_name")
+            .eq("id", user.id)
+            .single();
+
+          if (profile?.first_name) {
+            await admin.auth.admin.updateUserById(user.id, {
+              user_metadata: {
+                ...metadata,
+                first_name: profile.first_name,
+                last_name: profile.last_name,
+                firstName: profile.first_name,
+                lastName: profile.last_name,
+              },
+            });
+            console.log(`[Auth] Back-filled metadata for existing user: ${user.id}`);
+          }
+        }
       }
 
       return res.status(200).json({ message: "User synced" });
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Register - create new user in Supabase                                  */
+    /* POST /api/auth?action=register                                          */
+    /* ---------------------------------------------------------------------- */
+    if (action === "register" && req.method === "POST") {
+      const registerSchema = z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+        firstName: z.string().min(1),
+        lastName: z.string().min(1),
+        role: z.enum(["landlord", "tenant", "property_manager"]).optional(),
+      });
+
+      const { email, password, firstName, lastName, role } = registerSchema.parse(req.body);
+      const supabase = getSupabaseClient();
+
+      // Sign up the user with metadata so email templates can be personalized
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+            firstName: firstName, // Set both for compatibility across components
+            lastName: lastName,
+            role: role || "landlord",
+          },
+        },
+      });
+
+      if (error) {
+        console.error("[Auth] Registration failed:", error);
+        return res.status(400).json({ error: error.message });
+      }
+
+      return res.status(200).json({
+        message: "Registration successful! Please check your email for a verification link.",
+        user: data.user
+      });
     }
 
     /* ---------------------------------------------------------------------- */
@@ -197,7 +262,7 @@ export default async function handler(
       const { email } = forgotSchema.parse(req.body || {});
 
       const supabase = getSupabaseClient();
-                                                                                                                                        
+
       // Determine redirect URL for the recovery link. Prefer an explicit
       // environment variable; fall back to a conventional production URL.
       const redirectTo =
@@ -241,7 +306,7 @@ export default async function handler(
       return res.status(200).json({ message: "Logged out" });
     }
 
-    
+
 
     /* ---------------------------------------------------------------------- */
     /* Invalid route                                                           */
