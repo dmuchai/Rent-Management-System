@@ -21,6 +21,11 @@ export class SmsService {
         this.username = process.env.AT_USERNAME;
         this.apiKey = process.env.AT_API_KEY;
         this.senderId = process.env.AT_SENDER_ID;
+
+        // Automatically use sandbox URL if username is 'sandbox'
+        if (this.username === 'sandbox') {
+            this.apiUrl = 'https://api.sandbox.africastalking.com/version1/messaging';
+        }
     }
 
     async sendSms(options: SmsOptions): Promise<any> {
