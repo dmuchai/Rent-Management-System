@@ -39,6 +39,8 @@ export const users = pgTable("users", {
   verificationTokenExpiresAt: timestamp("verification_token_expires_at"),
   passwordResetToken: varchar("password_reset_token"),
   passwordResetTokenExpiresAt: timestamp("password_reset_token_expires_at"),
+  phoneNumber: varchar("phone_number").unique(),
+  phoneVerified: boolean("phone_verified").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -193,11 +195,36 @@ export const emailQueue = pgTable("email_queue", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// SMS Queue table for asynchronous processing
+export const smsQueue = pgTable("sms_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  to: varchar("to").notNull(),
+  message: text("message").notNull(),
+  status: varchar("status").notNull().default("pending"), // pending, processing, sent, failed
+  retryCount: integer("retry_count").notNull().default(0),
+  lastError: text("last_error"),
+  metadata: jsonb("metadata"), // flexible field for related IDs (payment_id, user_id)
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// OTP Codes table for phone verification
+export const otpCodes = pgTable("otp_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phoneNumber: varchar("phone_number").notNull(),
+  code: varchar("code").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   properties: many(properties),
   documents: many(documents),
   emails: many(emailQueue),
+  sms: many(smsQueue),
 }));
 
 export const propertiesRelations = relations(properties, ({ one, many }) => ({
@@ -336,6 +363,20 @@ export const insertEmailQueueSchema = createInsertSchema(emailQueue).omit({
   retryCount: true,
 });
 
+export const insertSmsQueueSchema = createInsertSchema(smsQueue).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  sentAt: true,
+  retryCount: true,
+});
+
+export const insertOtpCodeSchema = createInsertSchema(otpCodes).omit({
+  id: true,
+  createdAt: true,
+  used: true,
+});
+
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -358,3 +399,7 @@ export type Document = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type EmailQueueItem = typeof emailQueue.$inferSelect;
 export type InsertEmailQueue = z.infer<typeof insertEmailQueueSchema>;
+export type SmsQueueItem = typeof smsQueue.$inferSelect;
+export type InsertSmsQueue = z.infer<typeof insertSmsQueueSchema>;
+export type OtpCode = typeof otpCodes.$inferSelect;
+export type InsertOtpCode = z.infer<typeof insertOtpCodeSchema>;

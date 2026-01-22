@@ -61,7 +61,7 @@ export async function runAutomatedInvoicing() {
                 // 5. Fetch details for notification
                 const [details] = await sql`
                     SELECT 
-                        t.email as tenant_email, t.first_name as tenant_name,
+                        t.email as tenant_email, t.first_name as tenant_name, t.phone as tenant_phone,
                         u.unit_number,
                         prop.name as property_name
                     FROM public.tenants t
@@ -101,6 +101,22 @@ export async function runAutomatedInvoicing() {
                             NOW()
                         )
                     `;
+
+                    // 7. Enqueue SMS notification
+                    if (details.tenant_phone) {
+                        const { smsService } = await import('./smsService.js');
+                        const smsMsg = smsService.composeRentReminder(
+                            details.tenant_name,
+                            parseFloat(lease.monthly_rent),
+                            dueDate.toLocaleDateString(),
+                            details.property_name
+                        );
+
+                        await sql`
+                            INSERT INTO public.sms_queue ("to", message, metadata)
+                            VALUES (${details.tenant_phone}, ${smsMsg}, ${JSON.stringify({ type: 'new_invoice', paymentId: payment.id })})
+                        `;
+                    }
 
                     console.log(`${logPrefix} Generated Pending payment ${payment.id} and enqueued email for lease ${lease.id}`);
                     generatedCount++;

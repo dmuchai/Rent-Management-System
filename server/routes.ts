@@ -1724,6 +1724,24 @@ export async function registerRoutes(app: Express) {
     }
   });
 
+  app.get("/api/cron/process-sms", async (req: any, res: any) => {
+    // Shared secret for security
+    const authHeader = req.headers.authorization;
+    const CRON_SECRET = process.env.CRON_SECRET;
+
+    if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const { processSmsQueue } = await import("./workers/smsWorker");
+      const result = await processSmsQueue(20);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/cron/generate-invoices", async (req: any, res: any) => {
     // Shared secret for security
     const authHeader = req.headers.authorization;

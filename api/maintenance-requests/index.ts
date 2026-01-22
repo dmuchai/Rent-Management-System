@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   const sql = createDbConnection();
-  
+
   try {
     if (req.method === 'GET') {
       // Parse query parameters
@@ -14,7 +14,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       const status = req.query.status as string | undefined;
 
       let maintenanceRequests;
-      
+
       if (auth.role === 'landlord') {
         // Get all maintenance requests for landlord's properties
         if (status) {
@@ -67,13 +67,13 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         const tenants = await sql`
           SELECT id FROM public.tenants WHERE user_id = ${auth.userId}
         `;
-        
+
         if (tenants.length === 0) {
           return res.status(200).json({ data: [], pagination: { limit, nextCursor: null } });
         }
 
         const tenantId = tenants[0].id;
-        
+
         if (status) {
           maintenanceRequests = await sql`
             SELECT 
@@ -165,7 +165,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
       // Get unit ID from active lease if not provided, or validate if provided
       let unitId = requestData.unitId;
-      
+
       if (unitId) {
         // If unitId is provided, verify it belongs to an active lease for this tenant
         const leases = await sql`
@@ -179,9 +179,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         `;
 
         if (leases.length === 0) {
-          return res.status(403).json({ 
-            error: 'Access denied', 
-            details: 'You do not have an active lease for the specified unit' 
+          return res.status(403).json({
+            error: 'Access denied',
+            details: 'You do not have an active lease for the specified unit'
           });
         }
       } else {
@@ -196,9 +196,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         `;
 
         if (leases.length === 0) {
-          return res.status(400).json({ 
-            error: 'No active lease found', 
-            details: 'You must have an active lease to submit maintenance requests' 
+          return res.status(400).json({
+            error: 'No active lease found',
+            details: 'You must have an active lease to submit maintenance requests'
           });
         }
 
@@ -226,12 +226,48 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         RETURNING *
       `;
 
+      // Notify Landlord via SMS
+      try {
+        const [notificationData] = await sql`
+          SELECT 
+            u.unit_number,
+            p.name as property_name,
+            owner.first_name as landlord_name,
+            owner.phone_number as landlord_phone,
+            t.first_name as tenant_name
+          FROM public.units u
+          JOIN public.properties p ON u.property_id = p.id
+          JOIN public.users owner ON p.owner_id = owner.id
+          JOIN public.tenants t ON t.id = ${tenantId}
+          WHERE u.id = ${unitId!}
+        `;
+
+        if (notificationData && notificationData.landlord_phone) {
+          const { smsService } = await import('../_lib/smsService.js');
+          const smsMsg = smsService.composeMaintenanceNotification(
+            notificationData.landlord_name,
+            notificationData.tenant_name,
+            notificationData.property_name,
+            notificationData.unit_number,
+            requestData.title,
+            requestData.priority
+          );
+
+          await sql`
+            INSERT INTO public.sms_queue ("to", message, metadata)
+            VALUES (${notificationData.landlord_phone}, ${smsMsg}, ${JSON.stringify({ type: 'maintenance_request', id: maintenanceRequest[0].id })})
+          `;
+        }
+      } catch (smsErr) {
+        console.error('[Maintenance] SMS notification failed:', smsErr);
+      }
+
       return res.status(201).json(maintenanceRequest[0]);
     }
 
     if (req.method === 'PATCH') {
       const { id } = req.query;
-      
+
       if (!id || typeof id !== 'string') {
         return res.status(400).json({ error: 'Invalid request ID', details: null });
       }
@@ -285,7 +321,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
     if (req.method === 'DELETE') {
       const { id } = req.query;
-      
+
       if (!id || typeof id !== 'string') {
         return res.status(400).json({ error: 'Invalid request ID', details: null });
       }
@@ -305,7 +341,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       }
 
       // Tenants can only delete their own requests, landlords can delete any
-      const canDelete = 
+      const canDelete =
         (requests[0].tenant_user_id === auth.userId) ||
         (requests[0].owner_id === auth.userId);
 
@@ -319,7 +355,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
       return res.status(200).json({ message: 'Maintenance request deleted successfully' });
     }
-    
+
     return res.status(405).json({ error: 'Method not allowed', details: null });
   } catch (error) {
     console.error('Maintenance request error:', error);

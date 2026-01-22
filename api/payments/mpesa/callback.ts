@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createDbConnection } from '../../_lib/db.js';
 import { emailService } from '../../_lib/emailService.js';
+import { smsService } from '../../_lib/smsService.js';
 
 export default async (req: VercelRequest, res: VercelResponse) => {
     if (req.method !== 'POST') {
@@ -51,11 +52,11 @@ export default async (req: VercelRequest, res: VercelResponse) => {
           SELECT 
             p.*, 
             l.tenant_id, 
-            t.email as tenant_email, t.first_name as tenant_name,
+            t.email as tenant_email, t.first_name as tenant_name, t.phone as tenant_phone,
             u.unit_number,
             prop.name as property_name,
             prop.owner_id as landlord_id,
-            landlord.email as landlord_email, landlord.first_name as landlord_name
+            landlord.email as landlord_email, landlord.first_name as landlord_name, landlord.phone_number as landlord_phone
           FROM public.payments p
           JOIN public.leases l ON p.lease_id = l.id
           JOIN public.tenants t ON l.tenant_id = t.id
@@ -92,6 +93,31 @@ export default async (req: VercelRequest, res: VercelResponse) => {
             VALUES 
               (${tenantEmailOptions.to}, ${tenantEmailOptions.subject}, ${tenantEmailOptions.html}, ${tenantEmailOptions.text ?? null}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: payment.id, recipient: 'tenant' })}),
               (${landlordEmailOptions.to}, ${landlordEmailOptions.subject}, ${landlordEmailOptions.html}, ${landlordEmailOptions.text ?? null}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: payment.id, recipient: 'landlord' })})
+          `;
+
+                    // SMS Notifications
+                    const tenantMessage = smsService.composePaymentConfirmation(
+                        details.tenant_name,
+                        details.amount,
+                        details.property_name,
+                        details.unit_number,
+                        mpesaReceiptNumber
+                    );
+
+                    const landlordMessage = smsService.composeLandlordPaymentNotification(
+                        details.landlord_name,
+                        details.tenant_name,
+                        details.amount,
+                        details.property_name,
+                        details.unit_number,
+                        mpesaReceiptNumber
+                    );
+
+                    await sql`
+            INSERT INTO public.sms_queue ("to", message, metadata)
+            VALUES 
+              (${details.tenant_phone}, ${tenantMessage}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: payment.id, recipient: 'tenant' })}),
+              (${details.landlord_phone || details.landlord_email}, ${landlordMessage}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: payment.id, recipient: 'landlord' })})
           `;
                 }
             } catch (notifyErr) {

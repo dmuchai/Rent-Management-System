@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { smsService } from "./_lib/smsService.js";
+import { createDbConnection } from "./_lib/db.js";
 
 /**
  * IMPORTANT PRINCIPLES
@@ -172,10 +174,11 @@ export default async function handler(
         password: z.string().min(8),
         firstName: z.string().min(1),
         lastName: z.string().min(1),
+        phoneNumber: z.string().min(10).max(15).regex(/^\+?[0-9]+$/, "Invalid phone number"),
         role: z.enum(["landlord", "tenant", "property_manager"]).optional(),
       });
 
-      const { email, password, firstName, lastName, role } = registerSchema.parse(req.body);
+      const { email, password, firstName, lastName, phoneNumber, role } = registerSchema.parse(req.body);
       const supabase = getSupabaseClient();
 
       // Sign up the user with metadata so email templates can be personalized
@@ -188,6 +191,7 @@ export default async function handler(
             last_name: lastName,
             firstName: firstName, // Set both for compatibility across components
             lastName: lastName,
+            phone_number: phoneNumber,
             role: role || "landlord",
           },
         },
@@ -198,10 +202,120 @@ export default async function handler(
         return res.status(400).json({ error: error.message });
       }
 
+      // Generate and send OTP
+      const sql = createDbConnection();
+      const code = smsService.generateOtp();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      try {
+        await sql`
+          INSERT INTO public.otp_codes (phone_number, code, expires_at)
+          VALUES (${phoneNumber}, ${code}, ${expiresAt})
+        `;
+
+        await smsService.sendSms({
+          to: phoneNumber,
+          message: `Your Landee & Moony verification code is: ${code}. Valid for 10 minutes.`
+        });
+      } catch (smsErr) {
+        console.error("[Auth] Failed to send OTP:", smsErr);
+        // We don't fail registration if SMS fails, but user will need to request a new one
+      } finally {
+        await sql.end();
+      }
+
       return res.status(200).json({
-        message: "Registration successful! Please check your email for a verification link.",
-        user: data.user
+        message: "Registration successful! An OTP has been sent to your phone and a verification link to your email.",
+        user: data.user,
+        otpRequired: true
       });
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Verify OTP                                                              */
+    /* POST /api/auth?action=verify-otp                                        */
+    /* ---------------------------------------------------------------------- */
+    if (action === "verify-otp" && req.method === "POST") {
+      const verifySchema = z.object({
+        phoneNumber: z.string().min(10),
+        code: z.string().length(6),
+      });
+
+      const { phoneNumber, code } = verifySchema.parse(req.body);
+      const sql = createDbConnection();
+
+      try {
+        const [otp] = await sql`
+          SELECT * FROM public.otp_codes
+          WHERE phone_number = ${phoneNumber} 
+            AND code = ${code}
+            AND used = false
+            AND expires_at > NOW()
+          ORDER BY created_at DESC
+          LIMIT 1
+        `;
+
+        if (!otp) {
+          return res.status(400).json({ error: "Invalid or expired OTP code" });
+        }
+
+        // Mark OTP as used
+        await sql`
+          UPDATE public.otp_codes
+          SET used = true
+          WHERE id = ${otp.id}
+        `;
+
+        // Update user's phone_verified status in public.users if they exist
+        // This usually happens after they verify email and sync-user is called,
+        // but if they sync first we update it now.
+        const user = await getUserFromAuthHeader(req);
+        if (user) {
+          await sql`
+            UPDATE public.users
+            SET phone_verified = true,
+                phone_number = ${phoneNumber},
+                updated_at = NOW()
+            WHERE id = ${user.id}
+          `;
+        }
+
+        return res.status(200).json({ message: "Phone number verified successfully" });
+      } finally {
+        await sql.end();
+      }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Resend OTP                                                              */
+    /* POST /api/auth?action=send-otp                                          */
+    /* ---------------------------------------------------------------------- */
+    if (action === "send-otp" && req.method === "POST") {
+      const sendSchema = z.object({
+        phoneNumber: z.string().min(10),
+      });
+
+      const { phoneNumber } = sendSchema.parse(req.body);
+      const sql = createDbConnection();
+
+      try {
+        const code = smsService.generateOtp();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+        await sql`
+          INSERT INTO public.otp_codes (phone_number, code, expires_at)
+          VALUES (${phoneNumber}, ${code}, ${expiresAt})
+        `;
+
+        await smsService.sendSms({
+          to: phoneNumber,
+          message: `Your Landee & Moony verification code is: ${code}. Valid for 10 minutes.`
+        });
+
+        return res.status(200).json({ message: "OTP sent successfully" });
+      } finally {
+        await sql.end();
+      }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -320,8 +434,6 @@ export default async function handler(
 
       return res.status(200).json({ message: "Logged out" });
     }
-
-
 
     /* ---------------------------------------------------------------------- */
     /* Invalid route                                                           */
