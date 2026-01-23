@@ -349,14 +349,31 @@ export default async function handler(
         console.log(`[Auth] Self-corrected metadata for user: ${user.id}`);
       }
 
+      let phoneNumber = profile?.phone_number ?? "";
+      let phoneVerified = profile?.phone_verified ?? false;
+
+      // If user is a tenant and phone is missing, try to fetch from tenants table
+      if (profile?.role === "tenant" && !phoneNumber) {
+        const { data: tenantData } = await admin
+          .from("tenants")
+          .select("phone")
+          .eq("user_id", user.id)
+          .single();
+
+        if (tenantData?.phone) {
+          phoneNumber = tenantData.phone;
+          // Note: phoneVerified remains false unless confirmed via the new flow
+        }
+      }
+
       return res.status(200).json({
         id: user.id,
         email: user.email,
         firstName: profile?.first_name ?? "",
         lastName: profile?.last_name ?? "",
         role: profile?.role ?? "landlord",
-        phoneNumber: profile?.phone_number ?? "",
-        phoneVerified: profile?.phone_verified ?? false,
+        phoneNumber,
+        phoneVerified,
       });
     }
 

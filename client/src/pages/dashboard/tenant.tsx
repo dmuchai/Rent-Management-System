@@ -378,7 +378,11 @@ export default function TenantDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header title="Tenant Dashboard" showSidebar={false} />
+      <Header
+        title="Tenant Dashboard"
+        showSidebar={false}
+        onSectionChange={(section: string) => setActiveTab(section)}
+      />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section with Alerts */}
