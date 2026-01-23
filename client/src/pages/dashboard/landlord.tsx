@@ -99,8 +99,13 @@ export default function LandlordDashboard() {
   const [profileForm, setProfileForm] = useState({
     firstName: "",
     lastName: "",
-    email: ""
+    email: "",
+    phoneNumber: ""
   });
+
+  // State for phone verification
+  const [isOtpDialogOpen, setIsOtpDialogOpen] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
 
   // Form state for password change
   const [passwordForm, setPasswordForm] = useState({
@@ -308,7 +313,7 @@ export default function LandlordDashboard() {
         description: "Profile updated successfully!",
       });
       setIsProfileEditOpen(false);
-      setProfileForm({ firstName: "", lastName: "", email: "" });
+      setProfileForm({ firstName: "", lastName: "", email: "", phoneNumber: "" });
     },
     onError: (error: any) => {
       toast({
@@ -317,6 +322,52 @@ export default function LandlordDashboard() {
         variant: "destructive",
       });
     },
+  });
+
+  // Phone update mutations
+  const requestPhoneUpdateMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      const response = await apiRequest("POST", "/api/auth?action=request-phone-update", { phoneNumber });
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "OTP Sent",
+        description: "Please check your phone for the verification code.",
+      });
+      setIsOtpDialogOpen(true);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send verification code",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const verifyPhoneUpdateMutation = useMutation({
+    mutationFn: async (data: { phoneNumber: string; code: string }) => {
+      const response = await apiRequest("POST", "/api/auth?action=verify-phone-update", data);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
+      toast({
+        title: "Verified",
+        description: "Phone number updated and verified!",
+      });
+      setIsOtpDialogOpen(false);
+      setOtpCode("");
+      setIsProfileEditOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Verification Failed",
+        description: error.message || "Invalid OTP code",
+        variant: "destructive",
+      });
+    }
   });
 
   // Password change mutation
@@ -391,7 +442,8 @@ export default function LandlordDashboard() {
       setProfileForm({
         firstName: user.firstName || "",
         lastName: user.lastName || "",
-        email: user.email || ""
+        email: user.email || "",
+        phoneNumber: user.phoneNumber || ""
       });
     }
   }, [isProfileEditOpen, user]);
@@ -1099,8 +1151,25 @@ export default function LandlordDashboard() {
                     </p>
                   </div>
                   <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Phone Number</label>
+                    <div className="flex items-center gap-2">
+                      <p className="text-gray-900 bg-gray-50 p-3 rounded-md border flex-1">
+                        {user?.phoneNumber || 'Not provided'}
+                      </p>
+                      {user?.phoneNumber && (
+                        <Badge variant={user.phoneVerified ? "default" : "destructive"} className={user.phoneVerified ? "bg-green-100 text-green-700" : ""}>
+                          {user.phoneVerified ? (
+                            <><i className="fas fa-check-circle mr-1"></i> Verified</>
+                          ) : (
+                            <><i className="fas fa-exclamation-circle mr-1"></i> Unverified</>
+                          )}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">Role</label>
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-700 block w-fit">
                       <i className="fas fa-building mr-1"></i>
                       {user?.role || 'Landlord/Property Manager'}
                     </Badge>
@@ -1290,6 +1359,43 @@ export default function LandlordDashboard() {
                 placeholder="Enter email address"
               />
             </div>
+            <div>
+              <Label htmlFor="phoneNumber">Phone Number (with +254...)</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="phoneNumber"
+                  value={profileForm.phoneNumber}
+                  onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
+                  placeholder="+254712345678"
+                  className="flex-1"
+                />
+                {profileForm.phoneNumber && profileForm.phoneNumber !== user?.phoneNumber && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
+                    disabled={requestPhoneUpdateMutation.isPending}
+                  >
+                    {requestPhoneUpdateMutation.isPending ? "Sending..." : "Verify"}
+                  </Button>
+                )}
+                {profileForm.phoneNumber && profileForm.phoneNumber === user?.phoneNumber && !user?.phoneVerified && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
+                    disabled={requestPhoneUpdateMutation.isPending}
+                  >
+                    {requestPhoneUpdateMutation.isPending ? "Verify" : "Resend OTP"}
+                  </Button>
+                )}
+              </div>
+              {user?.phoneVerified && profileForm.phoneNumber === user?.phoneNumber && (
+                <p className="text-xs text-green-600 mt-1 flex items-center">
+                  <i className="fas fa-check-circle mr-1"></i> Verified
+                </p>
+              )}
+            </div>
             <div className="flex justify-end space-x-2 pt-4">
               <Button variant="outline" onClick={() => setIsProfileEditOpen(false)}>
                 Cancel
@@ -1307,6 +1413,48 @@ export default function LandlordDashboard() {
                 {profileUpdateMutation.isPending ? "Updating..." : "Save Changes"}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* OTP Verification Modal */}
+      <Dialog open={isOtpDialogOpen} onOpenChange={setIsOtpDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-center">Verify Phone Number</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-center text-muted-foreground">
+              Enter the 6-digit code sent to {profileForm.phoneNumber}
+            </p>
+            <div className="flex justify-center">
+              <Input
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, "").substring(0, 6))}
+                className="text-center text-2xl tracking-[0.5em] h-12 w-48"
+                placeholder="000000"
+                autoFocus
+              />
+            </div>
+            <Button
+              className="w-full h-12"
+              disabled={otpCode.length !== 6 || verifyPhoneUpdateMutation.isPending}
+              onClick={() => verifyPhoneUpdateMutation.mutate({
+                phoneNumber: profileForm.phoneNumber,
+                code: otpCode
+              })}
+            >
+              {verifyPhoneUpdateMutation.isPending ? (
+                <><i className="fas fa-spinner fa-spin mr-2"></i> Verifying...</>
+              ) : "Confirm Verification"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => setIsOtpDialogOpen(false)}
+            >
+              Cancel
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -10,7 +10,7 @@ import PaymentForm from "@/components/payments/PaymentForm";
 import EnhancedPaymentHistory from "@/components/payments/EnhancedPaymentHistory";
 import MaintenanceRequestForm from "@/components/maintenance/MaintenanceRequestForm";
 import MaintenanceRequestList from "@/components/maintenance/MaintenanceRequestList";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -19,7 +19,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { apiRequest } from "@/lib/queryClient";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Calendar,
   Home,
@@ -29,8 +31,15 @@ import {
   Clock,
   Download,
   Bell,
-  CreditCard
+  CreditCard,
+  User,
+  Settings,
+  Key,
+  Edit,
+  Building
 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AUTH_QUERY_KEYS } from "@/lib/auth-keys";
 
 interface DashboardStats {
   activeLease: {
@@ -72,6 +81,25 @@ export default function TenantDashboard() {
   const [, setLocation] = useLocation();
   const [isMaintenanceFormOpen, setIsMaintenanceFormOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Profile management state
+  const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
+  const [isOtpDialogOpen, setIsOtpDialogOpen] = useState(false);
+  const [isPasswordChangeOpen, setIsPasswordChangeOpen] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+
+  const [profileForm, setProfileForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phoneNumber: ""
+  });
+
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
+  });
 
   // Authentication guard - redirect unauthenticated users
   useEffect(() => {
@@ -120,6 +148,110 @@ export default function TenantDashboard() {
       syncStatus();
     }
   }, []); // Only run once on mount
+
+  // Profile update mutation
+  const profileUpdateMutation = useMutation({
+    mutationFn: async (data: { firstName?: string; lastName?: string; email?: string }) => {
+      const response = await apiRequest("PUT", "/api/auth/profile", data);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
+      toast({
+        title: "Success",
+        description: "Profile updated successfully!",
+      });
+      setIsProfileEditOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update profile",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Phone update mutations
+  const requestPhoneUpdateMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      const response = await apiRequest("POST", "/api/auth?action=request-phone-update", { phoneNumber });
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "OTP Sent",
+        description: "Please check your phone for the verification code.",
+      });
+      setIsOtpDialogOpen(true);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send verification code",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const verifyPhoneUpdateMutation = useMutation({
+    mutationFn: async (data: { phoneNumber: string; code: string }) => {
+      const response = await apiRequest("POST", "/api/auth?action=verify-phone-update", data);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
+      toast({
+        title: "Verified",
+        description: "Phone number updated and verified!",
+      });
+      setIsOtpDialogOpen(false);
+      setOtpCode("");
+      setIsProfileEditOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Verification Failed",
+        description: error.message || "Invalid OTP code",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Password change mutation
+  const passwordChangeMutation = useMutation({
+    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
+      const response = await apiRequest("POST", "/api/auth?action=change-password", data);
+      return await response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Password changed successfully!",
+      });
+      setIsPasswordChangeOpen(false);
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to change password",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Initialize form with user data when profile modal opens
+  useEffect(() => {
+    if (isProfileEditOpen && user) {
+      setProfileForm({
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        email: user.email || "",
+        phoneNumber: (user as any).phoneNumber || ""
+      });
+    }
+  }, [isProfileEditOpen, user]);
 
   const { data: dashboardStats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
@@ -318,7 +450,7 @@ export default function TenantDashboard() {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">
               <Home className="h-4 w-4 mr-2" />
               Overview
@@ -334,6 +466,10 @@ export default function TenantDashboard() {
             <TabsTrigger value="documents">
               <FileText className="h-4 w-4 mr-2" />
               Documents
+            </TabsTrigger>
+            <TabsTrigger value="profile">
+              <User className="h-4 w-4 mr-2" />
+              Profile
             </TabsTrigger>
           </TabsList>
 
@@ -674,6 +810,106 @@ export default function TenantDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Profile Tab */}
+          <TabsContent value="profile" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <User className="h-5 w-5 mr-3 text-blue-600" />
+                  Personal Information
+                </CardTitle>
+                <CardDescription>
+                  Manage your account details and preferences
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Full Name</label>
+                    <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
+                      {user?.firstName || 'Not provided'} {user?.lastName || ''}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Email Address</label>
+                    <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
+                      {user?.email || 'Not provided'}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Phone Number</label>
+                    <div className="flex items-center gap-2">
+                      <p className="text-gray-900 bg-gray-50 p-3 rounded-md border flex-1">
+                        {(user as any)?.phoneNumber || 'Not provided'}
+                      </p>
+                      {(user as any)?.phoneNumber && (
+                        <Badge variant={(user as any).phoneVerified ? "default" : "destructive"} className={(user as any).phoneVerified ? "bg-green-100 text-green-700" : ""}>
+                          {(user as any).phoneVerified ? (
+                            <><CheckCircle className="h-3 w-3 mr-1" /> Verified</>
+                          ) : (
+                            <><AlertCircle className="h-3 w-3 mr-1" /> Unverified</>
+                          )}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Account Created</label>
+                    <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
+                      {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Not available'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4 mt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900">Account Actions</h3>
+                      <p className="text-sm text-gray-600">Manage your account settings</p>
+                    </div>
+                    <div className="flex space-x-3">
+                      <Button variant="outline" onClick={() => setIsProfileEditOpen(true)}>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Profile
+                      </Button>
+                      <Button variant="outline" onClick={() => setIsPasswordChangeOpen(true)}>
+                        <Key className="h-4 w-4 mr-2" />
+                        Change Password
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Settings className="h-5 w-5 mr-3 text-gray-600" />
+                  Preferences
+                </CardTitle>
+                <CardDescription>
+                  Customize your dashboard experience
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Email Notifications</label>
+                    <div className="flex items-center space-x-2">
+                      <input type="checkbox" defaultChecked className="rounded border-gray-300" />
+                      <span className="text-sm text-gray-600">Receive payment reminders</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input type="checkbox" defaultChecked className="rounded border-gray-300" />
+                      <span className="text-sm text-gray-600">Property maintenance alerts</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -683,6 +919,206 @@ export default function TenantDashboard() {
         onOpenChange={setIsMaintenanceFormOpen}
         unitId={activeLease?.unitId}
       />
+
+      {/* Edit Profile Modal */}
+      <Dialog open={isProfileEditOpen} onOpenChange={setIsProfileEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  value={profileForm.firstName}
+                  onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                  placeholder="Enter first name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  value={profileForm.lastName}
+                  onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                  placeholder="Enter last name"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                value={profileForm.email}
+                onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                placeholder="Enter email address"
+              />
+            </div>
+            <div>
+              <Label htmlFor="phoneNumber">Phone Number (with +254...)</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="phoneNumber"
+                  value={profileForm.phoneNumber}
+                  onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
+                  placeholder="+254712345678"
+                  className="flex-1"
+                />
+                {profileForm.phoneNumber && profileForm.phoneNumber !== (user as any)?.phoneNumber && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
+                    disabled={requestPhoneUpdateMutation.isPending}
+                  >
+                    {requestPhoneUpdateMutation.isPending ? "Sending..." : "Verify"}
+                  </Button>
+                )}
+                {profileForm.phoneNumber && profileForm.phoneNumber === (user as any)?.phoneNumber && !(user as any)?.phoneVerified && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
+                    disabled={requestPhoneUpdateMutation.isPending}
+                  >
+                    {requestPhoneUpdateMutation.isPending ? "Verify" : "Resend OTP"}
+                  </Button>
+                )}
+              </div>
+              {(user as any)?.phoneVerified && profileForm.phoneNumber === (user as any)?.phoneNumber && (
+                <p className="text-xs text-green-600 mt-1 flex items-center">
+                  <CheckCircle className="h-3 w-3 mr-1" /> Verified
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button variant="outline" onClick={() => setIsProfileEditOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  profileUpdateMutation.mutate({
+                    firstName: profileForm.firstName,
+                    lastName: profileForm.lastName,
+                    email: profileForm.email
+                  });
+                }}
+                disabled={profileUpdateMutation.isPending}
+              >
+                {profileUpdateMutation.isPending ? "Updating..." : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* OTP Verification Modal */}
+      <Dialog open={isOtpDialogOpen} onOpenChange={setIsOtpDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-center">Verify Phone Number</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-center text-muted-foreground">
+              Enter the 6-digit code sent to {profileForm.phoneNumber}
+            </p>
+            <div className="flex justify-center">
+              <Input
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, "").substring(0, 6))}
+                className="text-center text-2xl tracking-[0.5em] h-12 w-48"
+                placeholder="000000"
+                autoFocus
+              />
+            </div>
+            <Button
+              className="w-full h-12"
+              disabled={otpCode.length !== 6 || verifyPhoneUpdateMutation.isPending}
+              onClick={() => verifyPhoneUpdateMutation.mutate({
+                phoneNumber: profileForm.phoneNumber,
+                code: otpCode
+              })}
+            >
+              {verifyPhoneUpdateMutation.isPending ? "Verifying..." : "Confirm Verification"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => setIsOtpDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Modal */}
+      <Dialog open={isPasswordChangeOpen} onOpenChange={setIsPasswordChangeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="currentPassword">Current Password</Label>
+              <Input
+                id="currentPassword"
+                type="password"
+                value={passwordForm.currentPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                placeholder="Enter current password"
+              />
+            </div>
+            <div>
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                placeholder="Enter new password (min 8 characters)"
+              />
+            </div>
+            <div>
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                placeholder="Confirm new password"
+              />
+            </div>
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button variant="outline" onClick={() => setIsPasswordChangeOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+                    toast({
+                      title: "Error",
+                      description: "Passwords don't match",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  passwordChangeMutation.mutate({
+                    currentPassword: passwordForm.currentPassword,
+                    newPassword: passwordForm.newPassword
+                  });
+                }}
+                disabled={passwordChangeMutation.isPending}
+              >
+                {passwordChangeMutation.isPending ? "Updating..." : "Update Password"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

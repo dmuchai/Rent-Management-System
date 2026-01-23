@@ -355,6 +355,8 @@ export default async function handler(
         firstName: profile?.first_name ?? "",
         lastName: profile?.last_name ?? "",
         role: profile?.role ?? "landlord",
+        phoneNumber: profile?.phone_number ?? "",
+        phoneVerified: profile?.phone_verified ?? false,
       });
     }
 
@@ -380,6 +382,100 @@ export default async function handler(
       }
 
       return res.status(200).json({ message: "Password updated" });
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Request phone update (send OTP)                                         */
+    /* POST /api/auth?action=request-phone-update                              */
+    /* ---------------------------------------------------------------------- */
+    if (action === "request-phone-update" && req.method === "POST") {
+      const user = await getUserFromAuthHeader(req);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+      const requestSchema = z.object({ phoneNumber: z.string() });
+      const { phoneNumber } = requestSchema.parse(req.body);
+
+      const sql = createDbConnection();
+      try {
+        const code = smsService.generateOtp();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+        await sql`
+          INSERT INTO public.otp_codes (phone_number, code, expires_at)
+          VALUES (${phoneNumber}, ${code}, ${expiresAt})
+        `;
+
+        await smsService.sendSms({
+          to: phoneNumber,
+          message: `Your Landee & Moony verification code is: ${code}. Valid for 10 minutes.`
+        });
+
+        return res.status(200).json({ message: "Verification code sent" });
+      } catch (err: any) {
+        console.error("[Auth] Failed to send phone update OTP:", err);
+        return res.status(500).json({ error: "Failed to send verification code" });
+      } finally {
+        await sql.end();
+      }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Verify phone update                                                     */
+    /* POST /api/auth?action=verify-phone-update                               */
+    /* ---------------------------------------------------------------------- */
+    if (action === "verify-phone-update" && req.method === "POST") {
+      const user = await getUserFromAuthHeader(req);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+      const verifySchema = z.object({
+        phoneNumber: z.string(),
+        code: z.string()
+      });
+      const { phoneNumber, code } = verifySchema.parse(req.body);
+
+      const sql = createDbConnection();
+      try {
+        // Find valid OTP
+        const [otp] = await sql`
+          SELECT id FROM public.otp_codes
+          WHERE phone_number = ${phoneNumber}
+            AND code = ${code}
+            AND expires_at > NOW()
+            AND used = false
+          LIMIT 1
+        `;
+
+        if (!otp) {
+          return res.status(400).json({ error: "Invalid or expired verification code" });
+        }
+
+        // Mark OTP as used
+        await sql`
+          UPDATE public.otp_codes SET used = true WHERE id = ${otp.id}
+        `;
+
+        // Update user record using Admin client (Supabase)
+        const admin = getAdminClient();
+        const { error: updateErr } = await admin
+          .from("users")
+          .update({
+            phone_number: phoneNumber,
+            phone_verified: true
+          })
+          .eq("id", user.id);
+
+        if (updateErr) {
+          console.error("[Auth] Failed to update user phone:", updateErr);
+          return res.status(500).json({ error: "Failed to update phone number" });
+        }
+
+        return res.status(200).json({ message: "Phone number verified and updated successfully" });
+      } catch (err: any) {
+        console.error("[Auth] Phone update verification error:", err);
+        return res.status(500).json({ error: "Internal server error during verification" });
+      } finally {
+        await sql.end();
+      }
     }
 
     /* ---------------------------------------------------------------------- */
