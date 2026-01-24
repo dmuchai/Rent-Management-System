@@ -93,7 +93,7 @@ export class SmsService {
             const statusName = messageStatus?.name || 'Unknown';
             const statusDesc = messageStatus?.description || 'No description';
 
-            if (statusName === 'PENDING' || statusName === 'ACCEPTED' || statusName === 'MESSAGE_ACCEPTED') {
+            if (['PENDING', 'ACCEPTED', 'MESSAGE_ACCEPTED', 'PENDING_ACCEPTED', 'PENDING_ENROUTE', 'DELIVERED_TO_HANDSET'].includes(statusName)) {
                 console.info(`✅ [SMS] Infobip Success | To: ${options.to} | Status: ${statusName}`);
             } else {
                 console.warn(`[SMS] Infobip Warning | To: ${options.to} | Status: ${statusName} (${statusDesc})`);
