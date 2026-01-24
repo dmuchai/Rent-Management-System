@@ -89,7 +89,15 @@ export class SmsService {
             }
 
             const data = await response.json();
-            console.info(`✅ [SMS] Infobip Success | To: ${options.to}`);
+            const messageStatus = data?.messages?.[0]?.status;
+            const statusName = messageStatus?.name || 'Unknown';
+            const statusDesc = messageStatus?.description || 'No description';
+
+            if (statusName === 'PENDING' || statusName === 'ACCEPTED' || statusName === 'MESSAGE_ACCEPTED') {
+                console.info(`✅ [SMS] Infobip Success | To: ${options.to} | Status: ${statusName}`);
+            } else {
+                console.warn(`[SMS] Infobip Warning | To: ${options.to} | Status: ${statusName} (${statusDesc})`);
+            }
             return data;
         } catch (error) {
             console.error('[SMS] Infobip send failed:', error);
