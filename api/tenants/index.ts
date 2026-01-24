@@ -86,6 +86,19 @@ async function handleListTenants(req: VercelRequest, res: VercelResponse, auth: 
 
 async function handleCreateTenant(req: VercelRequest, res: VercelResponse, auth: any, sql: any) {
     const tenantData = insertTenantSchema.parse(req.body);
+
+    // Check if a user with this email already exists with a different role
+    // We handle this via raw SQL since we already have the connection
+    const [existingUser] = await sql`
+      SELECT id, role FROM public.users WHERE email = ${tenantData.email}
+    `;
+
+    if (existingUser && existingUser.role !== 'tenant') {
+        return res.status(400).json({
+            message: `The user with email ${tenantData.email} is already registered as a ${existingUser.role}. A single account cannot have multiple roles.`
+        });
+    }
+
     const invitationToken = crypto.randomBytes(32).toString('hex');
 
     const [tenant] = await sql`

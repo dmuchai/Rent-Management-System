@@ -178,8 +178,24 @@ export default async function handler(
         role: z.enum(["landlord", "tenant", "property_manager"]).optional(),
       });
 
-      const { email, password, firstName, lastName, phoneNumber, role } = registerSchema.parse(req.body);
+      const { email, password, firstName, lastName, phoneNumber, role: requestedRole } = registerSchema.parse(req.body);
       const supabase = getSupabaseClient();
+      const admin = getAdminClient();
+
+      // Check if this email is already a tenant (invited or active)
+      // This prevents a tenant from accidentally registering as a landlord
+      const { data: existingTenant } = await admin
+        .from("tenants")
+        .select("id")
+        .eq("email", email)
+        .limit(1)
+        .maybeSingle();
+
+      const role = existingTenant ? "tenant" : (requestedRole || "landlord");
+
+      if (existingTenant && requestedRole && requestedRole !== "tenant") {
+        console.log(`[Auth] Forcing tenant role for email ${email} due to existing tenant record`);
+      }
 
       // Sign up the user with metadata so email templates can be personalized
       const { data, error } = await supabase.auth.signUp({
