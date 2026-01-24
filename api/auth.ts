@@ -328,11 +328,25 @@ export default async function handler(
 
       const admin = getAdminClient();
 
-      const { data: profile } = await admin
+      console.log(`[Auth] Fetching profile for user ID: ${user.id}`);
+
+      const { data: profile, error: profileError } = await admin
         .from("users")
         .select("*")
         .eq("id", user.id)
         .single();
+
+      if (profileError) {
+        console.error(`[Auth] Error fetching profile for ${user.id}:`, profileError.message);
+        // If profile is missing but user is authenticated, we might be in a race condition 
+        // with the sync process. We'll return what we have from Auth for now but log the issue.
+      } else {
+        console.log(`[Auth] Profile found:`, {
+          id: profile.id,
+          role: profile.role,
+          firstName: profile.first_name
+        });
+      }
 
       // Back-fill metadata if missing (enables personalization for existing users)
       const metadata = user.user_metadata || {};
@@ -362,17 +376,16 @@ export default async function handler(
 
         if (tenantData?.phone) {
           phoneNumber = tenantData.phone;
-          // Note: phoneVerified remains false unless confirmed via the new flow
         }
       }
 
       return res.status(200).json({
         id: user.id,
         email: user.email,
-        firstName: profile?.first_name ?? "",
-        lastName: profile?.last_name ?? "",
-        role: profile?.role ?? "landlord",
-        phoneNumber,
+        firstName: profile?.first_name ?? user.user_metadata?.first_name ?? user.user_metadata?.firstName ?? "",
+        lastName: profile?.last_name ?? user.user_metadata?.last_name ?? user.user_metadata?.lastName ?? "",
+        role: profile?.role ?? user.user_metadata?.role ?? "landlord",
+        phoneNumber: phoneNumber || user.user_metadata?.phone_number || "",
         phoneVerified,
       });
     }

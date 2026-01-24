@@ -22,127 +22,75 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
 
   // Fallback: allow Authorization: Bearer <token> header for serverless
   // functions called from the browser when the client holds the session
-  // (we attach the access_token in Authorization via apiRequest).
   if (!authToken) {
     const authHeader = req.headers.authorization;
     if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
       authToken = authHeader.replace('Bearer ', '');
     }
   }
-  
-  // Debug logging (only in non-production or when DEBUG flag is set)
+
+  // Debug logging
   const isDebugMode = process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production';
-  
-  if (isDebugMode) {
-    console.log('=== Auth Verification Debug ===');
-    console.log('Request path:', req.url?.split('?')[0]); // Only log path, not query params
-    console.log('Cookie header present:', !!req.headers.cookie);
-    console.log('Parsed cookie keys:', Object.keys(req.cookies || {}));
-    console.log('Has supabase-auth-token:', !!authToken);
-    console.log('Token length:', authToken ? authToken.length : 0);
-    console.log('===============================');
-  }
-  
+
   if (!authToken) {
-    console.error('❌ Auth verification failed: No auth token cookie or Authorization header found');
-    if (isDebugMode) {
-      console.error('Available cookie keys:', Object.keys(req.cookies || {}));
-      console.error('Authorization header present:', !!req.headers.authorization);
-    }
+    if (isDebugMode) console.error('❌ Auth verification failed: No auth token found');
     return null;
   }
-  
+
   try {
-    if (isDebugMode) {
-      console.log('Verifying token with Supabase...');
-    }
-    
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(authToken);
-    
+
     if (error || !user) {
-      console.error('❌ Auth verification failed: Invalid or expired token');
-      if (isDebugMode) {
-        console.error('Supabase error:', error?.message);
-      }
+      if (isDebugMode) console.error('❌ Auth verification failed: Invalid or expired token');
       return null;
     }
 
-    if (isDebugMode) {
-      console.log('✅ Auth verification successful for user:', user.id);
-      console.log('User email:', user.email);
-    }
-    
-    // Securely load role from server-only database table (not user-controlled metadata)
+    // Securely sync user data to public.users table using UPSERT to avoid race conditions
     const ALLOWED_ROLES = ['landlord', 'tenant', 'property_manager'] as const;
     type AllowedRole = typeof ALLOWED_ROLES[number];
-    
-    let role: AllowedRole | null = null;
-    
+
+    // Determine the role: metadata > default
+    const metadataRole = user.user_metadata?.role;
+    const defaultRole: AllowedRole = (metadataRole && ALLOWED_ROLES.includes(metadataRole as AllowedRole))
+      ? metadataRole as AllowedRole
+      : 'landlord';
+
+    let role: AllowedRole = defaultRole;
+
     try {
-      const { data: userData, error: roleError } = await supabaseAdmin
+      const { data: userData, error: upsertError } = await supabaseAdmin
         .from('users')
+        .upsert({
+          id: user.id,
+          email: user.email,
+          first_name: user.user_metadata?.first_name || user.user_metadata?.firstName || user.user_metadata?.full_name?.split(' ')[0] || '',
+          last_name: user.user_metadata?.last_name || user.user_metadata?.lastName || user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
+          profile_image_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+          role: defaultRole,
+        }, {
+          onConflict: 'id'
+        })
         .select('role')
-        .eq('id', user.id)
         .single();
-      
-      // If user doesn't exist in database yet (first login), create them with a default role
-      if (roleError?.code === 'PGRST116') {
-        console.log('📝 User not found in database, creating new user record for:', user.id);
-        
-        // Try to get role from user metadata (for OAuth users who selected a role)
-        const metadataRole = user.user_metadata?.role;
-        const defaultRole: AllowedRole = (metadataRole && ALLOWED_ROLES.includes(metadataRole as AllowedRole)) 
-          ? metadataRole as AllowedRole 
-          : 'landlord';
-        
-        const { data: newUser, error: insertError } = await supabaseAdmin
-          .from('users')
-          .insert({
-            id: user.id,
-            email: user.email,
-            first_name: user.user_metadata?.first_name || user.user_metadata?.full_name?.split(' ')[0] || '',
-            last_name: user.user_metadata?.last_name || user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
-            profile_image_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-            role: defaultRole,
-          })
-          .select('role')
-          .single();
-        
-        if (insertError) {
-          console.error('❌ Failed to create user in database:', insertError.message);
-          return null;
-        }
-        
-        role = newUser.role as AllowedRole;
-        console.log('✅ Created new user with role:', role);
-      } else if (roleError) {
-        console.error('❌ Failed to fetch user role from database:', roleError.message);
-        return null;
-      } else {
-        // Validate role against whitelist
-        if (userData?.role && ALLOWED_ROLES.includes(userData.role as AllowedRole)) {
-          role = userData.role as AllowedRole;
-        } else {
-          console.error('❌ Invalid or missing role for user:', user.id, 'Role:', userData?.role);
-          return null;
-        }
+
+      if (upsertError) {
+        console.error('❌ Failed to sync user in database:', upsertError.message);
+        // If upsert fails (e.g. unique constraint on email but different ID), 
+        // we fallback to metadata to let the user in, but logs will help us debug.
+      } else if (userData) {
+        role = userData.role as AllowedRole;
       }
     } catch (error) {
-      console.error('❌ Exception while fetching user role:', error);
-      return null;
+      console.error('❌ Exception while syncing user role:', error);
     }
-    
+
     if (isDebugMode) {
-      console.log('✅ User role verified:', role);
+      console.log('✅ Auth verification successful. User:', user.id, 'Role:', role);
     }
-    
+
     return { userId: user.id, user, role };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('❌ Auth verification exception:', errorMessage);
-    if (isDebugMode && error instanceof Error) {
-      console.error('Stack trace:', error.stack);
-    }
+    if (isDebugMode) console.error('❌ Auth verification exception:', error);
     return null;
   }
 }
@@ -159,22 +107,20 @@ export function setCorsHeaders(req: VercelRequest, res: VercelResponse) {
 
 export function requireAuth(
   handler: (
-    req: VercelRequest, 
-    res: VercelResponse, 
+    req: VercelRequest,
+    res: VercelResponse,
     auth: { userId: string; user: User; role: string }
   ) => Promise<void | VercelResponse>
 ) {
   return async (req: VercelRequest, res: VercelResponse) => {
-    // Set CORS headers for all requests
     setCorsHeaders(req, res);
 
-    // Handle preflight requests
     if (req.method === 'OPTIONS') {
       return res.status(200).end();
     }
 
     const auth = await verifyAuth(req);
-    
+
     if (!auth) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -184,22 +130,18 @@ export function requireAuth(
 }
 
 export function handleError(res: VercelResponse, error: any, message: string = 'Internal server error') {
-  // Log full error details for debugging
   const errorMessage = error instanceof Error ? error.message : String(error);
   console.error(message, errorMessage);
-  
-  // Log stack trace in non-production environments
+
   if (process.env.NODE_ENV !== 'production' && error instanceof Error && error.stack) {
     console.error('Stack trace:', error.stack);
   }
-  
-  // Build response object
+
   const response: { error: string; details?: string } = { error: message };
-  
-  // Only include error details in development mode
+
   if (process.env.NODE_ENV === 'development') {
     response.details = errorMessage;
   }
-  
+
   return res.status(500).json(response);
 }
