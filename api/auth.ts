@@ -378,6 +378,25 @@ export default async function handler(
     }
 
     /* ---------------------------------------------------------------------- */
+    /* Get user identities (linked providers)                                  */
+    /* GET /api/auth?action=identities                                         */
+    /* ---------------------------------------------------------------------- */
+    if (action === "identities" && req.method === "GET") {
+      const user = await getUserFromAuthHeader(req);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+      const identities = user.identities || [];
+      const hasEmailProvider = identities.some(id => id.provider === 'email');
+      const hasGoogleProvider = identities.some(id => id.provider === 'google');
+
+      return res.status(200).json({
+        identities,
+        hasEmailProvider,
+        hasGoogleProvider
+      });
+    }
+
+    /* ---------------------------------------------------------------------- */
     /* Change password (logged-in users only)                                  */
     /* POST /api/auth?action=change-password                                   */
     /* ---------------------------------------------------------------------- */

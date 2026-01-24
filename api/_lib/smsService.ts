@@ -70,13 +70,15 @@ export class SmsService {
             if (recipients.length > 0) {
                 const status = recipients[0].status;
                 const cost = recipients[0].cost;
-                console.log(`[SMS] Status: ${status} | To: ${options.to} | Cost: ${cost}`);
 
-                if (status !== 'Success' && status !== 'Sent') {
+                if (status === 'Success' || status === 'Sent') {
+                    console.info(`✅ [SMS] Success | To: ${options.to} | Cost: ${cost}`);
+                } else {
+                    console.warn(`[SMS] Status: ${status} | To: ${options.to} | Cost: ${cost}`);
                     console.warn(`[SMS] Delivery status warning: ${status} for ${options.to}`);
                 }
             } else {
-                console.log('✅ SMS sent successfully to:', options.to);
+                console.info('✅ [SMS] Sent successfully to:', options.to);
             }
 
             return data;
