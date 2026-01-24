@@ -51,13 +51,25 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
 
     // Determine the role: metadata > default
     const metadataRole = user.user_metadata?.role;
-    const defaultRole: AllowedRole = (metadataRole && ALLOWED_ROLES.includes(metadataRole as AllowedRole))
+    const initialRole: AllowedRole = (metadataRole && ALLOWED_ROLES.includes(metadataRole as AllowedRole))
       ? metadataRole as AllowedRole
       : 'landlord';
 
-    let role: AllowedRole = defaultRole;
+    let role: AllowedRole = initialRole;
 
     try {
+      // PROACTIVE ROLE SYNC: Check if this email is registered as a tenant
+      // We do this to ensure that a landlord who is also a tenant gets the correct view,
+      // or to fix accounts that were created with the wrong role.
+      const { data: tenantRecord } = await supabaseAdmin
+        .from('tenants')
+        .select('id')
+        .eq('email', user.email)
+        .limit(1)
+        .maybeSingle();
+
+      const finalRole = tenantRecord ? 'tenant' : initialRole;
+
       const { data: userData, error: upsertError } = await supabaseAdmin
         .from('users')
         .upsert({
@@ -66,7 +78,7 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
           first_name: user.user_metadata?.first_name || user.user_metadata?.firstName || user.user_metadata?.full_name?.split(' ')[0] || '',
           last_name: user.user_metadata?.last_name || user.user_metadata?.lastName || user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
           profile_image_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-          role: defaultRole,
+          role: finalRole,
         }, {
           onConflict: 'id'
         })
