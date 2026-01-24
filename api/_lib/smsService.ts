@@ -1,5 +1,3 @@
-import twilio from 'twilio';
-
 /**
  * SMS Service for API Functions
  * 
@@ -13,97 +11,47 @@ export interface SmsOptions {
 }
 
 export class SmsService {
-    // AT Credentials
-    private atUsername: string | undefined;
-    private atApiKey: string | undefined;
-    private atSenderId: string | undefined;
-    private atApiUrl = 'https://api.africastalking.com/version1/messaging';
-
-    // Twilio Credentials
-    private twilioAccountSid: string | undefined;
-    private twilioAuthToken: string | undefined;
-    private twilioFromNumber: string | undefined;
-    private twilioClient: any;
+    private username: string | undefined;
+    private apiKey: string | undefined;
+    private senderId: string | undefined;
+    private apiUrl = 'https://api.africastalking.com/version1/messaging';
 
     constructor() {
-        // Africa's Talking
-        this.atUsername = process.env.AT_USERNAME;
-        this.atApiKey = process.env.AT_API_KEY;
-        this.atSenderId = process.env.AT_SENDER_ID;
-
-        // Twilio
-        this.twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
-        this.twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-        this.twilioFromNumber = process.env.TWILIO_FROM_NUMBER;
-
-        if (this.twilioAccountSid && this.twilioAuthToken) {
-            this.twilioClient = twilio(this.twilioAccountSid, this.twilioAuthToken);
-        }
+        this.username = process.env.AT_USERNAME;
+        this.apiKey = process.env.AT_API_KEY;
+        this.senderId = process.env.AT_SENDER_ID;
 
         // Automatically use sandbox URL if username is 'sandbox'
-        if (this.atUsername === 'sandbox') {
-            this.atApiUrl = 'https://api.sandbox.africastalking.com/version1/messaging';
+        if (this.username === 'sandbox') {
+            this.apiUrl = 'https://api.sandbox.africastalking.com/version1/messaging';
         }
     }
 
     async sendSms(options: SmsOptions): Promise<any> {
-        const provider = process.env.SMS_PROVIDER || (this.twilioAccountSid ? 'twilio' : 'africastalking');
-
-        console.log(`[SMS] Sending via ${provider} to ${options.to}`);
-
-        if (provider === 'twilio') {
-            return this.sendViaTwilio(options);
-        } else {
-            return this.sendViaAt(options);
-        }
-    }
-
-    private async sendViaTwilio(options: SmsOptions): Promise<any> {
-        if (!this.twilioClient || !this.twilioFromNumber) {
-            console.warn('[SMS] Twilio not configured. Falling back to console.');
-            console.log(`[SMS MOCK] To: ${options.to} | Message: ${options.message}`);
-            return { status: 'mocked', message: 'Twilio credentials missing' };
-        }
-
-        try {
-            const message = await this.twilioClient.messages.create({
-                body: options.message,
-                from: this.twilioFromNumber,
-                to: options.to,
-            });
-            console.log(`[SMS] Twilio message created: ${message.sid} | Status: ${message.status}`);
-            return message;
-        } catch (error) {
-            console.error('[SMS] Twilio send failed:', error);
-            throw error;
-        }
-    }
-
-    private async sendViaAt(options: SmsOptions): Promise<any> {
-        if (!this.atUsername || !this.atApiKey) {
+        if (!this.username || !this.apiKey) {
             console.warn('[SMS] Africa\'s Talking credentials not configured. SMS will be logged to console only.');
             console.log(`[SMS MOCK] To: ${options.to} | Message: ${options.message}`);
             return { status: 'mocked', message: 'SMS credentials missing' };
         }
 
         const params = new URLSearchParams();
-        params.append('username', this.atUsername);
+        params.append('username', this.username);
         params.append('to', options.to);
         params.append('message', options.message);
-        if (this.atSenderId) {
-            params.append('from', this.atSenderId);
+        if (this.senderId) {
+            params.append('from', this.senderId);
         }
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
         try {
-            const response = await fetch(this.atApiUrl, {
+            const response = await fetch(this.apiUrl, {
                 method: 'POST',
                 signal: controller.signal,
                 headers: {
                     'Accept': 'application/json',
-                    'apiKey': this.atApiKey,
+                    'apiKey': this.apiKey,
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: params.toString(),
