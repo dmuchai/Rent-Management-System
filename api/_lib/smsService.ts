@@ -1,7 +1,8 @@
+
 /**
  * SMS Service for API Functions
  * 
- * Handles sending text messages using Africa's Talking API.
+ * Handles sending text messages using Africa's Talking API or Infobip.
  */
 
 export interface SmsOptions {
@@ -11,47 +12,113 @@ export interface SmsOptions {
 }
 
 export class SmsService {
-    private username: string | undefined;
-    private apiKey: string | undefined;
-    private senderId: string | undefined;
-    private apiUrl = 'https://api.africastalking.com/version1/messaging';
+    // AT Credentials
+    private atUsername: string | undefined;
+    private atApiKey: string | undefined;
+    private atSenderId: string | undefined;
+    private atApiUrl = 'https://api.africastalking.com/version1/messaging';
+
+    // Infobip Credentials
+    private infobipApiKey: string | undefined;
+    private infobipBaseUrl: string | undefined;
 
     constructor() {
-        this.username = process.env.AT_USERNAME;
-        this.apiKey = process.env.AT_API_KEY;
-        this.senderId = process.env.AT_SENDER_ID;
+        this.atUsername = process.env.AT_USERNAME;
+        this.atApiKey = process.env.AT_API_KEY;
+        this.atSenderId = process.env.AT_SENDER_ID;
+
+        this.infobipApiKey = process.env.INFOBIP_API_KEY;
+        this.infobipBaseUrl = process.env.INFOBIP_BASE_URL;
 
         // Automatically use sandbox URL if username is 'sandbox'
-        if (this.username === 'sandbox') {
-            this.apiUrl = 'https://api.sandbox.africastalking.com/version1/messaging';
+        if (this.atUsername === 'sandbox') {
+            this.atApiUrl = 'https://api.sandbox.africastalking.com/version1/messaging';
         }
     }
 
     async sendSms(options: SmsOptions): Promise<any> {
-        if (!this.username || !this.apiKey) {
+        const provider = process.env.SMS_PROVIDER || (this.infobipApiKey ? 'infobip' : 'africastalking');
+
+        console.log(`[SMS] Sending via ${provider} to ${options.to}`);
+
+        if (provider === 'infobip') {
+            return this.sendViaInfobip(options);
+        } else {
+            return this.sendViaAt(options);
+        }
+    }
+
+    private async sendViaInfobip(options: SmsOptions): Promise<any> {
+        if (!this.infobipApiKey || !this.infobipBaseUrl) {
+            console.warn('[SMS] Infobip credentials not configured. Falling back to console.');
+            console.log(`[SMS MOCK] To: ${options.to} | Message: ${options.message}`);
+            return { status: 'mocked', message: 'Infobip credentials missing' };
+        }
+
+        const baseUrl = this.infobipBaseUrl.endsWith('/') ? this.infobipBaseUrl.slice(0, -1) : this.infobipBaseUrl;
+        const url = `${baseUrl}/sms/2/text/advanced`;
+
+        const body = {
+            messages: [
+                {
+                    destinations: [{ to: options.to }],
+                    from: "Landee", // Default sender name
+                    text: options.message
+                }
+            ]
+        };
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `App ${this.infobipApiKey}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.text();
+                console.error('[SMS] Infobip API error:', errorData);
+                throw new Error(`Infobip API failed: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.info(`✅ [SMS] Infobip Success | To: ${options.to}`);
+            return data;
+        } catch (error) {
+            console.error('[SMS] Infobip send failed:', error);
+            throw error;
+        }
+    }
+
+    private async sendViaAt(options: SmsOptions): Promise<any> {
+        if (!this.atUsername || !this.atApiKey) {
             console.warn('[SMS] Africa\'s Talking credentials not configured. SMS will be logged to console only.');
             console.log(`[SMS MOCK] To: ${options.to} | Message: ${options.message}`);
             return { status: 'mocked', message: 'SMS credentials missing' };
         }
 
         const params = new URLSearchParams();
-        params.append('username', this.username);
+        params.append('username', this.atUsername);
         params.append('to', options.to);
         params.append('message', options.message);
-        if (this.senderId) {
-            params.append('from', this.senderId);
+        if (this.atSenderId) {
+            params.append('from', this.atSenderId);
         }
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
         try {
-            const response = await fetch(this.apiUrl, {
+            const response = await fetch(this.atApiUrl, {
                 method: 'POST',
                 signal: controller.signal,
                 headers: {
                     'Accept': 'application/json',
-                    'apiKey': this.apiKey,
+                    'apiKey': this.atApiKey,
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: params.toString(),
@@ -72,13 +139,13 @@ export class SmsService {
                 const cost = recipients[0].cost;
 
                 if (status === 'Success' || status === 'Sent') {
-                    console.info(`✅ [SMS] Success | To: ${options.to} | Cost: ${cost}`);
+                    console.info(`✅ [SMS] AT Success | To: ${options.to} | Cost: ${cost}`);
                 } else {
                     console.warn(`[SMS] Status: ${status} | To: ${options.to} | Cost: ${cost}`);
                     console.warn(`[SMS] Delivery status warning: ${status} for ${options.to}`);
                 }
             } else {
-                console.info('✅ [SMS] Sent successfully to:', options.to);
+                console.info('✅ [SMS] AT Sent successfully to:', options.to);
             }
 
             return data;
