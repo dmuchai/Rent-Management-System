@@ -65,7 +65,21 @@ export class SmsService {
             }
 
             const data = await response.json();
-            console.log('✅ SMS sent successfully to:', options.to);
+
+            // AT returns 201 even if delivery fails for individual recipients
+            const recipients = data?.SMSMessageData?.Recipients || [];
+            if (recipients.length > 0) {
+                const status = recipients[0].status;
+                const cost = recipients[0].cost;
+                console.log(`[SMS] Status: ${status} | To: ${options.to} | Cost: ${cost}`);
+
+                if (status !== 'Success' && status !== 'Sent') {
+                    console.warn(`[SMS] Delivery status warning: ${status} for ${options.to}`);
+                }
+            } else {
+                console.log('✅ SMS sent successfully to:', options.to);
+            }
+
             return data;
         } catch (error) {
             console.error('[SMS] Send failed:', error);
