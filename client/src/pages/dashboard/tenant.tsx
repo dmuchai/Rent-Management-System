@@ -938,216 +938,215 @@ export default function TenantDashboard() {
               </Card>
             </TabsContent>
           </Tabs>
-      </div>
+        </main>
 
-      {/* Maintenance Request Form Modal */}
-      <MaintenanceRequestForm
-        open={isMaintenanceFormOpen}
-        onOpenChange={setIsMaintenanceFormOpen}
-        unitId={activeLease?.unitId}
-      />
+        {/* Maintenance Request Form Modal */}
+        <MaintenanceRequestForm
+          open={isMaintenanceFormOpen}
+          onOpenChange={setIsMaintenanceFormOpen}
+          unitId={activeLease?.unitId}
+        />
 
-      {/* Edit Profile Modal */}
-      <Dialog open={isProfileEditOpen} onOpenChange={setIsProfileEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Profile</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="firstName">First Name</Label>
-                <Input
-                  id="firstName"
-                  value={profileForm.firstName}
-                  onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
-                  placeholder="Enter first name"
-                />
+        {/* Edit Profile Modal */}
+        <Dialog open={isProfileEditOpen} onOpenChange={setIsProfileEditOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Profile</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="firstName">First Name</Label>
+                  <Input
+                    id="firstName"
+                    value={profileForm.firstName}
+                    onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                    placeholder="Enter first name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lastName">Last Name</Label>
+                  <Input
+                    id="lastName"
+                    value={profileForm.lastName}
+                    onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                    placeholder="Enter last name"
+                  />
+                </div>
               </div>
               <div>
-                <Label htmlFor="lastName">Last Name</Label>
+                <Label htmlFor="email">Email Address</Label>
                 <Input
-                  id="lastName"
-                  value={profileForm.lastName}
-                  onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
-                  placeholder="Enter last name"
+                  id="email"
+                  type="email"
+                  value={profileForm.email}
+                  onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                  placeholder="Enter email address"
                 />
               </div>
-            </div>
-            <div>
-              <Label htmlFor="email">Email Address</Label>
-              <Input
-                id="email"
-                type="email"
-                value={profileForm.email}
-                onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                placeholder="Enter email address"
-              />
-            </div>
-            <div>
-              <Label htmlFor="phoneNumber">Phone Number (with +254...)</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="phoneNumber"
-                  value={profileForm.phoneNumber}
-                  onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
-                  placeholder="+254712345678"
-                  className="flex-1"
-                />
-                {profileForm.phoneNumber && profileForm.phoneNumber !== (user as any)?.phoneNumber && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
-                    disabled={requestPhoneUpdateMutation.isPending}
-                  >
-                    {requestPhoneUpdateMutation.isPending ? "Sending..." : "Verify"}
-                  </Button>
-                )}
-                {profileForm.phoneNumber && profileForm.phoneNumber === (user as any)?.phoneNumber && !(user as any)?.phoneVerified && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
-                    disabled={requestPhoneUpdateMutation.isPending}
-                  >
-                    {requestPhoneUpdateMutation.isPending ? "Verify" : "Resend OTP"}
-                  </Button>
+              <div>
+                <Label htmlFor="phoneNumber">Phone Number (with +254...)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="phoneNumber"
+                    value={profileForm.phoneNumber}
+                    onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
+                    placeholder="+254712345678"
+                    className="flex-1"
+                  />
+                  {profileForm.phoneNumber && profileForm.phoneNumber !== (user as any)?.phoneNumber && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
+                      disabled={requestPhoneUpdateMutation.isPending}
+                    >
+                      {requestPhoneUpdateMutation.isPending ? "Sending..." : "Verify"}
+                    </Button>
+                  )}
+                  {profileForm.phoneNumber && profileForm.phoneNumber === (user as any)?.phoneNumber && !(user as any)?.phoneVerified && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
+                      disabled={requestPhoneUpdateMutation.isPending}
+                    >
+                      {requestPhoneUpdateMutation.isPending ? "Verify" : "Resend OTP"}
+                    </Button>
+                  )}
+                </div>
+                {(user as any)?.phoneVerified && profileForm.phoneNumber === (user as any)?.phoneNumber && (
+                  <p className="text-xs text-green-600 mt-1 flex items-center">
+                    <CheckCircle className="h-3 w-3 mr-1" /> Verified
+                  </p>
                 )}
               </div>
-              {(user as any)?.phoneVerified && profileForm.phoneNumber === (user as any)?.phoneNumber && (
-                <p className="text-xs text-green-600 mt-1 flex items-center">
-                  <CheckCircle className="h-3 w-3 mr-1" /> Verified
-                </p>
-              )}
-            </div>
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button variant="outline" onClick={() => setIsProfileEditOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  profileUpdateMutation.mutate({
-                    firstName: profileForm.firstName,
-                    lastName: profileForm.lastName,
-                    email: profileForm.email
-                  });
-                }}
-                disabled={profileUpdateMutation.isPending}
-              >
-                {profileUpdateMutation.isPending ? "Updating..." : "Save Changes"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* OTP Verification Modal */}
-      <Dialog open={isOtpDialogOpen} onOpenChange={setIsOtpDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-center">Verify Phone Number</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-sm text-center text-muted-foreground">
-              Enter the 6-digit code sent to {profileForm.phoneNumber}
-            </p>
-            <div className="flex justify-center">
-              <Input
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, "").substring(0, 6))}
-                className="text-center text-2xl tracking-[0.5em] h-12 w-48"
-                placeholder="000000"
-                autoFocus
-              />
-            </div>
-            <Button
-              className="w-full h-12"
-              disabled={otpCode.length !== 6 || verifyPhoneUpdateMutation.isPending}
-              onClick={() => verifyPhoneUpdateMutation.mutate({
-                phoneNumber: profileForm.phoneNumber,
-                code: otpCode
-              })}
-            >
-              {verifyPhoneUpdateMutation.isPending ? "Verifying..." : "Confirm Verification"}
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full"
-              onClick={() => setIsOtpDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Change Password Modal */}
-      <Dialog open={isPasswordChangeOpen} onOpenChange={setIsPasswordChangeOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Change Password</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="currentPassword">Current Password</Label>
-              <Input
-                id="currentPassword"
-                type="password"
-                value={passwordForm.currentPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                placeholder="Enter current password"
-              />
-            </div>
-            <div>
-              <Label htmlFor="newPassword">New Password</Label>
-              <Input
-                id="newPassword"
-                type="password"
-                value={passwordForm.newPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                placeholder="Enter new password (min 8 characters)"
-              />
-            </div>
-            <div>
-              <Label htmlFor="confirmPassword">Confirm New Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={passwordForm.confirmPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                placeholder="Confirm new password"
-              />
-            </div>
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button variant="outline" onClick={() => setIsPasswordChangeOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-                    toast({
-                      title: "Error",
-                      description: "Passwords don't match",
-                      variant: "destructive",
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => setIsProfileEditOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    profileUpdateMutation.mutate({
+                      firstName: profileForm.firstName,
+                      lastName: profileForm.lastName,
+                      email: profileForm.email
                     });
-                    return;
-                  }
-                  passwordChangeMutation.mutate({
-                    currentPassword: passwordForm.currentPassword,
-                    newPassword: passwordForm.newPassword
-                  });
-                }}
-                disabled={passwordChangeMutation.isPending}
+                  }}
+                  disabled={profileUpdateMutation.isPending}
+                >
+                  {profileUpdateMutation.isPending ? "Updating..." : "Save Changes"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* OTP Verification Modal */}
+        <Dialog open={isOtpDialogOpen} onOpenChange={setIsOtpDialogOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-center">Verify Phone Number</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-center text-muted-foreground">
+                Enter the 6-digit code sent to {profileForm.phoneNumber}
+              </p>
+              <div className="flex justify-center">
+                <Input
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, "").substring(0, 6))}
+                  className="text-center text-2xl tracking-[0.5em] h-12 w-48"
+                  placeholder="000000"
+                  autoFocus
+                />
+              </div>
+              <Button
+                className="w-full h-12"
+                disabled={otpCode.length !== 6 || verifyPhoneUpdateMutation.isPending}
+                onClick={() => verifyPhoneUpdateMutation.mutate({
+                  phoneNumber: profileForm.phoneNumber,
+                  code: otpCode
+                })}
               >
-                {passwordChangeMutation.isPending ? "Updating..." : "Update Password"}
+                {verifyPhoneUpdateMutation.isPending ? "Verifying..." : "Confirm Verification"}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => setIsOtpDialogOpen(false)}
+              >
+                Cancel
               </Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </main>
-      </div >
-    </div >
+          </DialogContent>
+        </Dialog>
+
+        {/* Change Password Modal */}
+        <Dialog open={isPasswordChangeOpen} onOpenChange={setIsPasswordChangeOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Change Password</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="currentPassword">Current Password</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                  placeholder="Enter current password"
+                />
+              </div>
+              <div>
+                <Label htmlFor="newPassword">New Password</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                  placeholder="Enter new password (min 8 characters)"
+                />
+              </div>
+              <div>
+                <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                  placeholder="Confirm new password"
+                />
+              </div>
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => setIsPasswordChangeOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+                      toast({
+                        title: "Error",
+                        description: "Passwords don't match",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    passwordChangeMutation.mutate({
+                      currentPassword: passwordForm.currentPassword,
+                      newPassword: passwordForm.newPassword
+                    });
+                  }}
+                  disabled={passwordChangeMutation.isPending}
+                >
+                  {passwordChangeMutation.isPending ? "Updating..." : "Update Password"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
   );
 }
