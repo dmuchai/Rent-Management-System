@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useLocation } from "wouter";
 import Header from "@/components/layout/Header";
+import Sidebar from "@/components/layout/Sidebar";
 import StatsCard from "@/components/dashboard/StatsCard";
 import PaymentForm from "@/components/payments/PaymentForm";
 import EnhancedPaymentHistory from "@/components/payments/EnhancedPaymentHistory";
@@ -81,6 +82,10 @@ export default function TenantDashboard() {
   const [, setLocation] = useLocation();
   const [isMaintenanceFormOpen, setIsMaintenanceFormOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Profile management state
   const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
@@ -377,544 +382,562 @@ export default function TenantDashboard() {
   const hasOverdueRent = pendingPayments > 0 && daysUntilDue < 0;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header
-        title="Tenant Dashboard"
-        showSidebar={false}
-        onSectionChange={(section: string) => setActiveTab(section)}
+    <div className="flex min-h-screen bg-background">
+      <Sidebar
+        activeSection={activeTab}
+        onSectionChange={(section) => {
+          setActiveTab(section);
+          setIsSidebarOpen(false);
+        }}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        role="tenant"
       />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section with Alerts */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">
-            Welcome back, {user?.firstName || 'Tenant'}! 👋
-          </h1>
-          <p className="text-muted-foreground">
-            Manage your rental, payments, and maintenance requests
-          </p>
-        </div>
+      <div className="flex-1 min-w-0 transition-all duration-300">
+        <Header
+          title="Tenant Dashboard"
+          showSidebar={true}
+          onSectionChange={(section: string) => setActiveTab(section)}
+          onMenuClick={() => setIsSidebarOpen(true)}
+          onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          isSidebarCollapsed={isSidebarCollapsed}
+        />
 
-        {/* Alert Messages */}
-        {hasOverdueRent && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Payment Overdue</AlertTitle>
-            <AlertDescription>
-              You have overdue rent payments. Please make a payment as soon as possible to avoid late fees.
-            </AlertDescription>
-          </Alert>
-        )}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Welcome Section with Alerts */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold mb-2">
+              Welcome back, {user?.firstName || 'Tenant'}! 👋
+            </h1>
+            <p className="text-muted-foreground">
+              Manage your rental, payments, and maintenance requests
+            </p>
+          </div>
 
-        {activeLease && daysRemainingInLease < 30 && daysRemainingInLease > 0 && (
-          <Alert className="mb-6 border-orange-200 bg-orange-50">
-            <Clock className="h-4 w-4 text-orange-600" />
-            <AlertTitle className="text-orange-900">Lease Expiring Soon</AlertTitle>
-            <AlertDescription className="text-orange-800">
-              Your lease expires in {daysRemainingInLease} days. Please contact your landlord to discuss renewal.
-            </AlertDescription>
-          </Alert>
-        )}
+          {/* Alert Messages */}
+          {hasOverdueRent && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Payment Overdue</AlertTitle>
+              <AlertDescription>
+                You have overdue rent payments. Please make a payment as soon as possible to avoid late fees.
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {/* Quick Stats Grid */}
-        <motion.div
-          className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
-          initial="hidden"
-          animate="visible"
-          variants={{
-            visible: { transition: { staggerChildren: 0.1 } }
-          }}
-        >
-          {[
-            { title: "Current Rent", value: activeLease ? `KES ${parseFloat(activeLease.monthlyRent).toLocaleString()}` : "N/A", subtitle: "Monthly payment", icon: "fas fa-money-bill-wave", color: "chart-2" as const, testId: "stat-currentrent", loading: leasesLoading },
-            { title: "Next Due Date", value: nextDueDate.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }), subtitle: `${daysUntilDue} days remaining`, icon: "fas fa-calendar", color: daysUntilDue < 7 ? "destructive" as const : "chart-4" as const, testId: "stat-nextdue", loading: leasesLoading },
-            { title: "Total Paid", value: `KES ${totalPaid.toLocaleString()}`, subtitle: `${completedPayments} payments made`, icon: "fas fa-check-circle", color: "primary" as const, testId: "stat-totalpaid", loading: paymentsLoading },
-            { title: "Maintenance", value: maintenanceRequests.length, subtitle: `${pendingMaintenance} pending`, icon: "fas fa-tools", color: pendingMaintenance > 0 ? "destructive" as const : "chart-4" as const, testId: "stat-maintenance", loading: maintenanceLoading }
-          ].map((stat, idx) => (
-            <motion.div
-              key={idx}
-              variants={{
-                hidden: { opacity: 0, y: 20 },
-                visible: { opacity: 1, y: 0 }
-              }}
-              whileHover={{ y: -5, transition: { duration: 0.2 } }}
-            >
-              <StatsCard
-                title={stat.title}
-                value={stat.value}
-                subtitle={stat.subtitle}
-                icon={stat.icon}
-                color={stat.color}
-                loading={stat.loading}
-                data-testid={stat.testId}
-              />
-            </motion.div>
-          ))}
-        </motion.div>
+          {activeLease && daysRemainingInLease < 30 && daysRemainingInLease > 0 && (
+            <Alert className="mb-6 border-orange-200 bg-orange-50">
+              <Clock className="h-4 w-4 text-orange-600" />
+              <AlertTitle className="text-orange-900">Lease Expiring Soon</AlertTitle>
+              <AlertDescription className="text-orange-800">
+                Your lease expires in {daysRemainingInLease} days. Please contact your landlord to discuss renewal.
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {/* Main Content Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">
-              <Home className="h-4 w-4 mr-2" />
-              Overview
-            </TabsTrigger>
-            <TabsTrigger value="payments">
-              <CreditCard className="h-4 w-4 mr-2" />
-              Payments
-            </TabsTrigger>
-            <TabsTrigger value="maintenance">
-              <AlertCircle className="h-4 w-4 mr-2" />
-              Maintenance
-            </TabsTrigger>
-            <TabsTrigger value="documents">
-              <FileText className="h-4 w-4 mr-2" />
-              Documents
-            </TabsTrigger>
-            <TabsTrigger value="profile">
-              <User className="h-4 w-4 mr-2" />
-              Profile
-            </TabsTrigger>
-          </TabsList>
+          {/* Quick Stats Grid */}
+          <motion.div
+            className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              visible: { transition: { staggerChildren: 0.1 } }
+            }}
+          >
+            {[
+              { title: "Current Rent", value: activeLease ? `KES ${parseFloat(activeLease.monthlyRent).toLocaleString()}` : "N/A", subtitle: "Monthly payment", icon: "fas fa-money-bill-wave", color: "chart-2" as const, testId: "stat-currentrent", loading: leasesLoading },
+              { title: "Next Due Date", value: nextDueDate.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' }), subtitle: `${daysUntilDue} days remaining`, icon: "fas fa-calendar", color: daysUntilDue < 7 ? "destructive" as const : "chart-4" as const, testId: "stat-nextdue", loading: leasesLoading },
+              { title: "Total Paid", value: `KES ${totalPaid.toLocaleString()}`, subtitle: `${completedPayments} payments made`, icon: "fas fa-check-circle", color: "primary" as const, testId: "stat-totalpaid", loading: paymentsLoading },
+              { title: "Maintenance", value: maintenanceRequests.length, subtitle: `${pendingMaintenance} pending`, icon: "fas fa-tools", color: pendingMaintenance > 0 ? "destructive" as const : "chart-4" as const, testId: "stat-maintenance", loading: maintenanceLoading }
+            ].map((stat, idx) => (
+              <motion.div
+                key={idx}
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  visible: { opacity: 1, y: 0 }
+                }}
+                whileHover={{ y: -5, transition: { duration: 0.2 } }}
+              >
+                <StatsCard
+                  title={stat.title}
+                  value={stat.value}
+                  subtitle={stat.subtitle}
+                  icon={stat.icon}
+                  color={stat.color}
+                  loading={stat.loading}
+                  data-testid={stat.testId}
+                />
+              </motion.div>
+            ))}
+          </motion.div>
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            <motion.div
-              className="grid lg:grid-cols-2 gap-6"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              {/* Property Information Card */}
-              <Card className="overflow-hidden">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Home className="h-5 w-5 mr-2" />
-                    Your Property
-                  </CardTitle>
-                  <CardDescription>Rental unit details and lease information</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {leasesLoading ? (
-                    <div className="space-y-4">
-                      <Skeleton className="w-full h-48 rounded-lg" />
-                      <div className="space-y-2">
-                        <Skeleton className="h-6 w-48" />
-                        <Skeleton className="h-4 w-64" />
-                        <Skeleton className="h-6 w-24" />
-                      </div>
-                      <div className="space-y-3 pt-4 border-t">
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-4 w-full" />
-                      </div>
-                    </div>
-                  ) : activeLease ? (
-                    <div className="space-y-4">
-                      <div className="overflow-hidden rounded-lg">
-                        <motion.img
-                          whileHover={{ scale: 1.05 }}
-                          transition={{ duration: 0.4 }}
-                          src={activeLease.unit?.property?.imageUrl || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300"}
-                          alt={activeLease.unit?.property?.name || "Property"}
-                          className="w-full h-48 object-cover"
-                          data-testid="img-property"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src = "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300";
-                          }}
-                        />
-                      </div>
-                      {activeLease.unit && (
+          {/* Tabs Content */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            {/* TabsList is hidden on desktop when sidebar is present, but kept for quick mobile switching if preferred, 
+              or removed entirely for consistency. Landlord removes it. */}
+            <TabsList className="grid w-full grid-cols-5 md:hidden">
+              <TabsTrigger value="overview">
+                <Home className="h-4 w-4 mr-2" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="payments">
+                <CreditCard className="h-4 w-4 mr-2" />
+                Payments
+              </TabsTrigger>
+              <TabsTrigger value="maintenance">
+                <AlertCircle className="h-4 w-4 mr-2" />
+                Maintenance
+              </TabsTrigger>
+              <TabsTrigger value="documents">
+                <FileText className="h-4 w-4 mr-2" />
+                Documents
+              </TabsTrigger>
+              <TabsTrigger value="profile">
+                <User className="h-4 w-4 mr-2" />
+                Profile
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Overview Tab */}
+            <TabsContent value="overview" className="space-y-6">
+              <motion.div
+                className="grid lg:grid-cols-2 gap-6"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+              >
+                {/* Property Information Card */}
+                <Card className="overflow-hidden">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Home className="h-5 w-5 mr-2" />
+                      Your Property
+                    </CardTitle>
+                    <CardDescription>Rental unit details and lease information</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {leasesLoading ? (
+                      <div className="space-y-4">
+                        <Skeleton className="w-full h-48 rounded-lg" />
                         <div className="space-y-2">
-                          <h4 className="font-semibold text-lg">{activeLease.unit.property.name}</h4>
-                          <p className="text-sm text-muted-foreground">{activeLease.unit.property.address}</p>
-                          <div className="flex flex-wrap gap-2">
-                            <Badge>{activeLease.unit.property.propertyType}</Badge>
-                            <Badge variant="outline">Unit {activeLease.unit.unitNumber}</Badge>
-                          </div>
+                          <Skeleton className="h-6 w-48" />
+                          <Skeleton className="h-4 w-64" />
+                          <Skeleton className="h-6 w-24" />
                         </div>
-                      )}
-                      <div className="space-y-3 pt-4 border-t">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Monthly Rent</span>
-                          <span className="font-semibold" data-testid="text-monthlyrent">
-                            KES {parseFloat(activeLease.monthlyRent).toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Lease Start</span>
-                          <span className="font-medium" data-testid="text-leasestart">
-                            {new Date(activeLease.startDate).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Lease End</span>
-                          <span className="font-medium" data-testid="text-leaseend">
-                            {new Date(activeLease.endDate).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div className="pt-2">
-                          <div className="flex justify-between text-sm mb-2">
-                            <span className="text-muted-foreground">Lease Progress</span>
-                            <span className="font-medium">{Math.round(leaseProgress)}%</span>
-                          </div>
-                          <Progress value={leaseProgress} className="h-2" />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {daysRemainingInLease} days remaining
-                          </p>
+                        <div className="space-y-3 pt-4 border-t">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-full" />
                         </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <Home className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground" data-testid="text-nolease">
-                        No active lease found
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        Please contact your landlord
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Quick Payment Card */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <CreditCard className="h-5 w-5 mr-2" />
-                    Make Payment
-                  </CardTitle>
-                  <CardDescription>Pay your rent quickly and securely</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {activeLease ? (
-                    <PaymentForm tenantView={true} activeLease={activeLease} />
-                  ) : (
-                    <div className="text-center py-8">
-                      <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground" data-testid="text-nopaymentform">
-                        No active lease for payments
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Recent Activity */}
-            <div className="grid lg:grid-cols-2 gap-6">
-              {/* Recent Payments */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Payments</CardTitle>
-                  <CardDescription>Your last 3 rent payments</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {paymentsLoading ? (
-                    <div className="space-y-4">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <Skeleton className="w-10 h-10 rounded-lg" />
-                            <div className="space-y-2">
-                              <Skeleton className="h-4 w-24" />
-                              <Skeleton className="h-3 w-32" />
+                    ) : activeLease ? (
+                      <div className="space-y-4">
+                        <div className="overflow-hidden rounded-lg">
+                          <motion.img
+                            whileHover={{ scale: 1.05 }}
+                            transition={{ duration: 0.4 }}
+                            src={activeLease.unit?.property?.imageUrl || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300"}
+                            alt={activeLease.unit?.property?.name || "Property"}
+                            className="w-full h-48 object-cover"
+                            data-testid="img-property"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300";
+                            }}
+                          />
+                        </div>
+                        {activeLease.unit && (
+                          <div className="space-y-2">
+                            <h4 className="font-semibold text-lg">{activeLease.unit.property.name}</h4>
+                            <p className="text-sm text-muted-foreground">{activeLease.unit.property.address}</p>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge>{activeLease.unit.property.propertyType}</Badge>
+                              <Badge variant="outline">Unit {activeLease.unit.unitNumber}</Badge>
                             </div>
                           </div>
-                          <Skeleton className="h-6 w-16" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : payments.length > 0 ? (
-                    <div className="space-y-3">
-                      {payments.slice(0, 3).map((payment: any) => (
-                        <div key={payment.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${payment.status === 'completed' ? 'bg-green-100' :
-                              payment.status === 'failed' ? 'bg-red-100' : 'bg-yellow-100'
-                              }`}>
-                              {payment.status === 'completed' ? (
-                                <CheckCircle className="h-5 w-5 text-green-600" />
-                              ) : payment.status === 'failed' ? (
-                                <AlertCircle className="h-5 w-5 text-red-600" />
-                              ) : (
-                                <Clock className="h-5 w-5 text-yellow-600" />
-                              )}
+                        )}
+                        <div className="space-y-3 pt-4 border-t">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Monthly Rent</span>
+                            <span className="font-semibold" data-testid="text-monthlyrent">
+                              KES {parseFloat(activeLease.monthlyRent).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Lease Start</span>
+                            <span className="font-medium" data-testid="text-leasestart">
+                              {new Date(activeLease.startDate).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Lease End</span>
+                            <span className="font-medium" data-testid="text-leaseend">
+                              {new Date(activeLease.endDate).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="pt-2">
+                            <div className="flex justify-between text-sm mb-2">
+                              <span className="text-muted-foreground">Lease Progress</span>
+                              <span className="font-medium">{Math.round(leaseProgress)}%</span>
                             </div>
+                            <Progress value={leaseProgress} className="h-2" />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {daysRemainingInLease} days remaining
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <Home className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground" data-testid="text-nolease">
+                          No active lease found
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Please contact your landlord
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Quick Payment Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <CreditCard className="h-5 w-5 mr-2" />
+                      Make Payment
+                    </CardTitle>
+                    <CardDescription>Pay your rent quickly and securely</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {activeLease ? (
+                      <PaymentForm tenantView={true} activeLease={activeLease} />
+                    ) : (
+                      <div className="text-center py-8">
+                        <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground" data-testid="text-nopaymentform">
+                          No active lease for payments
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Recent Activity */}
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Recent Payments */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Payments</CardTitle>
+                    <CardDescription>Your last 3 rent payments</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {paymentsLoading ? (
+                      <div className="space-y-4">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center space-x-3">
+                              <Skeleton className="w-10 h-10 rounded-lg" />
+                              <div className="space-y-2">
+                                <Skeleton className="h-4 w-24" />
+                                <Skeleton className="h-3 w-32" />
+                              </div>
+                            </div>
+                            <Skeleton className="h-6 w-16" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : payments.length > 0 ? (
+                      <div className="space-y-3">
+                        {payments.slice(0, 3).map((payment: any) => (
+                          <div key={payment.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center space-x-3">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${payment.status === 'completed' ? 'bg-green-100' :
+                                payment.status === 'failed' ? 'bg-red-100' : 'bg-yellow-100'
+                                }`}>
+                                {payment.status === 'completed' ? (
+                                  <CheckCircle className="h-5 w-5 text-green-600" />
+                                ) : payment.status === 'failed' ? (
+                                  <AlertCircle className="h-5 w-5 text-red-600" />
+                                ) : (
+                                  <Clock className="h-5 w-5 text-yellow-600" />
+                                )}
+                              </div>
+                              <div>
+                                <p className="font-medium">KES {parseFloat(payment.amount).toLocaleString()}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {payment.paidDate ? new Date(payment.paidDate).toLocaleDateString() : 'Pending'}
+                                </p>
+                              </div>
+                            </div>
+                            <Badge variant={
+                              payment.status === 'completed' ? 'default' :
+                                payment.status === 'failed' ? 'destructive' : 'secondary'
+                            }>
+                              {payment.status}
+                            </Badge>
+                          </div>
+                        ))}
+                        <Button
+                          variant="outline"
+                          className="w-full mt-4"
+                          onClick={() => setActiveTab("payments")}
+                        >
+                          View All Payments
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-center text-muted-foreground py-8">No payments yet</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Recent Maintenance */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle>Maintenance Requests</CardTitle>
+                      <CardDescription>Recent service requests</CardDescription>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => setIsMaintenanceFormOpen(true)}
+                    >
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      New Request
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {maintenanceLoading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                      </div>
+                    ) : maintenanceRequests.length > 0 ? (
+                      <div className="space-y-3">
+                        {maintenanceRequests.slice(0, 3).map((request: any) => (
+                          <div key={request.id} className="flex items-center justify-between p-3 border rounded-lg">
                             <div>
-                              <p className="font-medium">KES {parseFloat(payment.amount).toLocaleString()}</p>
+                              <p className="font-medium">{request.title || 'Maintenance Request'}</p>
                               <p className="text-sm text-muted-foreground">
-                                {payment.paidDate ? new Date(payment.paidDate).toLocaleDateString() : 'Pending'}
+                                {new Date(request.createdAt).toLocaleDateString()}
                               </p>
                             </div>
+                            <Badge variant={
+                              request.status === 'completed' ? 'default' :
+                                request.status === 'in_progress' ? 'secondary' : 'outline'
+                            }>
+                              {request.status}
+                            </Badge>
                           </div>
-                          <Badge variant={
-                            payment.status === 'completed' ? 'default' :
-                              payment.status === 'failed' ? 'destructive' : 'secondary'
-                          }>
-                            {payment.status}
-                          </Badge>
-                        </div>
-                      ))}
-                      <Button
-                        variant="outline"
-                        className="w-full mt-4"
-                        onClick={() => setActiveTab("payments")}
-                      >
-                        View All Payments
-                      </Button>
-                    </div>
-                  ) : (
-                    <p className="text-center text-muted-foreground py-8">No payments yet</p>
-                  )}
+                        ))}
+                        <Button
+                          variant="outline"
+                          className="w-full mt-4"
+                          onClick={() => setActiveTab("maintenance")}
+                        >
+                          View All Requests
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground">No maintenance requests</p>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          All systems running smoothly! 🎉
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* Payments Tab */}
+            <TabsContent value="payments" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Payment History</CardTitle>
+                  <CardDescription>Complete record of all your rent payments</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <EnhancedPaymentHistory limit={10} showViewAll={false} />
                 </CardContent>
               </Card>
+            </TabsContent>
 
-              {/* Recent Maintenance */}
+            {/* Maintenance Tab */}
+            <TabsContent value="maintenance" className="space-y-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
                     <CardTitle>Maintenance Requests</CardTitle>
-                    <CardDescription>Recent service requests</CardDescription>
+                    <CardDescription>Track and manage your service requests</CardDescription>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={() => setIsMaintenanceFormOpen(true)}
-                  >
+                  <Button onClick={() => setIsMaintenanceFormOpen(true)}>
                     <AlertCircle className="h-4 w-4 mr-2" />
                     New Request
                   </Button>
                 </CardHeader>
                 <CardContent>
-                  {maintenanceLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                    </div>
-                  ) : maintenanceRequests.length > 0 ? (
-                    <div className="space-y-3">
-                      {maintenanceRequests.slice(0, 3).map((request: any) => (
-                        <div key={request.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div>
-                            <p className="font-medium">{request.title || 'Maintenance Request'}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(request.createdAt).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <Badge variant={
-                            request.status === 'completed' ? 'default' :
-                              request.status === 'in_progress' ? 'secondary' : 'outline'
-                          }>
-                            {request.status}
-                          </Badge>
-                        </div>
-                      ))}
-                      <Button
-                        variant="outline"
-                        className="w-full mt-4"
-                        onClick={() => setActiveTab("maintenance")}
-                      >
-                        View All Requests
-                      </Button>
+                  <MaintenanceRequestList limit={20} showViewAll={false} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Documents Tab */}
+            <TabsContent value="documents" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Documents</CardTitle>
+                  <CardDescription>Lease agreements, receipts, and important files</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {documents.length === 0 ? (
+                    <div className="text-center py-12">
+                      <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground" data-testid="text-nodocuments">
+                        No documents available
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Documents will appear here when uploaded by your landlord
+                      </p>
                     </div>
                   ) : (
-                    <div className="text-center py-8">
-                      <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">No maintenance requests</p>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        All systems running smoothly! 🎉
-                      </p>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {documents.map((document: any) => (
+                        <div
+                          key={document.id}
+                          className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"
+                          data-testid={`document-item-${document.id}`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="w-12 h-12 bg-destructive/10 rounded-lg flex items-center justify-center">
+                              <FileText className="h-6 w-6 text-destructive" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{document.name}</p>
+                              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                                <span>{document.fileSize ? `${(document.fileSize / 1024 / 1024).toFixed(1)} MB` : 'Unknown size'}</span>
+                                <span>•</span>
+                                <span>{document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString() : 'N/A'}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <Button variant="ghost" size="sm" data-testid={`button-download-${document.id}`}>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </CardContent>
               </Card>
-            </div>
-          </TabsContent>
+            </TabsContent>
 
-          {/* Payments Tab */}
-          <TabsContent value="payments" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Payment History</CardTitle>
-                <CardDescription>Complete record of all your rent payments</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <EnhancedPaymentHistory limit={10} showViewAll={false} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Maintenance Tab */}
-          <TabsContent value="maintenance" className="space-y-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Maintenance Requests</CardTitle>
-                  <CardDescription>Track and manage your service requests</CardDescription>
-                </div>
-                <Button onClick={() => setIsMaintenanceFormOpen(true)}>
-                  <AlertCircle className="h-4 w-4 mr-2" />
-                  New Request
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <MaintenanceRequestList limit={20} showViewAll={false} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Documents Tab */}
-          <TabsContent value="documents" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Documents</CardTitle>
-                <CardDescription>Lease agreements, receipts, and important files</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {documents.length === 0 ? (
-                  <div className="text-center py-12">
-                    <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground" data-testid="text-nodocuments">
-                      No documents available
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Documents will appear here when uploaded by your landlord
-                    </p>
+            {/* Profile Tab */}
+            <TabsContent value="profile" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <User className="h-5 w-5 mr-3 text-blue-600" />
+                    Personal Information
+                  </CardTitle>
+                  <CardDescription>
+                    Manage your account details and preferences
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Full Name</label>
+                      <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
+                        {user?.firstName || 'Not provided'} {user?.lastName || ''}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Email Address</label>
+                      <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
+                        {user?.email || 'Not provided'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Phone Number</label>
+                      <div className="flex items-center gap-2">
+                        <p className="text-gray-900 bg-gray-50 p-3 rounded-md border flex-1">
+                          {(user as any)?.phoneNumber || 'Not provided'}
+                        </p>
+                        {(user as any)?.phoneNumber && (
+                          <Badge variant={(user as any).phoneVerified ? "default" : "destructive"} className={(user as any).phoneVerified ? "bg-green-100 text-green-700" : ""}>
+                            {(user as any).phoneVerified ? (
+                              <><CheckCircle className="h-3 w-3 mr-1" /> Verified</>
+                            ) : (
+                              <><AlertCircle className="h-3 w-3 mr-1" /> Unverified</>
+                            )}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Account Created</label>
+                      <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
+                        {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Not available'}
+                      </p>
+                    </div>
                   </div>
-                ) : (
-                  <div className="grid md:grid-cols-2 gap-4">
-                    {documents.map((document: any) => (
-                      <div
-                        key={document.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow"
-                        data-testid={`document-item-${document.id}`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-destructive/10 rounded-lg flex items-center justify-center">
-                            <FileText className="h-6 w-6 text-destructive" />
-                          </div>
-                          <div>
-                            <p className="font-medium">{document.name}</p>
-                            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                              <span>{document.fileSize ? `${(document.fileSize / 1024 / 1024).toFixed(1)} MB` : 'Unknown size'}</span>
-                              <span>•</span>
-                              <span>{document.uploadedAt ? new Date(document.uploadedAt).toLocaleDateString() : 'N/A'}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="sm" data-testid={`button-download-${document.id}`}>
-                          <Download className="h-4 w-4" />
+
+                  <div className="border-t pt-4 mt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-medium text-gray-900">Account Actions</h3>
+                        <p className="text-sm text-gray-600">Manage your account settings</p>
+                      </div>
+                      <div className="flex space-x-3">
+                        <Button variant="outline" onClick={() => setIsProfileEditOpen(true)}>
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit Profile
+                        </Button>
+                        <Button variant="outline" onClick={() => setIsPasswordChangeOpen(true)}>
+                          <Key className="h-4 w-4 mr-2" />
+                          Change Password
                         </Button>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                </CardContent>
+              </Card>
 
-          {/* Profile Tab */}
-          <TabsContent value="profile" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <User className="h-5 w-5 mr-3 text-blue-600" />
-                  Personal Information
-                </CardTitle>
-                <CardDescription>
-                  Manage your account details and preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Full Name</label>
-                    <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
-                      {user?.firstName || 'Not provided'} {user?.lastName || ''}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Email Address</label>
-                    <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
-                      {user?.email || 'Not provided'}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Phone Number</label>
-                    <div className="flex items-center gap-2">
-                      <p className="text-gray-900 bg-gray-50 p-3 rounded-md border flex-1">
-                        {(user as any)?.phoneNumber || 'Not provided'}
-                      </p>
-                      {(user as any)?.phoneNumber && (
-                        <Badge variant={(user as any).phoneVerified ? "default" : "destructive"} className={(user as any).phoneVerified ? "bg-green-100 text-green-700" : ""}>
-                          {(user as any).phoneVerified ? (
-                            <><CheckCircle className="h-3 w-3 mr-1" /> Verified</>
-                          ) : (
-                            <><AlertCircle className="h-3 w-3 mr-1" /> Unverified</>
-                          )}
-                        </Badge>
-                      )}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Settings className="h-5 w-5 mr-3 text-gray-600" />
+                    Preferences
+                  </CardTitle>
+                  <CardDescription>
+                    Customize your dashboard experience
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Email Notifications</label>
+                      <div className="flex items-center space-x-2">
+                        <input type="checkbox" defaultChecked className="rounded border-gray-300" />
+                        <span className="text-sm text-gray-600">Receive payment reminders</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input type="checkbox" defaultChecked className="rounded border-gray-300" />
+                        <span className="text-sm text-gray-600">Property maintenance alerts</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Account Created</label>
-                    <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
-                      {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Not available'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="border-t pt-4 mt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900">Account Actions</h3>
-                      <p className="text-sm text-gray-600">Manage your account settings</p>
-                    </div>
-                    <div className="flex space-x-3">
-                      <Button variant="outline" onClick={() => setIsProfileEditOpen(true)}>
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit Profile
-                      </Button>
-                      <Button variant="outline" onClick={() => setIsPasswordChangeOpen(true)}>
-                        <Key className="h-4 w-4 mr-2" />
-                        Change Password
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Settings className="h-5 w-5 mr-3 text-gray-600" />
-                  Preferences
-                </CardTitle>
-                <CardDescription>
-                  Customize your dashboard experience
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Email Notifications</label>
-                    <div className="flex items-center space-x-2">
-                      <input type="checkbox" defaultChecked className="rounded border-gray-300" />
-                      <span className="text-sm text-gray-600">Receive payment reminders</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <input type="checkbox" defaultChecked className="rounded border-gray-300" />
-                      <span className="text-sm text-gray-600">Property maintenance alerts</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
       </div>
 
       {/* Maintenance Request Form Modal */}
@@ -1123,6 +1146,8 @@ export default function TenantDashboard() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
+      </div >
+    </div >
   );
 }

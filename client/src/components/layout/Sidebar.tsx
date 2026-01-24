@@ -8,20 +8,24 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   isCollapsed?: boolean;
+  role?: string;
 }
 
 const navItems = [
-  { id: "overview", label: "Overview", icon: "fas fa-chart-pie" },
-  { id: "properties", label: "Properties", icon: "fas fa-building" },
-  { id: "tenants", label: "Tenants", icon: "fas fa-users" },
-  { id: "leases", label: "Leases", icon: "fas fa-file-contract" },
-  { id: "payments", label: "Payments", icon: "fas fa-credit-card" },
-  { id: "documents", label: "Documents", icon: "fas fa-file-alt" },
-  { id: "reports", label: "Reports", icon: "fas fa-chart-line" },
-  { id: "profile", label: "Profile", icon: "fas fa-user-circle" },
+  { id: "overview", label: "Overview", icon: "fas fa-chart-pie", roles: ["landlord", "property_manager", "tenant"] },
+  { id: "properties", label: "Properties", icon: "fas fa-building", roles: ["landlord", "property_manager"] },
+  { id: "tenants", label: "Tenants", icon: "fas fa-users", roles: ["landlord", "property_manager"] },
+  { id: "leases", label: "Leases", icon: "fas fa-file-contract", roles: ["landlord", "property_manager"] },
+  { id: "payments", label: "Payments", icon: "fas fa-credit-card", roles: ["landlord", "property_manager", "tenant"] },
+  { id: "maintenance", label: "Maintenance", icon: "fas fa-tools", roles: ["tenant"] }, // Added for tenants
+  { id: "documents", label: "Documents", icon: "fas fa-file-alt", roles: ["landlord", "property_manager", "tenant"] },
+  { id: "reports", label: "Reports", icon: "fas fa-chart-line", roles: ["landlord", "property_manager"] },
+  { id: "profile", label: "Profile", icon: "fas fa-user-circle", roles: ["landlord", "property_manager", "tenant"] },
 ];
 
-export default function Sidebar({ activeSection, onSectionChange, isOpen, onClose, isCollapsed = false }: SidebarProps) {
+export default function Sidebar({ activeSection, onSectionChange, isOpen, onClose, isCollapsed = false, role = "landlord" }: SidebarProps) {
+  const filteredNavItems = navItems.filter(item => item.roles.includes(role));
+
   const handleNavClick = (sectionId: string) => {
     onSectionChange(sectionId);
     // Auto-close on mobile after selection
@@ -34,7 +38,7 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
     <>
       {/* Mobile overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={onClose}
         />
@@ -54,18 +58,18 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
           <div className="p-6 flex items-center justify-between">
             <div className="flex items-center">
               {isCollapsed ? (
-                <img 
-                  src="/favicon.png" 
-                  alt="Landee & Moony" 
+                <img
+                  src="/favicon.png"
+                  alt="Landee & Moony"
                   className="h-8 w-8"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}
                 />
               ) : (
-                <img 
-                  src="/logo-full.png" 
-                  alt="Landee & Moony" 
+                <img
+                  src="/logo-full.png"
+                  alt="Landee & Moony"
                   className="h-8"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
@@ -82,11 +86,11 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
               <X className="h-5 w-5" />
             </Button>
           </div>
-          
+
           {/* Navigation */}
           <nav className="px-4 flex-1 overflow-y-auto">
             <div className="space-y-1">
-              {navItems.map((item) => (
+              {filteredNavItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id)}
