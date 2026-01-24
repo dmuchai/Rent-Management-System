@@ -31,15 +31,42 @@ function getAdminClient() {
 }
 
 async function getUserFromAuthHeader(req: VercelRequest) {
+  const isDebugMode = process.env.DEBUG === "true" || process.env.NODE_ENV !== "production";
+
+  // 1. Check Authorization header
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) return null;
+  let token = authHeader?.startsWith("Bearer ") ? authHeader.replace("Bearer ", "") : null;
 
-  const token = authHeader.replace("Bearer ", "");
-  const supabase = getSupabaseClient();
+  // 2. Fallback to supabase-auth-token cookie
+  if (!token && req.headers.cookie) {
+    const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
+      const [key, value] = cookie.trim().split('=');
+      acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
 
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return null;
+    token = cookies['supabase-auth-token'] || null;
+    if (token && isDebugMode) console.log("[Auth] Token found in 'supabase-auth-token' cookie");
+  }
 
+  if (!token) {
+    if (isDebugMode) console.warn("[Auth] No Bearer token or cookie found in request");
+    return null;
+  }
+
+  // Use Admin client (Service Role) for verification to be consistent with _lib/auth.ts
+  const admin = getAdminClient();
+
+  const { data, error } = await admin.auth.getUser(token);
+
+  if (error || !data.user) {
+    if (isDebugMode) {
+      console.error("[Auth] Token verification failed:", error?.message || "User not found");
+    }
+    return null;
+  }
+
+  if (isDebugMode) console.log(`[Auth] User ${data.user.id} verified successfully`);
   return data.user;
 }
 
