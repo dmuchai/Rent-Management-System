@@ -55,7 +55,10 @@ export class SmsService {
             return { status: 'mocked', message: 'Infobip credentials missing' };
         }
 
-        const baseUrl = this.infobipBaseUrl.endsWith('/') ? this.infobipBaseUrl.slice(0, -1) : this.infobipBaseUrl;
+        let baseUrl = this.infobipBaseUrl.endsWith('/') ? this.infobipBaseUrl.slice(0, -1) : this.infobipBaseUrl;
+        if (!baseUrl.startsWith('http')) {
+            baseUrl = `https://${baseUrl}`;
+        }
         const url = `${baseUrl}/sms/2/text/advanced`;
 
         const body = {
