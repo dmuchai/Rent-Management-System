@@ -6,13 +6,13 @@ const isLocal = typeof window !== 'undefined' && window.location.hostname === 'l
 
 // Backend API Base URLs
 const API_ENDPOINTS = {
-  // Use relative paths in development so it works on both localhost and local IP (mobile)
-  development: '',
-  // Production uses same-origin Vercel serverless functions
-  production: ''
+  // Use VITE_API_URL if defined (for mobile apps connecting to cloud backend)
+  // Otherwise default to empty string for same-origin web requests
+  development: import.meta.env.VITE_API_URL || '',
+  production: import.meta.env.VITE_API_URL || ''
 };
 
-export const API_BASE_URL = API_ENDPOINTS.development;
+export const API_BASE_URL = isDevelopment ? API_ENDPOINTS.development : API_ENDPOINTS.production;
 
 // Base path for the application (supports subdirectory deployments)
 // Set VITE_BASE_PATH environment variable if deploying to a subdirectory

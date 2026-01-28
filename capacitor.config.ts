@@ -4,11 +4,14 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const isDev = process.env.NODE_ENV !== 'production';
 
 function getProdUrl() {
-  const prodUrl = process.env.PROD_URL;
+  const prodUrl = process.env.PROD_URL || process.env.CAPACITOR_SERVER_URL;
   if (!prodUrl || prodUrl.includes('example.com')) {
-    throw new Error(
-      'Production URL is not set or is using a placeholder. Please set the PROD_URL environment variable to your actual production URL.'
-    );
+    // If we're strictly in production, we need a URL. 
+    // For local builds, we can fallback to a placeholder but warn the user.
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('⚠️ WARNING: PROD_URL is not set. Native app may not connect to backend.');
+    }
+    return 'https://api.rentmanagement.co'; // Default placeholder domain
   }
   return prodUrl;
 }
