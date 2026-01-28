@@ -14,7 +14,7 @@ Since your mobile app is running locally on the emulator (not through Vercel), y
 2. **Make sure the emulator is running** with your app open
 
 3. **You should see your app listed** under "Remote Target"
-   - Look for something like "Landee & Moony" or "localhost"
+   - Look for something like "Rent Management System" or "localhost"
 
 4. **Click "inspect"** to open DevTools
 
@@ -105,7 +105,7 @@ supabase.auth.onAuthStateChange((event, session) => {
 ## Next Steps
 
 Once you have Chrome DevTools open:
-1. Clear the app data (Settings → Apps → Landee & Moony → Clear Data)
+1. Clear the app data (Settings → Apps → Rent Management System → Clear Data)
 2. Restart the app
 3. Try logging in again
 4. Watch the Console tab for errors

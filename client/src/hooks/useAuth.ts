@@ -87,7 +87,7 @@ export function useAuth() {
       }
 
       const userData = await response.json();
-      console.log('[useAuth] User data received:', { id: userData.id, role: userData.role, email: userData.email });
+      console.log('[useAuth] User data received:', { id: userData.id, role: userData.role });
       return userData;
     },
     retry: 1, // Retry once if API call fails

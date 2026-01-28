@@ -43,7 +43,7 @@ export default function DocumentManager() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = `${import.meta.env.VITE_API_BASE_URL}/api/login`;
+          window.location.href = `${import.meta.env.VITE_API_BASE_URL || ''}/api/login`;
         }, 500);
         return;
       }

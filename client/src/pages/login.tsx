@@ -89,8 +89,10 @@ export default function Login() {
         throw new Error(error.message || "Login failed");
       }
 
-      console.log('[Login] Sign-in successful. User ID:', data.user?.id);
-      console.log('[Login] Session:', data.session ? 'Created' : 'None');
+      if (import.meta.env.DEV) {
+        console.log('[Login] Sign-in successful. User ID:', data.user?.id);
+        console.log('[Login] Session:', data.session ? 'Created' : 'None');
+      }
 
       toast({ title: "Success", description: "Logged in successfully!" });
 
