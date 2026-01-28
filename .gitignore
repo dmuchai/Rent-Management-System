@@ -21,3 +21,7 @@ replit.md
 .upm
 .vercel
 IPN ID.pdf
+
+# Capacitor native projects (managed by Capacitor CLI)
+android/
+ios/

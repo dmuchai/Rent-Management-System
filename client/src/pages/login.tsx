@@ -46,7 +46,7 @@ export default function Login() {
     const params = new URLSearchParams(window.location.search);
     const error = params.get('error');
     const success = params.get('success');
-    
+
     if (error) {
       const decodedError = decodeURIComponent(error);
       console.error('[Login] OAuth error:', decodedError);
@@ -58,7 +58,7 @@ export default function Login() {
       // Clean up URL
       window.history.replaceState({}, '', '/login');
     }
-    
+
     if (success === 'password-reset') {
       toast({
         title: "Password Reset Complete",
@@ -74,6 +74,8 @@ export default function Login() {
     setIsLoading(true);
 
     try {
+      console.log('[Login] Starting email login process...');
+
       // Perform sign-in directly from the browser so Supabase can manage
       // the session (browser owns sessions). This avoids a server-side
       // `/api/auth?action=login` route and is the recommended flow.
@@ -83,20 +85,33 @@ export default function Login() {
       });
 
       if (error) {
+        console.error('[Login] Sign-in failed:', error.message);
         throw new Error(error.message || "Login failed");
       }
+
+      console.log('[Login] Sign-in successful. User ID:', data.user?.id);
+      console.log('[Login] Session:', data.session ? 'Created' : 'None');
 
       toast({ title: "Success", description: "Logged in successfully!" });
 
       // Invalidate the auth query to force refetch of user data
+      console.log('[Login] Invalidating auth queries...');
       await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
-      
+
       // Small delay to ensure query refetch completes before redirect
+      console.log('[Login] Waiting for query refetch...');
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Redirect to dashboard
+      console.log('[Login] Redirecting to /dashboard');
       setLocation("/dashboard");
+
+      // Verify redirect happened
+      setTimeout(() => {
+        console.log('[Login] Current location after redirect:', window.location.pathname);
+      }, 200);
     } catch (error) {
+      console.error('[Login] Login error:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Invalid email or password",
@@ -158,9 +173,9 @@ export default function Login() {
         {/* Logo/Brand */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <img 
-              src="/favicon.png" 
-              alt="Landee & Moony" 
+            <img
+              src="/favicon.png"
+              alt="Landee & Moony"
               className="h-12 w-12 mr-3"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';

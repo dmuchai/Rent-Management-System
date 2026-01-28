@@ -93,7 +93,6 @@ export async function registerRoutes(app: Express) {
       'https://property-manager-ke.vercel.app', // CORRECT Vercel frontend URL
       'https://rent-management-system-chi.vercel.app', // Backup URL
       'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app', // Previous deployment
-      'https://rent-management-backend.onrender.com' // Render backend for self-testing
     ];
 
     const origin = req.headers.origin;
@@ -369,7 +368,7 @@ export async function registerRoutes(app: Express) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'none', // Allow cross-domain cookies
-        domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined,
+        // domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined,
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
       });
 
@@ -379,7 +378,7 @@ export async function registerRoutes(app: Express) {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'none', // Allow cross-domain cookies
-          domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined,
+          // domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined,
           maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
       }

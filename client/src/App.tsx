@@ -26,21 +26,26 @@ function Router() {
 
   // Redirect logic for proper URL handling
   useEffect(() => {
+    console.log('[Router] Auth state:', { isAuthenticated, isLoading, location, userRole: user?.role });
+
     if (!isLoading) {
       if (isAuthenticated) {
         // If user has no role, redirect to role selection
         if (user && !user.role && location !== '/select-role') {
+          console.log('[Router] User has no role, redirecting to /select-role');
           setLocation('/select-role');
           return;
         }
 
         // If authenticated and on landing/login page, redirect to dashboard
         if (location === "/" || location === "/login") {
+          console.log('[Router] Authenticated user on public page, redirecting to /dashboard');
           setLocation("/dashboard");
         }
       } else {
         // If not authenticated and trying to access protected routes, redirect to login
         if (location === "/dashboard" || location === "/select-role") {
+          console.log('[Router] Unauthenticated user on protected page, redirecting to /login');
           setLocation("/login");
         }
       }

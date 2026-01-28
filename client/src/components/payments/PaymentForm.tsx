@@ -117,7 +117,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'https://rent-management-backend.onrender.com'}/api/login`;
+          window.location.href = `${import.meta.env.VITE_API_BASE_URL}/api/login`;
         }, 500);
         return;
       }

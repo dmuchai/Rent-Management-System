@@ -37,7 +37,7 @@ export async function apiRequest(
 ): Promise<Response> {
   // Construct full URL with base URL for production
   const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
-  
+
   const headers: Record<string, string> = {};
   // Attach JSON header when sending a body
   if (data) {
@@ -48,12 +48,19 @@ export async function apiRequest(
   // as a Bearer token so server endpoints that accept Authorization headers
   // can validate the user using Supabase.
   try {
+    console.log('[apiRequest] Attempting to get access token...');
     const token = await getAccessTokenWithRetry(5, 100);
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (token) {
+      console.log('[apiRequest] Token found, length:', token.length);
+      headers["Authorization"] = `Bearer ${token}`;
+    } else {
+      console.warn('[apiRequest] No token found after retries');
+    }
   } catch (err) {
+    console.error('[apiRequest] Error getting token:', err);
     // ignore
   }
-  
+
   // Using httpOnly cookies for authentication - no need for Bearer token
   const res = await fetch(fullUrl, {
     method,
@@ -71,31 +78,31 @@ export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
-  async ({ queryKey }) => {
-    // Build full URL like apiRequest
-    const rawUrl = queryKey.join("/") as string;
-    const fullUrl = rawUrl.startsWith('http') ? rawUrl : `${API_BASE_URL}${rawUrl}`;
+    async ({ queryKey }) => {
+      // Build full URL like apiRequest
+      const rawUrl = queryKey.join("/") as string;
+      const fullUrl = rawUrl.startsWith('http') ? rawUrl : `${API_BASE_URL}${rawUrl}`;
 
-    const headers: Record<string, string> = {};
-    try {
-      const token = await getAccessTokenWithRetry(5, 100);
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-    } catch (err) {
-      // ignore
-    }
+      const headers: Record<string, string> = {};
+      try {
+        const token = await getAccessTokenWithRetry(5, 100);
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      } catch (err) {
+        // ignore
+      }
 
-    const res = await fetch(fullUrl, {
-      headers,
-      credentials: "include",
-    });
+      const res = await fetch(fullUrl, {
+        headers,
+        credentials: "include",
+      });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
-    }
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null;
+      }
 
-    await throwIfResNotOk(res);
-    return await res.json();
-  };
+      await throwIfResNotOk(res);
+      return await res.json();
+    };
 
 export const queryClient = new QueryClient({
   defaultOptions: {
