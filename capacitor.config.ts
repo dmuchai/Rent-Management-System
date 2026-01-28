@@ -1,7 +1,17 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
+
 const isDev = process.env.NODE_ENV !== 'production';
-const defaultProdUrl = 'https://rent-management-system.example.com'; // Replace with your actual prod URL
+
+function getProdUrl() {
+  const prodUrl = process.env.PROD_URL;
+  if (!prodUrl || prodUrl.includes('example.com')) {
+    throw new Error(
+      'Production URL is not set or is using a placeholder. Please set the PROD_URL environment variable to your actual production URL.'
+    );
+  }
+  return prodUrl;
+}
 
 const config: CapacitorConfig = {
   appId: 'com.rentmanagement.app',
@@ -16,7 +26,7 @@ const config: CapacitorConfig = {
       }
     : {
         server: {
-          url: process.env.CAPACITOR_SERVER_URL || defaultProdUrl,
+          url: process.env.CAPACITOR_SERVER_URL || getProdUrl(),
           cleartext: false,
         },
       }),
