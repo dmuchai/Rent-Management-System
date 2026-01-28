@@ -53,16 +53,6 @@ For faster development, you can use live reload:
 
 1. Start your dev server: `npm run dev`
 2. Update `capacitor.config.ts` to point to your local server:
-```typescript
-server: {
-  url: 'http://localhost:5173', // or your dev server URL
-  cleartext: true
-}
-```
-3. Run `npx cap sync`
-4. Open the app in the native IDE and run it
-
-The app will now reload automatically when you make changes to your code.
 
 ## Building for Production
 

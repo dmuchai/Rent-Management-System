@@ -25,3 +25,7 @@ IPN ID.pdf
 # Capacitor native projects (managed by Capacitor CLI)
 android/
 ios/
+
+# Ignore IDE cache files
+.idea/caches/
+.idea/*.xml
