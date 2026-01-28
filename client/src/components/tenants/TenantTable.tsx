@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,9 @@ import TenantDetailsModal from "./TenantDetailsModal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, MailCheck, CheckCircle2, Clock, Loader2, Trash2, Search, Filter, Eye } from "lucide-react";
+import { Mail, MailCheck, CheckCircle2, Clock, Loader2, Trash2, Search, Filter, Eye, AlertCircle } from "lucide-react";
+import { Lease, Payment } from "@shared/schema";
+import { calculateLedger } from "@/lib/ledger";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,11 +32,13 @@ import {
 
 interface TenantTableProps {
   tenants: Tenant[];
+  leases?: Lease[];
+  payments?: Payment[];
   loading?: boolean;
   onAddTenant?: () => void;
 }
 
-export default function TenantTable({ tenants, loading, onAddTenant }: TenantTableProps) {
+export default function TenantTable({ tenants, leases = [], payments = [], loading, onAddTenant }: TenantTableProps) {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -59,7 +64,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
         const fullName = `${tenant.firstName} ${tenant.lastName}`.toLowerCase();
         const email = tenant.email?.toLowerCase() || "";
         const phone = tenant.phone?.toLowerCase() || "";
-        
+
         return (
           fullName.includes(query) ||
           email.includes(query) ||
@@ -118,7 +123,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
 
   const getStatusBadge = (tenant: Tenant) => {
     const status = tenant.accountStatus || 'pending_invitation';
-    
+
     switch (status) {
       case 'active':
         return (
@@ -254,6 +259,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                 <th className="text-left py-3 px-6 font-medium">Tenant</th>
                 <th className="text-left py-3 px-6 font-medium">Contact</th>
                 <th className="text-left py-3 px-6 font-medium">Status</th>
+                <th className="text-left py-3 px-6 font-medium">Balance</th>
                 <th className="text-left py-3 px-6 font-medium">Emergency Contact</th>
                 <th className="text-left py-3 px-6 font-medium">Actions</th>
               </tr>
@@ -264,13 +270,13 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                   <td colSpan={5} className="py-12 text-center">
                     <i className="fas fa-search text-4xl text-muted-foreground mb-4 block"></i>
                     <p className="text-muted-foreground text-lg">
-                      {searchQuery || statusFilter !== "all" 
+                      {searchQuery || statusFilter !== "all"
                         ? "No tenants match your search criteria"
                         : "No tenants found"}
                     </p>
                     {(searchQuery || statusFilter !== "all") && (
-                      <Button 
-                        variant="link" 
+                      <Button
+                        variant="link"
                         onClick={() => {
                           setSearchQuery("");
                           setStatusFilter("all");
@@ -284,86 +290,108 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
                 </tr>
               ) : (
                 filteredTenants.filter(t => t && t.id).map((tenant) => (
-                <tr key={tenant.id} className="border-b border-border hover:bg-muted/30 transition-colors" data-testid={`tenant-row-${tenant.id}`}>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                        <span className="text-primary font-semibold text-sm">
-                          {tenant.firstName?.[0] || ''}{tenant.lastName?.[0] || ''}
-                        </span>
+                  <tr key={tenant.id} className="border-b border-border hover:bg-muted/30 transition-colors" data-testid={`tenant-row-${tenant.id}`}>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                          <span className="text-primary font-semibold text-sm">
+                            {tenant.firstName?.[0] || ''}{tenant.lastName?.[0] || ''}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium" data-testid={`tenant-name-${tenant.id}`}>
+                            {tenant.firstName || ''} {tenant.lastName || ''}
+                          </p>
+                          <p className="text-sm text-muted-foreground" data-testid={`tenant-email-${tenant.id}`}>
+                            {tenant.email || 'N/A'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium" data-testid={`tenant-name-${tenant.id}`}>
-                          {tenant.firstName || ''} {tenant.lastName || ''}
-                        </p>
-                        <p className="text-sm text-muted-foreground" data-testid={`tenant-email-${tenant.id}`}>
-                          {tenant.email || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6" data-testid={`tenant-phone-${tenant.id}`}>
-                    {tenant.phone}
-                  </td>
-                  <td className="py-4 px-6" data-testid={`tenant-status-${tenant.id}`}>
-                    {getStatusBadge(tenant)}
-                  </td>
-                  <td className="py-4 px-6" data-testid={`tenant-emergency-${tenant.id}`}>
-                    {tenant.emergencyContact || "N/A"}
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center gap-2">
-                      {(tenant.accountStatus === 'invited' || tenant.accountStatus === 'pending_invitation') && (
+                    </td>
+                    <td className="py-4 px-6" data-testid={`tenant-phone-${tenant.id}`}>
+                      {tenant.phone}
+                    </td>
+                    <td className="py-4 px-6" data-testid={`tenant-status-${tenant.id}`}>
+                      {getStatusBadge(tenant)}
+                    </td>
+                    <td className="py-4 px-6">
+                      {(() => {
+                        const tenantLease = leases.find(l => l.tenantId === tenant.id && l.isActive);
+                        const tenantPayments = payments.filter(p => {
+                          // This assumes payments are linked to leases
+                          // If we don't have the leaseId here, we might need more complex filtering
+                          return leases.some(l => l.tenantId === tenant.id && l.id === p.leaseId);
+                        });
+
+                        const ledger = calculateLedger(tenantLease, tenantPayments);
+                        const balance = ledger.currentBalance;
+
+                        return (
+                          <span className={cn(
+                            "font-bold",
+                            balance > 0 ? "text-destructive" : balance < 0 ? "text-green-600" : "text-muted-foreground"
+                          )}>
+                            KES {balance.toLocaleString()}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="py-4 px-6" data-testid={`tenant-emergency-${tenant.id}`}>
+                      {tenant.emergencyContact || "N/A"}
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        {(tenant.accountStatus === 'invited' || tenant.accountStatus === 'pending_invitation') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleResendInvitation(tenant)}
+                            disabled={resendingTenantId === tenant.id}
+                            title="Resend invitation email"
+                            data-testid={`button-resend-invitation-${tenant.id}`}
+                            className="hover:bg-blue-100 hover:text-blue-700"
+                          >
+                            {resendingTenantId === tenant.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Mail className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleResendInvitation(tenant)}
-                          disabled={resendingTenantId === tenant.id}
-                          title="Resend invitation email"
-                          data-testid={`button-resend-invitation-${tenant.id}`}
-                          className="hover:bg-blue-100 hover:text-blue-700"
+                          onClick={() => handleEdit(tenant)}
+                          data-testid={`button-edit-tenant-${tenant.id}`}
+                          className="hover:bg-yellow-100 hover:text-yellow-700"
+                          title="Edit tenant"
                         >
-                          {resendingTenantId === tenant.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Mail className="h-4 w-4" />
-                          )}
+                          <i className="fas fa-edit"></i>
                         </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(tenant)}
-                        data-testid={`button-edit-tenant-${tenant.id}`}
-                        className="hover:bg-yellow-100 hover:text-yellow-700"
-                        title="Edit tenant"
-                      >
-                        <i className="fas fa-edit"></i>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleView(tenant)}
-                        data-testid={`button-view-tenant-${tenant.id}`}
-                        className="hover:bg-green-100 hover:text-green-700"
-                        title="View details"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setTenantToDelete(tenant)}
-                        data-testid={`button-delete-tenant-${tenant.id}`}
-                        className="hover:bg-red-100 hover:text-red-700"
-                        title="Delete tenant"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              )))}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleView(tenant)}
+                          data-testid={`button-view-tenant-${tenant.id}`}
+                          className="hover:bg-green-100 hover:text-green-700"
+                          title="View details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setTenantToDelete(tenant)}
+                          data-testid={`button-delete-tenant-${tenant.id}`}
+                          className="hover:bg-red-100 hover:text-red-700"
+                          title="Delete tenant"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )))}
             </tbody>
           </table>
         </div>
@@ -387,7 +415,7 @@ export default function TenantTable({ tenants, loading, onAddTenant }: TenantTab
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Tenant</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {tenantToDelete?.firstName} {tenantToDelete?.lastName}? 
+              Are you sure you want to delete {tenantToDelete?.firstName} {tenantToDelete?.lastName}?
               This action cannot be undone and will remove all associated data.
             </AlertDialogDescription>
           </AlertDialogHeader>

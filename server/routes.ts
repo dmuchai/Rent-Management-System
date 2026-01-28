@@ -1009,6 +1009,28 @@ export async function registerRoutes(app: Express) {
   });
 
   // Unit routes
+  app.get("/api/units", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const propertyId = req.query.propertyId;
+      let units: any[];
+
+      if (propertyId) {
+        units = await supabaseStorage.getUnitsByPropertyId(propertyId as string);
+      } else {
+        // Fallback or full list if needed, though typically we want filtered
+        const ownerId = req.user.sub;
+        // This is a bit complex as it requires finding all units for all properties of the owner
+        // For now, let's keep it simple and focus on the propertyId filter used by the details modal
+        units = [];
+      }
+
+      res.json(units || []);
+    } catch (error) {
+      console.log('Error fetching units:', error);
+      res.status(500).json({ message: "Failed to fetch units" });
+    }
+  });
+
   app.get("/api/properties/:propertyId/units", isAuthenticated, async (req: any, res: any) => {
     try {
       const units = await supabaseStorage.getUnitsByPropertyId(req.params.propertyId) || [];
@@ -1223,7 +1245,39 @@ export async function registerRoutes(app: Express) {
   app.get("/api/payments", isAuthenticated, async (req: any, res: any) => {
     try {
       const userId = req.user.sub;
-      const payments = await supabaseStorage.getPaymentsByOwnerId(userId) || [];
+      const role = req.user.appRole;
+
+      let payments: any[] = [];
+
+      if (role === 'tenant') {
+        const tenant = await supabaseStorage.getTenantByUserId(userId);
+        if (tenant) {
+          const leases = await supabaseStorage.getLeasesByTenantId(tenant.id);
+          const leaseIds = leases.map(l => l.id);
+          if (leaseIds.length > 0) {
+            const { data: paymentsData } = await supabase
+              .from('payments')
+              .select('*')
+              .in('lease_id', leaseIds)
+              .order('due_date', { ascending: false });
+
+            payments = (paymentsData || []).map(p => ({
+              id: p.id,
+              leaseId: p.lease_id,
+              amount: p.amount,
+              dueDate: p.due_date,
+              paidDate: p.paid_date,
+              paymentMethod: p.payment_method,
+              status: p.status,
+              description: p.description,
+              createdAt: p.created_at
+            }));
+          }
+        }
+      } else {
+        payments = await supabaseStorage.getPaymentsByOwnerId(userId) || [];
+      }
+
       res.json(payments);
     } catch (error) {
       console.log('Error fetching payments:', error);
@@ -1302,44 +1356,90 @@ export async function registerRoutes(app: Express) {
   app.get("/api/dashboard/stats", isAuthenticated, async (req: any, res: any) => {
     try {
       const userId = req.user.sub;
+      const role = req.user.appRole;
 
-      // Get all data in parallel for better performance
-      const [properties, tenants, payments] = await Promise.all([
+      if (role === 'tenant') {
+        const tenant = await supabaseStorage.getTenantByUserId(userId);
+        if (!tenant) return res.status(404).json({ message: "Tenant record not found" });
+
+        const tenantLeases = await supabaseStorage.getLeasesByTenantId(tenant.id);
+        const leaseIds = tenantLeases.map(l => l.id);
+
+        const [paymentsResults, maintenance] = await Promise.all([
+          leaseIds.length > 0 ? supabase.from('payments').select('*').in('lease_id', leaseIds) : { data: [] },
+          supabaseStorage.getMaintenanceRequestsByTenantId(tenant.id)
+        ]);
+
+        const activeLease = tenantLeases.find(l => l.isActive) || null;
+
+        // Use the fetched payments data correctly
+        const paymentsData = paymentsResults.data || [];
+        const totalPaid = paymentsData
+          .filter(p => p.status === 'completed')
+          .reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+
+        return res.json({
+          activeLease,
+          totalPaid: totalPaid.toString(),
+          pendingAmount: "0", // Simplification
+          maintenanceRequests: {
+            total: maintenance.length,
+            pending: maintenance.filter(r => r.status === 'open' || r.status === 'pending').length,
+            inProgress: maintenance.filter(r => r.status === 'in_progress').length,
+            completed: maintenance.filter(r => r.status === 'completed').length
+          }
+        });
+      }
+
+      // Landlord stats (existing logic)
+      const [properties, landlordTenants, allPayments] = await Promise.all([
         supabaseStorage.getPropertiesByOwnerId(userId),
         supabaseStorage.getTenantsByOwnerId(userId),
         supabaseStorage.getPaymentsByOwnerId(userId),
       ]);
 
-      // Calculate statistics
       const totalProperties = properties?.length || 0;
-      const totalTenants = tenants?.length || 0;
+      const totalTenants = landlordTenants?.length || 0;
 
-      // Calculate total revenue (completed payments)
-      const completedPayments = payments?.filter(p => p.status === "completed") || [];
-      const totalRevenue = completedPayments.reduce((sum, payment) => {
-        return sum + parseFloat(payment.amount || "0");
-      }, 0);
+      // Calculate units stats
+      const allUnits = properties.flatMap(p => (p as any).units || []);
+      const totalUnits = allUnits.length;
+      const occupiedUnits = allUnits.filter(u => u.isOccupied).length;
+      const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
 
-      // Calculate monthly revenue (current month)
-      const currentMonth = new Date().getMonth();
-      const currentYear = new Date().getFullYear();
-      const monthlyRevenue = completedPayments
-        .filter(payment => {
-          const paymentDate = new Date(payment.paidDate || payment.createdAt || new Date());
-          return paymentDate.getMonth() === currentMonth && paymentDate.getFullYear() === currentYear;
+      // Calculate monthly revenue (completed payments in current month)
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      const monthlyRevenue = allPayments
+        .filter(p => {
+          if (p.status !== "completed" || !p.paidDate) return false;
+          const paidDate = new Date(p.paidDate);
+          return paidDate.getMonth() === currentMonth && paidDate.getFullYear() === currentYear;
         })
         .reduce((sum, payment) => sum + parseFloat(payment.amount || "0"), 0);
 
-      // Get pending payments count
-      const pendingPayments = payments?.filter(p => p.status === "pending").length || 0;
+      const totalRevenue = allPayments
+        .filter(p => p.status === "completed")
+        .reduce((sum, payment) => sum + parseFloat(payment.amount || "0"), 0);
+
+      // Calculate overdue payments
+      const overduePayments = allPayments.filter(p => {
+        const dueDate = new Date(p.dueDate);
+        return p.status === "pending" && dueDate < now;
+      }).length;
 
       res.json({
         totalProperties,
         totalTenants,
-        totalRevenue,
+        totalUnits,
+        occupiedUnits,
+        occupancyRate,
         monthlyRevenue,
-        pendingPayments,
-        recentPayments: completedPayments.slice(0, 5), // Last 5 payments
+        totalRevenue,
+        overduePayments,
+        pendingPayments: allPayments?.filter(p => p.status === "pending").length || 0,
       });
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
@@ -1351,7 +1451,22 @@ export async function registerRoutes(app: Express) {
   app.get("/api/leases", isAuthenticated, async (req: any, res: any) => {
     try {
       const userId = req.user.sub;
-      const leases = await supabaseStorage.getLeasesByOwnerId(userId);
+      const role = req.user.appRole;
+
+      let leases: any[] = [];
+
+      if (role === 'tenant') {
+        const tenant = await supabaseStorage.getTenantByUserId(userId);
+        if (tenant) {
+          console.log('[API] Fetching leases for tenant record:', tenant.id);
+          leases = await supabaseStorage.getLeasesByTenantId(tenant.id);
+        } else {
+          console.log('[API] No tenant record found for user:', userId);
+        }
+      } else {
+        leases = await supabaseStorage.getLeasesByOwnerId(userId);
+      }
+
       res.json(leases);
     } catch (error) {
       console.error('Error fetching leases:', error);
@@ -1447,10 +1562,20 @@ export async function registerRoutes(app: Express) {
   app.get("/api/maintenance-requests", isAuthenticated, async (req: any, res: any) => {
     try {
       const userId = req.user.sub;
+      const role = req.user.appRole;
 
-      // For now, return empty array since we haven't implemented maintenance requests fully
-      // In the future, we'll get maintenance requests for the owner's properties
-      res.json([]);
+      let requests: any[] = [];
+
+      if (role === 'tenant') {
+        const tenant = await supabaseStorage.getTenantByUserId(userId);
+        if (tenant) {
+          requests = await supabaseStorage.getMaintenanceRequestsByTenantId(tenant.id);
+        }
+      } else {
+        requests = await supabaseStorage.getMaintenanceRequestsByOwnerId(userId);
+      }
+
+      res.json(requests);
     } catch (error) {
       console.log('Error fetching maintenance requests:', error);
       res.status(500).json({ message: "Failed to fetch maintenance requests" });

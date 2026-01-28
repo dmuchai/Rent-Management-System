@@ -6,14 +6,13 @@ const isLocal = typeof window !== 'undefined' && window.location.hostname === 'l
 
 // Backend API Base URLs
 const API_ENDPOINTS = {
-  development: 'http://localhost:5000',
-  // Production uses same-origin Vercel serverless functions (no separate backend needed)
+  // Use relative paths in development so it works on both localhost and local IP (mobile)
+  development: '',
+  // Production uses same-origin Vercel serverless functions
   production: ''
 };
 
-export const API_BASE_URL = isDevelopment || isLocal 
-  ? API_ENDPOINTS.development
-  : API_ENDPOINTS.production;
+export const API_BASE_URL = API_ENDPOINTS.development;
 
 // Base path for the application (supports subdirectory deployments)
 // Set VITE_BASE_PATH environment variable if deploying to a subdirectory

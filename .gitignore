@@ -29,3 +29,6 @@ ios/
 # Ignore IDE cache files
 .idea/caches/
 .idea/*.xml
+
+# Supabase local files
+supabase/

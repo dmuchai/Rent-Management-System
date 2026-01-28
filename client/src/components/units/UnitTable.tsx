@@ -22,11 +22,11 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
     queryKey: [`/api/units`, propertyId],
     queryFn: async (): Promise<Unit[]> => {
       const response = await apiRequest("GET", `/api/units?propertyId=${propertyId}`);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch units: ${response.status} ${response.statusText}`);
       }
-      
+
       return await response.json() as Unit[];
     },
   });
@@ -35,12 +35,12 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
   const deleteMutation = useMutation({
     mutationFn: async (unitId: string) => {
       const response = await apiRequest("DELETE", `/api/units/${unitId}`);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Failed to delete unit: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
       }
-      
+
       return await response.json();
     },
     onSuccess: () => {
@@ -88,71 +88,67 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
             <TableRow>
               <TableHead>Unit Number</TableHead>
               <TableHead>Bedrooms</TableHead>
-              <TableHead>Bathrooms</TableHead>
-              <TableHead>Size (sq ft)</TableHead>
               <TableHead>Monthly Rent</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-        </TableHeader>
-        <TableBody>
-          {units.map((unit: Unit) => (
-            <TableRow key={unit.id}>
-              <TableCell className="font-medium">{unit.unitNumber}</TableCell>
-              <TableCell>{unit.bedrooms || "-"}</TableCell>
-              <TableCell>{unit.bathrooms || "-"}</TableCell>
-              <TableCell>{unit.size ? `${unit.size}` : "-"}</TableCell>
-              <TableCell>KES {Number(unit.rentAmount).toLocaleString()}</TableCell>
-              <TableCell>
-                <Badge variant={unit.isOccupied ? "destructive" : "default"}>
-                  {unit.isOccupied ? "Occupied" : "Available"}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onEditUnit(unit)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Unit</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete unit "{unit.unitNumber}"? 
-                          This action cannot be undone and will remove all associated data.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => deleteMutation.mutate(unit.id)}
-                          className="bg-red-600 hover:bg-red-700"
+          </TableHeader>
+          <TableBody>
+            {units.map((unit: Unit) => (
+              <TableRow key={unit.id}>
+                <TableCell className="font-medium">{unit.unitNumber}</TableCell>
+                <TableCell>{unit.bedrooms || "-"}</TableCell>
+                <TableCell>KES {Number(unit.rentAmount).toLocaleString()}</TableCell>
+                <TableCell>
+                  <Badge variant={unit.isOccupied ? "destructive" : "default"}>
+                    {unit.isOccupied ? "Occupied" : "Available"}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onEditUnit(unit)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={deleteMutation.isPending}
                         >
-                          Delete Unit
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Unit</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete unit "{unit.unitNumber}"?
+                            This action cannot be undone and will remove all associated data.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => deleteMutation.mutate(unit.id)}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            Delete Unit
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
 
       <div className="text-sm text-gray-500">

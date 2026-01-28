@@ -12,8 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileText, Download, User, Home, Calendar, DollarSign, Mail, Phone, AlertCircle, CheckCircle2, MailCheck, Clock } from "lucide-react";
+import { FileText, Download, User, Home, Calendar, DollarSign, Mail, Phone, AlertCircle, CheckCircle2, MailCheck, Clock, History } from "lucide-react";
 import type { Tenant, Lease, Payment, Property } from "@/../../shared/schema";
+import { calculateLedger } from "@/lib/ledger";
 
 // Extended lease type with populated relations from API join
 interface LeaseWithRelations extends Lease {
@@ -88,6 +89,9 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
 
   // Get current active lease
   const activeLease = leases.find(l => l.isActive);
+
+  // Calculate ledger for the active lease
+  const ledgerData = calculateLedger(activeLease, payments);
 
   // Get status badge
   const getStatusBadge = () => {
@@ -174,10 +178,11 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
           </DialogHeader>
 
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="leases">Lease History</TabsTrigger>
               <TabsTrigger value="payments">Payment History</TabsTrigger>
+              <TabsTrigger value="ledger">Ledger</TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}
@@ -466,6 +471,77 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+
+            {/* Ledger Tab */}
+            <TabsContent value="ledger" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
+                    Account Ledger
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!activeLease ? (
+                    <div className="text-center py-12 border rounded-lg bg-gray-50/50">
+                      <p className="text-muted-foreground">No active lease found to generate a ledger.</p>
+                    </div>
+                  ) : ledgerData.entries.length === 0 ? (
+                    <div className="text-center py-12 border rounded-lg bg-gray-50/50">
+                      <p className="text-muted-foreground">No financial history found for this lease.</p>
+                    </div>
+                  ) : (
+                    <div className="rounded-md border overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-gray-50/50">
+                            <TableHead className="w-[120px]">Date</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead className="text-right">Debit</TableHead>
+                            <TableHead className="text-right">Credit</TableHead>
+                            <TableHead className="text-right">Balance</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {ledgerData.entries.map((entry) => (
+                            <TableRow key={entry.id}>
+                              <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
+                              <TableCell>{entry.description}</TableCell>
+                              <TableCell className="text-right text-destructive">
+                                {entry.type === 'charge' ? `KES ${entry.amount.toLocaleString()}` : '-'}
+                              </TableCell>
+                              <TableCell className="text-right text-green-600">
+                                {entry.type === 'payment' ? `KES ${entry.amount.toLocaleString()}` : '-'}
+                              </TableCell>
+                              <TableCell className={`text-right font-bold ${entry.balance > 0 ? 'text-destructive' : 'text-green-600'}`}>
+                                KES {entry.balance.toLocaleString()}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 border rounded-lg bg-gray-50">
+                      <p className="text-sm text-muted-foreground">Total Charges</p>
+                      <p className="text-xl font-bold">KES {ledgerData.totalCharged.toLocaleString()}</p>
+                    </div>
+                    <div className="p-4 border rounded-lg bg-gray-50">
+                      <p className="text-sm text-muted-foreground">Total Payments</p>
+                      <p className="text-xl font-bold text-green-600">KES {ledgerData.totalPaid.toLocaleString()}</p>
+                    </div>
+                    <div className={`p-4 border rounded-lg ${ledgerData.currentBalance > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                      <p className="text-sm font-medium">Outstanding Balance</p>
+                      <p className={`text-xl font-bold ${ledgerData.currentBalance > 0 ? 'text-destructive' : 'text-green-600'}`}>
+                        KES {ledgerData.currentBalance.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
         </DialogContent>

@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 const paymentFormSchema = z.object({
   leaseId: z.string().min(1, "Please select a lease"),
-  amount: z.number().min(1, "Amount must be greater than 0"),
+  amount: z.coerce.number().min(1, "Amount must be greater than 0"),
   description: z.string().min(1, "Description is required"),
   paymentMethod: z.string().optional(),
   phoneNumber: z.string().optional(),
@@ -144,7 +144,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
               id="amount"
               type="number"
               value={form.watch("amount")}
-              onChange={(e) => form.setValue("amount", parseFloat(e.target.value) || 0)}
+              onChange={(e) => (form.setValue as any)("amount", e.target.value)}
               data-testid="input-payment-amount"
             />
           </div>
@@ -290,7 +290,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                   id="amount"
                   type="number"
                   value={form.watch("amount")}
-                  onChange={(e) => form.setValue("amount", parseFloat(e.target.value) || 0)}
+                  onChange={(e) => form.setValue("amount", e.target.value as any)}
                   data-testid="input-landlord-amount"
                 />
               </div>

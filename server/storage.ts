@@ -209,7 +209,6 @@ export class SupabaseStorage {
 
       console.log('Fetched leases from Supabase:', leases.length);
 
-      // Now fetch related data separately for each lease
       const leasesWithRelatedData = await Promise.all(
         leases.map(async (lease: any) => {
           // Get unit details
@@ -235,7 +234,12 @@ export class SupabaseStorage {
             unit: unit ? {
               id: unit.id,
               unitNumber: unit.unitNumber,
-              propertyName: property?.name || 'Unknown Property'
+              property: property ? {
+                id: property.id,
+                name: property.name,
+                address: property.address,
+                propertyType: property.propertyType
+              } : null
             } : null,
             tenant: tenant ? {
               id: tenant.id,
@@ -275,7 +279,6 @@ export class SupabaseStorage {
 
       console.log('Fetched leases for tenant:', leases.length);
 
-      // Fetch related data separately for each lease
       const leasesWithRelatedData = await Promise.all(
         leases.map(async (lease: any) => {
           // Get unit details
@@ -301,7 +304,12 @@ export class SupabaseStorage {
             unit: unit ? {
               id: unit.id,
               unitNumber: unit.unitNumber,
-              propertyName: property?.name || 'Unknown Property'
+              property: property ? {
+                id: property.id,
+                name: property.name,
+                address: property.address,
+                propertyType: property.propertyType
+              } : null
             } : null,
             tenant: tenant ? {
               id: tenant.id,
@@ -416,12 +424,117 @@ export class SupabaseStorage {
 
   // Maintenance request operations
   async getMaintenanceRequestsByOwnerId(ownerId: string): Promise<MaintenanceRequest[]> {
-    // TODO: Implement Supabase query
-    return [];
+    try {
+      console.log('Fetching maintenance requests for owner:', ownerId);
+
+      // Get all property IDs for this owner
+      const { data: properties, error: propertiesError } = await supabase
+        .from("properties")
+        .select("id")
+        .eq("owner_id", ownerId);
+
+      if (propertiesError) throw propertiesError;
+      if (!properties || properties.length === 0) return [];
+
+      const propertyIds = properties.map(p => p.id);
+
+      // Get units in those properties
+      const { data: units, error: unitsError } = await supabase
+        .from("units")
+        .select("id")
+        .in("property_id", propertyIds);
+
+      if (unitsError) throw unitsError;
+      if (!units || units.length === 0) return [];
+
+      const unitIds = units.map(u => u.id);
+
+      // Get maintenance requests for those units
+      const { data, error } = await supabase
+        .from("maintenance_requests")
+        .select("*")
+        .in("unit_id", unitIds)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map(r => ({
+        id: r.id,
+        unitId: r.unit_id,
+        tenantId: r.tenant_id,
+        title: r.title,
+        description: r.description,
+        priority: r.priority,
+        status: r.status,
+        assignedTo: r.assigned_to,
+        completedDate: r.completed_date,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      })) as MaintenanceRequest[];
+    } catch (error) {
+      console.error('Error in getMaintenanceRequestsByOwnerId:', error);
+      return [];
+    }
   }
+
+  async getMaintenanceRequestsByTenantId(tenantId: string): Promise<MaintenanceRequest[]> {
+    try {
+      const { data, error } = await supabase
+        .from("maintenance_requests")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map(r => ({
+        id: r.id,
+        unitId: r.unit_id,
+        tenantId: r.tenant_id,
+        title: r.title,
+        description: r.description,
+        priority: r.priority,
+        status: r.status,
+        assignedTo: r.assigned_to,
+        completedDate: r.completed_date,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      })) as MaintenanceRequest[];
+    } catch (error) {
+      console.error('Error in getMaintenanceRequestsByTenantId:', error);
+      return [];
+    }
+  }
+
   async createMaintenanceRequest(request: InsertMaintenanceRequest): Promise<MaintenanceRequest> {
-    // TODO: Implement Supabase query
-    return request as MaintenanceRequest;
+    const { data, error } = await supabase
+      .from("maintenance_requests")
+      .insert([{
+        unit_id: request.unitId,
+        tenant_id: request.tenantId,
+        title: request.title,
+        description: request.description,
+        priority: request.priority || 'medium',
+        status: request.status || 'open'
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      unitId: data.unit_id,
+      tenantId: data.tenant_id,
+      title: data.title,
+      description: data.description,
+      priority: data.priority,
+      status: data.status,
+      assignedTo: data.assigned_to,
+      completedDate: data.completed_date,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    } as MaintenanceRequest;
   }
 
   // Document operations
@@ -437,11 +550,11 @@ export class SupabaseStorage {
   async getTenantsByOwnerId(ownerId: string): Promise<Tenant[]> {
     console.log('getTenantsByOwnerId called for owner:', ownerId);
 
-    // Use user_id field to find tenants associated with this landlord
+    // Use landlord_id field to find tenants associated with this landlord
     const { data, error } = await supabase
       .from("tenants")
       .select("*")
-      .eq("user_id", ownerId)
+      .eq("landlord_id", ownerId)
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -454,6 +567,7 @@ export class SupabaseStorage {
     // Map snake_case database fields to camelCase for frontend
     const mappedTenants = data?.map(tenant => ({
       id: tenant.id,
+      landlordId: tenant.landlord_id,
       userId: tenant.user_id,
       firstName: tenant.first_name,
       lastName: tenant.last_name,
@@ -484,6 +598,7 @@ export class SupabaseStorage {
     // Convert snake_case to camelCase for consistency
     return {
       id: data.id,
+      landlordId: data.landlord_id,
       userId: data.user_id,
       firstName: data.first_name,
       lastName: data.last_name,
@@ -511,6 +626,7 @@ export class SupabaseStorage {
 
     return {
       id: data.id,
+      landlordId: data.landlord_id,
       userId: data.user_id,
       firstName: data.first_name,
       lastName: data.last_name,
@@ -524,9 +640,9 @@ export class SupabaseStorage {
 
   async createTenant(tenant: InsertTenant, landlordId?: string): Promise<Tenant> {
     // Map camelCase to snake_case for database insertion
-    // Use user_id to temporarily store the landlord ID for association
     const dbTenant = {
-      user_id: landlordId || tenant.userId, // Use landlord ID for association
+      landlord_id: landlordId || tenant.landlordId || tenant.userId, // Maintain consistency with old param usage
+      user_id: tenant.userId,
       first_name: tenant.firstName,
       last_name: tenant.lastName,
       email: tenant.email,
@@ -565,11 +681,11 @@ export class SupabaseStorage {
   // Payments CRUD
   async getPaymentsByOwnerId(ownerId: string): Promise<Payment[]> {
     try {
-      // First get all tenants for this owner using user_id field
+      // First get all tenants for this owner using landlord_id field
       const { data: tenants, error: tenantsError } = await supabase
         .from("tenants")
         .select("id")
-        .eq("user_id", ownerId);
+        .eq("landlord_id", ownerId);
 
       if (tenantsError) throw tenantsError;
       if (!tenants || tenants.length === 0) return [];
@@ -596,25 +712,71 @@ export class SupabaseStorage {
 
       if (paymentsError) throw paymentsError;
 
-      // Map snake_case to camelCase for each payment
-      const mappedPayments: Payment[] = (payments || []).map((payment: any) => ({
-        id: payment.id,
-        leaseId: payment.lease_id,
-        amount: payment.amount,
-        dueDate: payment.due_date,
-        paidDate: payment.paid_date,
-        paymentMethod: payment.payment_method,
-        paymentType: payment.payment_type || 'rent',
-        pesapalTransactionId: payment.pesapal_transaction_id,
-        pesapalOrderTrackingId: payment.pesapal_order_tracking_id,
-        status: payment.status,
-        description: payment.description,
-        receiptUrl: payment.receipt_url,
-        createdAt: payment.created_at,
-        updatedAt: payment.updated_at,
+      // Map snake_case to camelCase and fetch related data
+      const enrichedPayments: any[] = await Promise.all((payments || []).map(async (payment: any) => {
+        // Get lease info to get unit and tenant
+        const { data: lease } = await supabase
+          .from("leases")
+          .select("unit_id, tenant_id")
+          .eq("id", payment.lease_id)
+          .single();
+
+        let tenantInfo = null;
+        let propertyInfo = null;
+        let unitInfo = null;
+
+        if (lease) {
+          // Get tenant info
+          const tenant = await this.getTenantById(lease.tenant_id);
+          if (tenant) {
+            tenantInfo = {
+              id: tenant.id,
+              firstName: tenant.firstName,
+              lastName: tenant.lastName,
+              email: tenant.email
+            };
+          }
+
+          // Get unit and property info
+          const unit = await this.getUnitById(lease.unit_id);
+          if (unit) {
+            unitInfo = {
+              id: unit.id,
+              unitNumber: unit.unitNumber
+            };
+            const property = await this.getPropertyById(unit.propertyId);
+            if (property) {
+              propertyInfo = {
+                id: property.id,
+                name: property.name
+              };
+            }
+          }
+        }
+
+        return {
+          id: payment.id,
+          leaseId: payment.lease_id,
+          amount: payment.amount,
+          dueDate: payment.due_date,
+          paidDate: payment.paid_date,
+          paymentMethod: payment.payment_method,
+          paymentType: payment.payment_type || 'rent',
+          pesapalTransactionId: payment.pesapal_transaction_id,
+          pesapalOrderTrackingId: payment.pesapal_order_tracking_id,
+          status: payment.status,
+          description: payment.description,
+          receiptUrl: payment.receipt_url,
+          createdAt: payment.created_at,
+          updatedAt: payment.updated_at,
+          // Extra fields for display
+          tenant: tenantInfo,
+          property: propertyInfo,
+          unit: unitInfo
+        };
       }));
 
-      return mappedPayments;
+      return enrichedPayments;
     } catch (error) {
       console.error("Error in getPaymentsByOwnerId:", error);
       return [];

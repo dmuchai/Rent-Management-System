@@ -19,17 +19,17 @@ const config: CapacitorConfig = {
   webDir: 'dist/public',
   ...(isDev
     ? {
-        server: {
-          url: process.env.CAPACITOR_SERVER_URL || 'http://localhost:5173',
-          cleartext: true,
-        },
-      }
+      server: {
+        url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.100.165:5000',
+        cleartext: true,
+      },
+    }
     : {
-        server: {
-          url: process.env.CAPACITOR_SERVER_URL || getProdUrl(),
-          cleartext: false,
-        },
-      }),
+      server: {
+        url: process.env.CAPACITOR_SERVER_URL || getProdUrl(),
+        cleartext: false,
+      },
+    }),
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,

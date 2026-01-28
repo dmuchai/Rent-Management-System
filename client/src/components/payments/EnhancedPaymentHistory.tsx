@@ -209,7 +209,7 @@ export default function EnhancedPaymentHistory({
                       </span>
                       <span className="flex items-center gap-1">
                         <i className="far fa-credit-card"></i>
-                        {payment.paymentMethod.replace(/_/g, " ")}
+                        {payment.paymentMethod?.replace(/_/g, " ") || 'Unknown Method'}
                       </span>
                     </div>
                   </div>
@@ -220,7 +220,7 @@ export default function EnhancedPaymentHistory({
                       KES {parseAmount(payment.amount).toLocaleString()}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {payment.paymentType.replace(/_/g, " ")}
+                      {payment.paymentType?.replace(/_/g, " ") || 'Payment'}
                     </p>
                   </div>
                   {payment.status === "completed" ? (

@@ -1019,6 +1019,8 @@ export default function LandlordDashboard() {
 
             <TenantTable
               tenants={tenants}
+              leases={leases}
+              payments={payments}
               loading={tenantsLoading}
               onAddTenant={() => setIsTenantFormOpen(true)}
             />
@@ -1261,17 +1263,17 @@ export default function LandlordDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="flex h-screen">
-        <Sidebar
-          activeSection={activeSection}
-          onSectionChange={(section) => setActiveSection(section as DashboardSection)}
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
-          isCollapsed={isSidebarCollapsed}
-        />
+    <div className="min-h-screen bg-background md:flex">
+      <Sidebar
+        activeSection={activeSection}
+        onSectionChange={(section) => setActiveSection(section as DashboardSection)}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+      />
 
-        <div className="flex-1 overflow-auto">
+      <div className="flex-1 min-w-0">
+        <div className="sticky top-0 z-30">
           <Header
             title={sectionHeaders[activeSection]}
             onSectionChange={(section) => setActiveSection(section as DashboardSection)}
@@ -1279,10 +1281,10 @@ export default function LandlordDashboard() {
             onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             isSidebarCollapsed={isSidebarCollapsed}
           />
+        </div>
 
-          <div className="p-4 md:p-6">
-            {renderMainContent()}
-          </div>
+        <div className="p-4 md:p-6">
+          {renderMainContent()}
         </div>
       </div>
 
