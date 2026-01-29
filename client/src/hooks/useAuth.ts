@@ -79,7 +79,7 @@ export function useAuth() {
       // Use apiRequest so the Supabase access token (if present) is attached
       // via Authorization header. This keeps server-side and client-side
       // auth validation consistent.
-      const response = await apiRequest("GET", "/api/auth/user");
+      const response = await apiRequest("GET", "/api/auth?action=user");
 
       if (!response.ok) {
         console.error('[useAuth] API returned error:', response.status, response.statusText);

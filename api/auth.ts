@@ -477,6 +477,70 @@ export default async function handler(
     }
 
     /* ---------------------------------------------------------------------- */
+    /* Update profile (logged-in users only)                                   */
+    /* PUT /api/auth?action=update-profile                                     */
+    /* ---------------------------------------------------------------------- */
+    if (action === "update-profile" && req.method === "PUT") {
+      const user = await getUserFromAuthHeader(req);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+      const updateProfileSchema = z.object({
+        firstName: z.string().min(1).optional(),
+        lastName: z.string().min(1).optional(),
+        email: z.string().email().optional(),
+      });
+
+      const { firstName, lastName } = updateProfileSchema.parse(req.body);
+
+      // We only update first_name and last_name in public.users
+      // Email updates are more complex and usually require re-verification, so skipping for now
+
+      const admin = getAdminClient();
+      const updates: any = {};
+      const metadataUpdates: any = {};
+
+      if (firstName) {
+        updates.first_name = firstName;
+        metadataUpdates.firstName = firstName;
+        metadataUpdates.first_name = firstName;
+      }
+
+      if (lastName) {
+        updates.last_name = lastName;
+        metadataUpdates.lastName = lastName;
+        metadataUpdates.last_name = lastName;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        // 1. Update public.users table
+        const { error: dbError } = await admin
+          .from("users")
+          .update(updates)
+          .eq("id", user.id);
+
+        if (dbError) {
+          console.error("[Auth] Profile database update failed:", dbError);
+          return res.status(500).json({ error: "Failed to update profile", details: dbError.message });
+        }
+
+        // 2. Update Supabase Auth metadata (so it persists across sessions)
+        const { error: authError } = await admin.auth.admin.updateUserById(user.id, {
+          user_metadata: {
+            ...user.user_metadata,
+            ...metadataUpdates
+          }
+        });
+
+        if (authError) {
+          console.error("[Auth] Profile metadata update failed:", authError);
+          // Not critical enough to fail the request if DB update succeeded
+        }
+      }
+
+      return res.status(200).json({ message: "Profile updated successfully" });
+    }
+
+    /* ---------------------------------------------------------------------- */
     /* Request phone update (send OTP)                                         */
     /* POST /api/auth?action=request-phone-update                              */
     /* ---------------------------------------------------------------------- */

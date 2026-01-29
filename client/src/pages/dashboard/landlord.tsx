@@ -303,7 +303,7 @@ export default function LandlordDashboard() {
   // Profile update mutation
   const profileUpdateMutation = useMutation({
     mutationFn: async (data: { firstName?: string; lastName?: string; email?: string }) => {
-      const response = await apiRequest("PUT", "/api/auth/profile", data);
+      const response = await apiRequest("PUT", "/api/auth?action=update-profile", data);
       return await response.json();
     },
     onSuccess: () => {
