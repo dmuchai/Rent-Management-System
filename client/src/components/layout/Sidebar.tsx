@@ -17,6 +17,7 @@ const navItems = [
   { id: "tenants", label: "Tenants", icon: "fas fa-users", roles: ["landlord", "property_manager"] },
   { id: "leases", label: "Leases", icon: "fas fa-file-contract", roles: ["landlord", "property_manager"] },
   { id: "payments", label: "Payments", icon: "fas fa-credit-card", roles: ["landlord", "property_manager", "tenant"] },
+  { id: "payment-settings", label: "Payment Settings", icon: "fas fa-cog", roles: ["landlord", "property_manager"] },
   { id: "maintenance", label: "Maintenance", icon: "fas fa-tools", roles: ["tenant"] }, // Added for tenants
   { id: "documents", label: "Documents", icon: "fas fa-file-alt", roles: ["landlord", "property_manager", "tenant"] },
   { id: "reports", label: "Reports", icon: "fas fa-chart-line", roles: ["landlord", "property_manager"] },

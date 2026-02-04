@@ -17,6 +17,7 @@ import LeaseForm from "@/components/leases/LeaseForm";
 import LeaseTable from "@/components/leases/LeaseTable";
 import LeaseDetailsModal from "@/components/leases/LeaseDetailsModal";
 import PaymentHistory from "@/components/payments/PaymentHistory";
+import PaymentChannelsManager from "@/components/landlord/PaymentChannelsManager";
 import DocumentManager from "@/components/documents/DocumentManager";
 import ReportGenerator from "@/components/reports/ReportGenerator";
 import { LinkedAccountsSection } from "@/components/LinkedAccountsSection";
@@ -37,7 +38,7 @@ import { AUTH_QUERY_KEYS, clearAuthQueries } from "@/lib/auth-keys";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Lease } from "@/../../shared/schema";
 
-type DashboardSection = "overview" | "properties" | "tenants" | "leases" | "payments" | "documents" | "reports" | "profile";
+type DashboardSection = "overview" | "properties" | "tenants" | "leases" | "payments" | "payment-settings" | "documents" | "reports" | "profile";
 
 // Password validation helper function
 function validatePassword(password: string): { isValid: boolean; failedRequirements: string[] } {
@@ -71,6 +72,7 @@ export default function LandlordDashboard() {
     tenants: 'Tenants',
     leases: 'Leases',
     payments: 'Payments',
+    'payment-settings': 'Payment Settings',
     documents: 'Documents',
     reports: 'Reports',
     profile: 'Profile'
@@ -1118,6 +1120,9 @@ export default function LandlordDashboard() {
             />
           </div>
         );
+
+      case "payment-settings":
+        return <PaymentChannelsManager />;
 
       case "documents":
         return <DocumentManager />;

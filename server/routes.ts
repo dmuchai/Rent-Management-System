@@ -15,6 +15,7 @@ import { z } from "zod";
 import { emailService } from "./services/emailService";
 import { pesapalService } from "./services/pesapalService";
 import { mpesaService } from "./services/mpesaService";
+import jwt from "jsonwebtoken";
 
 // Security helper functions for environment variable validation and sanitization
 function validateSupabaseUrl(url: string | undefined): string | null {
@@ -452,6 +453,96 @@ export async function registerRoutes(app: Express) {
     // Clear auth cookie/session
     res.clearCookie('supabase-auth-token');
     res.json({ message: "Logged out successfully" });
+  });
+
+  // Handle Vercel-style query parameter format for /api/auth?action=*
+  // This allows the same client code to work in both local dev and production
+  app.all("/api/auth", async (req: any, res: any) => {
+    const action = req.query.action;
+    
+    // Extract and verify JWT token manually (since we can't use middleware on app.all)
+    let token = null;
+    const authHeader = req.headers['authorization'];
+    if (authHeader) {
+      token = authHeader.split(' ')[1];
+    } else if (req.cookies && req.cookies['supabase-auth-token']) {
+      token = req.cookies['supabase-auth-token'];
+    }
+
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    let userId: string;
+    try {
+      const payload = jwt.verify(token, process.env.SUPABASE_JWT_SECRET!);
+      userId = (payload as any).sub;
+    } catch (err) {
+      console.log('Token verification failed:', err instanceof Error ? err.message : 'Unknown error');
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    if (action === "user" && req.method === "GET") {
+      try {
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .single();
+
+        if (error || !userData) {
+          console.log('User not found in database, returning minimal data');
+          return res.json({ id: userId, email: '', role: null });
+        }
+
+        console.log('Returning user data:', { id: userData.id, role: userData.role });
+        return res.json({
+          id: userData.id,
+          email: userData.email,
+          firstName: userData.first_name,
+          lastName: userData.last_name,
+          role: userData.role,
+          phoneNumber: userData.phone_number || "",
+          phoneVerified: userData.phone_verified || false,
+          profileImageUrl: userData.profile_image_url,
+        });
+      } catch (error) {
+        console.log('Error in /api/auth?action=user:', error);
+        return res.status(500).json({ error: "Failed to fetch user" });
+      }
+    } else if (action === "set-role" && req.method === "POST") {
+      const { role } = req.body;
+      if (!role || !['landlord', 'property_manager', 'tenant'].includes(role)) {
+        return res.status(400).json({ error: "Invalid role" });
+      }
+      
+      try {
+        const { error } = await supabase
+          .from('users')
+          .update({ role, updated_at: new Date().toISOString() })
+          .eq('id', userId);
+
+        if (error) {
+          console.error('Error setting role:', error);
+          return res.status(500).json({ error: "Failed to set role" });
+        }
+
+        console.log('Role set successfully:', { userId, role });
+        return res.json({ message: "Role set successfully", role });
+      } catch (error) {
+        console.error('Error in /api/auth?action=set-role:', error);
+        return res.status(500).json({ error: "Failed to set role" });
+      }
+    } else if (action === "logout" && req.method === "POST") {
+      // Handle logout - no authentication required since we're logging out
+      // Just clear the cookie and return success
+      res.clearCookie('supabase-auth-token');
+      console.log('User logged out successfully');
+      return res.json({ message: "Logged out successfully" });
+    }
+    
+    // If action is not handled, return 404
+    return res.status(404).json({ error: "Action not found" });
   });
 
   // Create/sync user in custom users table

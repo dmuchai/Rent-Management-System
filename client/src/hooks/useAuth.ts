@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { User } from "@shared/schema";
 import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
@@ -36,6 +36,34 @@ function clearAuthStorageLocal() {
 
 export function useAuth() {
   const queryClient = useQueryClient();
+  const [sessionUser, setSessionUser] = useState<{ id: string } | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (isMounted) {
+          setSessionUser(session?.user ? { id: session.user.id } : null);
+        }
+      } finally {
+        if (isMounted) setSessionChecked(true);
+      }
+    };
+
+    loadSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSessionUser(session?.user ? { id: session.user.id } : null);
+    });
+
+    return () => {
+      isMounted = false;
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
 
   // Handle logout parameter from server redirect
   useEffect(() => {
@@ -87,15 +115,17 @@ export function useAuth() {
       }
 
       const userData = await response.json();
-      console.log('[useAuth] User data received:', { id: userData.id, role: userData.role });
+      console.log('[useAuth] User data received:', JSON.stringify({ id: userData.id, role: userData.role, email: userData.email, fullData: userData }));
       return userData;
     },
     retry: 1, // Retry once if API call fails
     retryDelay: 500, // Wait 500ms before retry
-  }); return {
+  });
+
+  return {
     user,
-    isLoading,
+    isLoading: isLoading || !sessionChecked,
     error,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user || !!sessionUser,
   };
 }

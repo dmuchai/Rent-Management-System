@@ -26,13 +26,13 @@ function Router() {
 
   // Redirect logic for proper URL handling
   useEffect(() => {
-    console.log('[Router] Auth state:', { isAuthenticated, isLoading, location, userRole: user?.role });
+    console.log('[Router] Auth state:', JSON.stringify({ isAuthenticated, isLoading, location, userRole: user?.role, userRoleType: typeof user?.role, hasUser: !!user }));
 
     if (!isLoading) {
       if (isAuthenticated) {
         // If user has no role, redirect to role selection
         if (user && !user.role && location !== '/select-role') {
-          console.log('[Router] User has no role, redirecting to /select-role');
+          console.log('[Router] User has no role, redirecting to /select-role. Role value:', user.role);
           setLocation('/select-role');
           return;
         }

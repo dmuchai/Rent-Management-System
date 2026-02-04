@@ -23,7 +23,7 @@ const config: CapacitorConfig = {
   ...(isDev
     ? {
       server: {
-        url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.100.165:5000',
+        url: process.env.CAPACITOR_SERVER_URL || 'http://10.0.2.2:5000',
         cleartext: true,
       },
     }

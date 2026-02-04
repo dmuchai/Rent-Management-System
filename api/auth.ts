@@ -422,12 +422,22 @@ export default async function handler(
         }
       }
 
+      // Determine user role - handle null vs undefined properly
+      const userRole = profile?.role || user.user_metadata?.role || null;
+      
+      console.log(`[Auth] Returning user data:`, {
+        id: user.id,
+        role: userRole,
+        profileRole: profile?.role,
+        metadataRole: user.user_metadata?.role
+      });
+
       return res.status(200).json({
         id: user.id,
         email: user.email,
         firstName: profile?.first_name ?? user.user_metadata?.first_name ?? user.user_metadata?.firstName ?? "",
         lastName: profile?.last_name ?? user.user_metadata?.last_name ?? user.user_metadata?.lastName ?? "",
-        role: profile?.role ?? user.user_metadata?.role ?? "landlord",
+        role: userRole,
         phoneNumber: phoneNumber || user.user_metadata?.phone_number || "",
         phoneVerified,
       });
@@ -538,6 +548,51 @@ export default async function handler(
       }
 
       return res.status(200).json({ message: "Profile updated successfully" });
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Set user role (for initial role selection)                             */
+    /* POST /api/auth?action=set-role                                          */
+    /* ---------------------------------------------------------------------- */
+    if (action === "set-role" && req.method === "POST") {
+      const user = await getUserFromAuthHeader(req);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+      const setRoleSchema = z.object({
+        role: z.enum(["landlord", "property_manager", "tenant"]),
+      });
+
+      const { role } = setRoleSchema.parse(req.body);
+
+      const admin = getAdminClient();
+
+      // 1. Update public.users table
+      const { error: dbError } = await admin
+        .from("users")
+        .update({ role })
+        .eq("id", user.id);
+
+      if (dbError) {
+        console.error("[Auth] Role database update failed:", dbError);
+        return res.status(500).json({ error: "Failed to set role", details: dbError.message });
+      }
+
+      // 2. Update Supabase Auth metadata (so it persists across sessions)
+      const { error: authError } = await admin.auth.admin.updateUserById(user.id, {
+        user_metadata: {
+          ...user.user_metadata,
+          role,
+        }
+      });
+
+      if (authError) {
+        console.error("[Auth] Role metadata update failed:", authError);
+        // Not critical enough to fail the request if DB update succeeded
+      }
+
+      console.log(`[Auth] Role set to '${role}' for user ${user.id}`);
+
+      return res.status(200).json({ message: "Role set successfully", role });
     }
 
     /* ---------------------------------------------------------------------- */

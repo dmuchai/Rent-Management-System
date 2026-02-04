@@ -28,50 +28,36 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const handleLogout = async () => {
-    // Run both logout operations concurrently, handling each independently
-    const results = await Promise.allSettled([
-      supabase.auth.signOut(),
-      apiRequest("POST", "/api/auth?action=logout"),
-    ]);
-
-    const [supabaseResult, apiResult] = results;
-    
-    if (supabaseResult.status === 'rejected') {
-      console.error('Supabase signOut failed:', supabaseResult.reason);
-    }
-    
+    // Call API logout FIRST while we still have the session token
     let apiSuccess = false;
-    if (apiResult.status === 'rejected') {
-      console.error('API logout failed:', apiResult.reason);
-    } else if (!apiResult.value.ok) {
-      console.error('API logout failed: Server returned status', apiResult.value.status);
-    } else {
-      apiSuccess = true;
+    try {
+      const apiResult = await apiRequest("POST", "/api/auth?action=logout");
+      if (apiResult.ok) {
+        apiSuccess = true;
+      } else {
+        console.error('API logout failed: Server returned status', apiResult.status);
+      }
+    } catch (error) {
+      console.error('API logout failed:', error);
+    }
+
+    // Then clear Supabase session (this removes the token)
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Supabase signOut failed:', error);
     }
 
     // Clear auth-related queries from cache using consistent keys
     clearAuthQueries(queryClient);
 
-    if (apiSuccess) {
-      toast({
-        title: "Logged out successfully",
-        description: "You have been logged out. Redirecting to login...",
-      });
-      window.location.href = "/";
-    } else if (supabaseResult.status === 'fulfilled') {
-      toast({
-        title: "Partial Logout",
-        description: "Local session cleared, but server logout failed. Redirecting...",
-        variant: "destructive",
-      });
-      window.location.href = "/";
-    } else {
-      toast({
-        title: "Logout Error",
-        description: "Failed to logout. Please try again or clear your browser data.",
-        variant: "destructive",
-      });
-    }
+    // Always redirect to login after logout, regardless of API result
+    toast({
+      title: "Logged out successfully",
+      description: "You have been logged out.",
+    });
+    
+    window.location.href = "/";
   };
 
   const handleViewProfile = () => {
