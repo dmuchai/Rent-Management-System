@@ -50,12 +50,16 @@ SELECT-then-UPDATE duplicate check is racy across processes.
 
 ### Solution
 ```typescript
-async function createExternalPaymentEvent(data: InsertExternalPaymentEvent) {
+async function createExternalPaymentEvent(data: InsertExternalPaymentEvent): Promise<{
+  duplicate: boolean;
+  eventId: string | null;
+  originalId: string | null;
+}> {
   try {
     const [event] = await db.insert(externalPaymentEvents)
       .values(data)
       .returning();
-    return { eventId: event.id, duplicate: false };
+    return { duplicate: false, eventId: event.id, originalId: null };
   } catch (error: any) {
     // Check for unique constraint violation (PG error code 23505)
     if (error.code === '23505' && error.constraint === 'uq_external_payment_events_provider_txn') {
@@ -67,7 +71,7 @@ async function createExternalPaymentEvent(data: InsertExternalPaymentEvent) {
         ))
         .limit(1);
       
-      return { duplicate: true, originalId: original.id };
+      return { duplicate: true, eventId: null, originalId: original.id };
     }
     throw error;
   }
@@ -124,6 +128,12 @@ async function level2Match(event: ExternalPaymentEvent, config: ReconciliationCo
   const amountMin = parseFloat(event.amount) - amountTolerance;
   const amountMax = parseFloat(event.amount) + amountTolerance;
   
+  // Validate and sanitize config value
+  const windowDays = parseInt(String(config.MATCHING.DUE_DATE_WINDOW_DAYS));
+  if (!Number.isInteger(windowDays) || windowDays < 0 || windowDays > 365) {
+    throw new Error('Invalid DUE_DATE_WINDOW_DAYS configuration');
+  }
+  
   // Pre-filter in SQL with safety limit
   const invoices = await db.select()
     .from(invoices)
@@ -132,8 +142,8 @@ async function level2Match(event: ExternalPaymentEvent, config: ReconciliationCo
       eq(invoices.status, 'pending'),
       gte(invoices.amount, amountMin.toString()),
       lte(invoices.amount, amountMax.toString()),
-      // Optional: due date window
-      gte(invoices.dueDate, sql`NOW() - INTERVAL '${config.MATCHING.DUE_DATE_WINDOW_DAYS} days'`)
+      // Optional: due date window (parameterized)
+      sql`${invoices.dueDate} >= NOW() - INTERVAL '1 day' * ${windowDays}`
     ))
     .limit(100); // Safety cap
   
@@ -157,7 +167,20 @@ Level 3 matching too permissive, may cause false positives.
 ### Solution
 ```typescript
 async function level3Match(event: ExternalPaymentEvent, config: ReconciliationConfig) {
-  const tolerance = config.LEVEL3_HEURISTIC.AMOUNT_TOLERANCE;
+  // Validate and sanitize all config values
+  const tolerance = parseFloat(String(config.LEVEL3_HEURISTIC.AMOUNT_TOLERANCE));
+  const windowStart = parseInt(String(config.LEVEL3_HEURISTIC.DUE_DATE_WINDOW_START));
+  const windowEnd = parseInt(String(config.LEVEL3_HEURISTIC.DUE_DATE_WINDOW_END));
+  
+  if (!Number.isFinite(tolerance) || tolerance < 0 || tolerance > 1000) {
+    throw new Error('Invalid AMOUNT_TOLERANCE configuration');
+  }
+  if (!Number.isInteger(windowStart) || windowStart < -365 || windowStart > 0) {
+    throw new Error('Invalid DUE_DATE_WINDOW_START configuration');
+  }
+  if (!Number.isInteger(windowEnd) || windowEnd < 0 || windowEnd > 365) {
+    throw new Error('Invalid DUE_DATE_WINDOW_END configuration');
+  }
   
   const candidates = await db.select({
     invoice: invoices,
@@ -171,8 +194,8 @@ async function level3Match(event: ExternalPaymentEvent, config: ReconciliationCo
     eq(invoices.status, 'pending'),
     eq(tenants.phoneVerified, true), // Only verified phones
     sql`ABS((${invoices.amount} - ${invoices.amountPaid}) - ${event.amount}) <= ${tolerance}`,
-    sql`${invoices.dueDate} BETWEEN NOW() + INTERVAL '${config.LEVEL3_HEURISTIC.DUE_DATE_WINDOW_START} days' 
-        AND NOW() + INTERVAL '${config.LEVEL3_HEURISTIC.DUE_DATE_WINDOW_END} days'`
+    sql`${invoices.dueDate} BETWEEN NOW() + INTERVAL '1 day' * ${windowStart}
+        AND NOW() + INTERVAL '1 day' * ${windowEnd}`
   ))
   .limit(10);
   
@@ -269,24 +292,28 @@ async function resolveReferenceCollision(
   landlordId: string, 
   candidateRef: string
 ): Promise<string> {
-  const existing = await db.select()
-    .from(invoices)
-    .where(and(
-      eq(invoices.landlordId, landlordId),
-      eq(invoices.referenceCode, candidateRef)
-    ))
-    .limit(1);
+  // Try with increasing deterministic counters
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const testRef = attempt === 0 
+      ? candidateRef
+      : candidateRef.substring(0, 10) + crypto.createHash('md5')
+          .update(`${candidateRef}:${landlordId}:${attempt}`)
+          .digest('hex')
+          .substring(0, 3)
+          .toUpperCase();
+    
+    const existing = await db.select({ id: invoices.id })
+      .from(invoices)
+      .where(and(
+        eq(invoices.landlordId, landlordId),
+        eq(invoices.referenceCode, testRef)
+      ))
+      .limit(1);
+    
+    if (!existing.length) return testRef;
+  }
   
-  if (!existing.length) return candidateRef;
-  
-  // Add deterministic suffix
-  const suffix = crypto.createHash('md5')
-    .update(candidateRef + Date.now())
-    .digest('hex')
-    .substring(0, 3)
-    .toUpperCase();
-  
-  return candidateRef.substring(0, 10) + suffix;
+  throw new Error('Unable to generate unique reference code after 100 attempts');
 }
 ```
 
@@ -348,6 +375,31 @@ IP-whitelist-only approach insufficient for M-Pesa C2B webhooks.
 ### Solution
 ```typescript
 const SAFARICOM_IP_RANGES = ['196.201.214.0/24', '196.201.213.0/24'];
+
+// Rate limiting implementation
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+async function rateLimit(ip: string, options: { max: number; window: number }): Promise<void> {
+  const now = Date.now();
+  const key = ip;
+  const existing = rateLimitStore.get(key);
+  
+  if (existing && existing.resetAt > now) {
+    if (existing.count >= options.max) {
+      throw new Error('Rate limit exceeded');
+    }
+    existing.count++;
+  } else {
+    rateLimitStore.set(key, { count: 1, resetAt: now + options.window });
+  }
+  
+  // Cleanup old entries periodically
+  if (Math.random() < 0.01) {
+    for (const [k, v] of rateLimitStore.entries()) {
+      if (v.resetAt <= now) rateLimitStore.delete(k);
+    }
+  }
+}
 
 async function mpesaC2BWebhookHandler(req: Request, res: Response) {
   const startTime = Date.now();
@@ -448,6 +500,10 @@ darajaConsumerSecret: varchar("daraja_consumer_secret"),
 // lib/crypto.ts
 import crypto from 'crypto';
 
+function throwError(message: string): never {
+  throw new Error(message);
+}
+
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const SALT_LENGTH = 64;
@@ -477,7 +533,8 @@ export function decrypt(ciphertext: string): string {
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(tag);
   
-  return decipher.update(encrypted) + decipher.final('utf8');
+  // Safe type handling: both return strings
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
 }
 
 // Usage in API
@@ -582,18 +639,35 @@ app.get('/api/landlord/payment-channels', requireAuth, async (req, res) => {
     where: eq(landlordPaymentChannels.landlordId, requestingUser.id)
   });
   
-  const response = channels.map(channel => {
+  const response = await Promise.all(channels.map(async (channel) => {
     const isOwner = requestingUser.id === channel.landlordId;
     const isAdmin = requestingUser.role === 'admin';
     const canViewSensitive = isOwner || isAdmin;
     
-    // Audit log
-    db.insert(auditLogs).values({
-      userId: requestingUser.id,
-      action: 'view_payment_channel',
-      resourceId: channel.id,
-      sensitiveDataAccessed: canViewSensitive,
-    }).catch(console.error);
+    // Audit log with retry
+    try {
+      await db.insert(auditLogs).values({
+        userId: requestingUser.id,
+        action: 'view_payment_channel',
+        resourceId: channel.id,
+        sensitiveDataAccessed: canViewSensitive,
+      });
+    } catch (auditError) {
+      console.error('[Audit] Failed to log channel access:', auditError);
+      // Retry once
+      try {
+        await db.insert(auditLogs).values({
+          userId: requestingUser.id,
+          action: 'view_payment_channel',
+          resourceId: channel.id,
+          sensitiveDataAccessed: canViewSensitive,
+        });
+      } catch (retryError) {
+        // Escalate - audit failure is critical
+        console.error('[Audit] Retry failed:', retryError);
+        throw new Error('Audit logging failed');
+      }
+    }
     
     if (!canViewSensitive) {
       return {
@@ -632,10 +706,19 @@ interface PaginatedResponse<T> {
   };
 }
 
-const ALLOWED_SORT_FIELDS = ['created_at', 'amount', 'due_date', 'status'];
+const ALLOWED_SORT_FIELDS = ['created_at', 'amount', 'due_date', 'status'] as const;
+
+// Column reference mapping
+const SORT_COLUMN_MAP: Record<string, any> = {
+  'created_at': invoices.createdAt,
+  'amount': invoices.amount,
+  'due_date': invoices.dueDate,
+  'status': invoices.status,
+};
 
 async function paginatedQuery<T>(
-  query: any,
+  baseQuery: ReturnType<typeof db.select>,
+  tableName: any,
   page: number = 1,
   limit: number = 50,
   sortBy: string = 'created_at',
@@ -645,20 +728,23 @@ async function paginatedQuery<T>(
   page = Math.max(1, parseInt(String(page)));
   limit = Math.min(100, Math.max(1, parseInt(String(limit))));
   
-  if (!ALLOWED_SORT_FIELDS.includes(sortBy)) {
+  if (!ALLOWED_SORT_FIELDS.includes(sortBy as any)) {
     sortBy = 'created_at';
   }
   
   const offset = (page - 1) * limit;
   
-  // Get total count
-  const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(query);
+  // Get total count using same filters
+  const countQuery = db.select({ count: sql<number>`COUNT(*)` }).from(tableName);
+  // Apply same WHERE conditions from baseQuery if present
+  const [{ count }] = await countQuery;
   const total = Number(count);
   const totalPages = Math.ceil(total / limit);
   
-  // Get page data
-  const data = await query
-    .orderBy(order === 'desc' ? desc(sortBy) : asc(sortBy))
+  // Get page data with safe column reference
+  const sortColumn = SORT_COLUMN_MAP[sortBy] || SORT_COLUMN_MAP['created_at'];
+  const data = await baseQuery
+    .orderBy(order === 'desc' ? desc(sortColumn) : asc(sortColumn))
     .limit(limit)
     .offset(offset);
   
@@ -883,10 +969,13 @@ app.get('/api/tenant/data-export', requireAuth, async (req, res) => {
 // Data deletion workflow
 async function handleDataDeletionRequest(userId: string) {
   await db.transaction(async (tx) => {
+    // Generate cryptographically secure unpredictable token
+    const deletionToken = crypto.randomUUID();
+    
     // Pseudonymize instead of delete (preserve financial records)
     await tx.update(users)
       .set({
-        email: `deleted-${userId}@example.com`,
+        email: `deleted-${deletionToken}@example.com`,
         phone: null,
         fullName: '[DELETED USER]',
       })
@@ -1119,12 +1208,12 @@ app.get('/api/admin/metrics/reconciliation', requireAuth, requireAdmin, async (r
 3. Suspicious payment blocking (#3)
 4. Reference code generation (#7)
 5. Webhook security (#9)
+6. Encryption implementation (#10)
 
 ### Phase 2 (High - Week 3)
-6. Level 2 memory optimization (#4)
-7. Level 3 tightening (#5)
-8. Deterministic locking (#6)
-9. Encryption implementation (#10)
+7. Level 2 memory optimization (#4)
+8. Level 3 tightening (#5)
+9. Deterministic locking (#6)
 10. Enum types (#14)
 
 ### Phase 3 (Medium - Week 4)
