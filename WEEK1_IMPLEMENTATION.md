@@ -1,5 +1,22 @@
 # Week 1 Implementation - Payment Reconciliation Foundation
 
+## ⚠️ Important Schema Notes
+
+### Invoice Foreign Key Behavior
+The `invoices` table uses **nullable foreign keys with ON DELETE SET NULL** for:
+- `lease_id`
+- `landlord_id`
+- `tenant_id`
+
+**Rationale**: Preserves invoice history for accounting/auditing even when leases, landlords, or tenants are deleted. This is critical for financial compliance.
+
+**Application Impact**: 
+- When querying invoices, these fields may be `null`
+- Week 2+ code must handle nullable values (e.g., `invoice.leaseId ?? 'Deleted Lease'`)
+- Use LEFT JOINs when joining invoices with leases/users/tenants
+
+---
+
 ## ✅ What Was Implemented
 
 ### 1. Database Schema (Phase 1)
@@ -34,7 +51,7 @@
 
 **Option A: Using Drizzle (Recommended for dev)**
 ```bash
-cd /home/dennis-muchai/Rent-Management-System
+# From the project root:
 npx drizzle-kit generate:pg
 npx drizzle-kit push:pg
 ```

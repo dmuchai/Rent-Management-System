@@ -102,6 +102,20 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         }
       }
 
+      if (channelData.tillNumber) {
+        const [existingTill] = await sql`
+          SELECT id FROM public.landlord_payment_channels
+          WHERE till_number = ${channelData.tillNumber}
+            AND landlord_id = ${auth.userId}
+        `;
+        if (existingTill) {
+          return res.status(400).json({ 
+            error: 'This Till number is already registered',
+            details: 'You cannot register the same Till number twice'
+          });
+        }
+      }
+
       // If setting as primary, unset other primary channels
       if (channelData.isPrimary) {
         await sql`

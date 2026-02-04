@@ -10,6 +10,7 @@ import {
   boolean,
   integer,
   pgEnum,
+  unique,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -263,10 +264,10 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
 export const invoices = pgTable("invoices", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   
-  // Core fields
-  leaseId: varchar("lease_id").notNull().references(() => leases.id),
-  landlordId: varchar("landlord_id").notNull().references(() => users.id), // Denormalized for queries
-  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),   // Denormalized
+  // Core fields (nullable to preserve invoice history when entities are deleted)
+  leaseId: varchar("lease_id").references(() => leases.id),
+  landlordId: varchar("landlord_id").references(() => users.id), // Denormalized for queries
+  tenantId: varchar("tenant_id").references(() => tenants.id),   // Denormalized
   
   // Financial
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
@@ -335,7 +336,10 @@ export const externalPaymentEvents = pgTable("external_payment_events", {
   // Audit
   receivedAt: timestamp("received_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  // Unique constraint to prevent duplicate webhooks
+  uniqueProviderTransaction: unique("uq_external_payment_events_provider_txn").on(table.provider, table.externalTransactionId),
+}));
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({

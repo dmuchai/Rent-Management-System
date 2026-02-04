@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS landlord_payment_channels (
     account_number VARCHAR,
     account_name VARCHAR,
     
-    is_primary BOOLEAN DEFAULT true,
+    is_primary BOOLEAN DEFAULT false,
     is_active BOOLEAN DEFAULT true,
     
     -- Metadata
@@ -56,14 +56,19 @@ CREATE INDEX IF NOT EXISTS idx_payment_channels_paybill
     ON landlord_payment_channels(paybill_number) 
     WHERE paybill_number IS NOT NULL;
 
+-- Enforce only one primary channel per landlord
+CREATE UNIQUE INDEX IF NOT EXISTS idx_landlord_primary_channel_unique
+    ON landlord_payment_channels(landlord_id)
+    WHERE is_primary = true;
+
 -- Invoices table
 CREATE TABLE IF NOT EXISTS invoices (
     id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
     
-    -- Core fields
-    lease_id VARCHAR NOT NULL REFERENCES leases(id) ON DELETE CASCADE,
-    landlord_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    tenant_id VARCHAR NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    -- Core fields (nullable to preserve invoice history when entities are deleted)
+    lease_id VARCHAR REFERENCES leases(id) ON DELETE SET NULL,
+    landlord_id VARCHAR REFERENCES users(id) ON DELETE SET NULL,
+    tenant_id VARCHAR REFERENCES tenants(id) ON DELETE SET NULL,
     
     -- Financial
     amount DECIMAL(10, 2) NOT NULL,
@@ -162,4 +167,6 @@ CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);
 DO $$
 BEGIN
     RAISE NOTICE 'Payment Reconciliation System - Phase 1 migration completed successfully';
+    RAISE NOTICE 'NOTE: Invoice foreign keys use ON DELETE SET NULL to preserve invoice history';
+    RAISE NOTICE 'Application code must handle nullable lease_id, landlord_id, and tenant_id';
 END $$;

@@ -476,6 +476,7 @@ export default function LandlordDashboard() {
     tenants: "Tenants",
     leases: "Lease Management",
     payments: "Payment Management",
+    "payment-settings": "Payment Settings",
     documents: "Document Management",
     reports: "Financial Reports",
     profile: "Profile Management",

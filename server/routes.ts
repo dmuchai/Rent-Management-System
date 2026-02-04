@@ -463,9 +463,17 @@ export async function registerRoutes(app: Express) {
     // Extract and verify JWT token manually (since we can't use middleware on app.all)
     let token = null;
     const authHeader = req.headers['authorization'];
-    if (authHeader) {
-      token = authHeader.split(' ')[1];
-    } else if (req.cookies && req.cookies['supabase-auth-token']) {
+    
+    // Validate Bearer token scheme
+    if (authHeader && typeof authHeader === 'string') {
+      const bearerPrefix = 'Bearer ';
+      if (authHeader.toLowerCase().startsWith(bearerPrefix.toLowerCase())) {
+        token = authHeader.substring(bearerPrefix.length);
+      }
+    }
+    
+    // Fallback to cookie if no valid Bearer token
+    if (!token && req.cookies && req.cookies['supabase-auth-token']) {
       token = req.cookies['supabase-auth-token'];
     }
 
@@ -473,9 +481,16 @@ export async function registerRoutes(app: Express) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    // Validate JWT secret is configured
+    const jwtSecret = process.env.SUPABASE_JWT_SECRET;
+    if (!jwtSecret) {
+      console.error('SUPABASE_JWT_SECRET is not configured');
+      return res.status(500).json({ error: "Server misconfiguration" });
+    }
+
     let userId: string;
     try {
-      const payload = jwt.verify(token, process.env.SUPABASE_JWT_SECRET!);
+      const payload = jwt.verify(token, jwtSecret);
       userId = (payload as any).sub;
     } catch (err) {
       console.log('Token verification failed:', err instanceof Error ? err.message : 'Unknown error');

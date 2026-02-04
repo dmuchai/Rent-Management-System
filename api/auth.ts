@@ -564,6 +564,17 @@ export default async function handler(
 
       const { role } = setRoleSchema.parse(req.body);
 
+      // Authorization: only allow role selection if current role is null (initial selection)
+      // or if user is admin. Prevent role escalation.
+      const currentRole = user.role || user.user_metadata?.role;
+      if (currentRole && currentRole !== 'admin') {
+        console.log(`[Auth] Role change denied: user ${user.id} attempted to change from ${currentRole} to ${role}`);
+        return res.status(403).json({ 
+          error: "Unauthorized role change",
+          details: "You cannot change your role after initial selection. Contact support if needed."
+        });
+      }
+
       const admin = getAdminClient();
 
       // 1. Update public.users table

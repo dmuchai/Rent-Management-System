@@ -56,6 +56,7 @@ export function useAuth() {
     loadSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
       setSessionUser(session?.user ? { id: session.user.id } : null);
     });
 
@@ -115,7 +116,7 @@ export function useAuth() {
       }
 
       const userData = await response.json();
-      console.log('[useAuth] User data received:', JSON.stringify({ id: userData.id, role: userData.role, email: userData.email, fullData: userData }));
+      console.log('[useAuth] User data received:', JSON.stringify({ id: userData.id, role: userData.role }));
       return userData;
     },
     retry: 1, // Retry once if API call fails

@@ -44,14 +44,35 @@ case $DB_CHOICE in
         read -p "Enter PostgreSQL port (default: 5432): " PG_PORT
         PG_PORT=${PG_PORT:-5432}
         
-        read -p "Enter database name: " PG_DB
-        read -p "Enter database user: " PG_USER
+        # Database name with validation
+        while true; do
+            read -p "Enter database name: " PG_DB
+            if [ -z "$PG_DB" ]; then
+                echo "❌ Error: Database name cannot be empty. Please try again."
+            else
+                break
+            fi
+        done
+        
+        # Database user with validation
+        while true; do
+            read -p "Enter database user: " PG_USER
+            if [ -z "$PG_USER" ]; then
+                echo "❌ Error: Database user cannot be empty. Please try again."
+            else
+                break
+            fi
+        done
         
         echo ""
         echo "Running migration..."
+        # Temporarily disable errexit to capture psql exit status
+        set +e
         psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" -f migrations/001_payment_reconciliation_phase1.sql
+        migration_status=$?
+        set -e
         
-        if [ $? -eq 0 ]; then
+        if [ $migration_status -eq 0 ]; then
             echo "✅ Migration completed successfully!"
         else
             echo "❌ Migration failed. Please check the errors above."
