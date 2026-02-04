@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/api";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -53,8 +53,18 @@ export default function PaymentChannelsManager() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingChannel, setEditingChannel] = useState<PaymentChannel | null>(null);
 
-  const [formData, setFormData] = useState({
-    channelType: "mpesa_paybill" as const,
+  const [formData, setFormData] = useState<{
+    channelType: "mpesa_paybill" | "mpesa_till" | "bank_account";
+    paybillNumber: string;
+    tillNumber: string;
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+    displayName: string;
+    isPrimary: boolean;
+    notes: string;
+  }>({
+    channelType: "mpesa_paybill",
     paybillNumber: "",
     tillNumber: "",
     bankName: "",
