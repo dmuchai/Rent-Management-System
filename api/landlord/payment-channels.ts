@@ -44,6 +44,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         channelType: ch.channel_type,
         paybillNumber: ch.paybill_number,
         tillNumber: ch.till_number,
+        bankPaybillNumber: ch.bank_paybill_number,
+        bankAccountNumber: ch.bank_account_number,
         bankName: ch.bank_name,
         accountNumber: ch.account_number,
         accountName: ch.account_name,
@@ -60,9 +62,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
     if (req.method === 'POST') {
       const channelSchema = z.object({
-        channelType: z.enum(['mpesa_paybill', 'mpesa_till', 'bank_account']),
+        channelType: z.enum(['mpesa_paybill', 'mpesa_till', 'mpesa_to_bank', 'bank_account']),
         paybillNumber: z.string().regex(/^\d{6,7}$/, 'Paybill must be 6-7 digits').optional(),
         tillNumber: z.string().regex(/^\d{6,7}$/, 'Till number must be 6-7 digits').optional(),
+        bankPaybillNumber: z.string().regex(/^\d{6,7}$/, 'Bank paybill must be 6-7 digits').optional(),
+        bankAccountNumber: z.string().min(8).max(16).optional(),
         bankName: z.string().min(1).optional(),
         accountNumber: z.string().min(1).optional(),
         accountName: z.string().min(1).optional(),
@@ -75,6 +79,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           return false;
         }
         if (data.channelType === 'mpesa_till' && !data.tillNumber) {
+          return false;
+        }
+        if (data.channelType === 'mpesa_to_bank' && (!data.bankPaybillNumber || !data.bankAccountNumber)) {
           return false;
         }
         if (data.channelType === 'bank_account' && (!data.bankName || !data.accountNumber)) {
@@ -116,6 +123,20 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         }
       }
 
+      if (channelData.bankAccountNumber) {
+        const [existingBank] = await sql`
+          SELECT id FROM public.landlord_payment_channels
+          WHERE bank_account_number = ${channelData.bankAccountNumber}
+            AND landlord_id = ${auth.userId}
+        `;
+        if (existingBank) {
+          return res.status(400).json({ 
+            error: 'This bank account is already registered',
+            details: 'You cannot register the same bank account twice'
+          });
+        }
+      }
+
       // If setting as primary, unset other primary channels
       if (channelData.isPrimary) {
         await sql`
@@ -132,6 +153,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           channel_type,
           paybill_number,
           till_number,
+          bank_paybill_number,
+          bank_account_number,
           bank_name,
           account_number,
           account_name,
@@ -143,6 +166,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           ${channelData.channelType},
           ${channelData.paybillNumber || null},
           ${channelData.tillNumber || null},
+          ${channelData.bankPaybillNumber || null},
+          ${channelData.bankAccountNumber || null},
           ${channelData.bankName || null},
           ${channelData.accountNumber || null},
           ${channelData.accountName || null},
@@ -158,6 +183,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         channelType: channel.channel_type,
         paybillNumber: channel.paybill_number,
         tillNumber: channel.till_number,
+        bankPaybillNumber: channel.bank_paybill_number,
+        bankAccountNumber: channel.bank_account_number,
         bankName: channel.bank_name,
         accountNumber: channel.account_number,
         accountName: channel.account_name,

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { KENYA_BANK_PAYBILLS, getBankByPaybill, validateBankAccount, getBankOptions } from "@/../../shared/bankPaybills";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -54,9 +55,11 @@ export default function PaymentChannelsManager() {
   const [editingChannel, setEditingChannel] = useState<PaymentChannel | null>(null);
 
   const [formData, setFormData] = useState<{
-    channelType: "mpesa_paybill" | "mpesa_till" | "bank_account";
+    channelType: "mpesa_paybill" | "mpesa_till" | "mpesa_to_bank" | "bank_account";
     paybillNumber: string;
     tillNumber: string;
+    bankPaybillNumber: string;
+    bankAccountNumber: string;
     bankName: string;
     accountNumber: string;
     accountName: string;
@@ -67,6 +70,8 @@ export default function PaymentChannelsManager() {
     channelType: "mpesa_paybill",
     paybillNumber: "",
     tillNumber: "",
+    bankPaybillNumber: "",
+    bankAccountNumber: "",
     bankName: "",
     accountNumber: "",
     accountName: "",
@@ -135,6 +140,8 @@ export default function PaymentChannelsManager() {
       channelType: "mpesa_paybill",
       paybillNumber: "",
       tillNumber: "",
+      bankPaybillNumber: "",
+      bankAccountNumber: "",
       bankName: "",
       accountNumber: "",
       accountName: "",
@@ -298,16 +305,17 @@ export default function PaymentChannelsManager() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="mpesa_paybill">M-Pesa Paybill</SelectItem>
+                  <SelectItem value="mpesa_paybill">M-Pesa Paybill (Own)</SelectItem>
                   <SelectItem value="mpesa_till">M-Pesa Till Number</SelectItem>
-                  <SelectItem value="bank_account">Bank Account</SelectItem>
+                  <SelectItem value="mpesa_to_bank">M-Pesa to Bank Account</SelectItem>
+                  <SelectItem value="bank_account">Bank Account (Direct)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {formData.channelType === "mpesa_paybill" && (
               <div>
-                <Label htmlFor="paybillNumber">Paybill Number</Label>
+                <Label htmlFor="paybillNumber">Your Paybill Number</Label>
                 <Input
                   id="paybillNumber"
                   placeholder="e.g., 4012345"
@@ -318,7 +326,7 @@ export default function PaymentChannelsManager() {
                   pattern="\d{6,7}"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">6-7 digit Paybill number</p>
+                <p className="text-xs text-gray-500 mt-1">Your registered M-Pesa Paybill (6-7 digits)</p>
               </div>
             )}
 
@@ -337,6 +345,68 @@ export default function PaymentChannelsManager() {
                 />
                 <p className="text-xs text-gray-500 mt-1">6-7 digit Till number</p>
               </div>
+            )}
+
+            {formData.channelType === "mpesa_to_bank" && (
+              <>
+                <div>
+                  <Label htmlFor="bankName">Select Bank</Label>
+                  <Select
+                    value={formData.bankPaybillNumber}
+                    onValueChange={(value) => {
+                      const bank = getBankByPaybill(value);
+                      setFormData({
+                        ...formData,
+                        bankPaybillNumber: value,
+                        bankName: bank?.name || "",
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose your bank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getBankOptions().map((bank) => (
+                        <SelectItem key={bank.value} value={bank.value}>
+                          {bank.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Select the bank where your account is held
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="bankAccountNumber">Your Bank Account Number</Label>
+                  <Input
+                    id="bankAccountNumber"
+                    placeholder="e.g., 1234567890"
+                    value={formData.bankAccountNumber}
+                    onChange={(e) =>
+                      setFormData({ ...formData, bankAccountNumber: e.target.value })
+                    }
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Tenants will pay to your bank's paybill using this account number
+                  </p>
+                </div>
+
+                {formData.bankPaybillNumber && formData.bankAccountNumber && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm font-medium text-blue-900">Payment Instructions Preview:</p>
+                    <div className="mt-2 space-y-1 text-sm text-blue-800">
+                      <p><strong>Paybill:</strong> {formData.bankPaybillNumber} ({formData.bankName})</p>
+                      <p><strong>Account:</strong> {formData.bankAccountNumber}</p>
+                      <p className="text-xs text-blue-600 mt-2">
+                        ℹ️ Tenants will see these details when making payment
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {formData.channelType === "bank_account" && (
