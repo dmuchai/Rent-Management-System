@@ -48,12 +48,16 @@ export default function PaymentInstructions({
       const response = await apiRequest("GET", `/api/landlord/payment-channels?landlordId=${landlordId}`);
       const result = await response.json();
       console.log('[PaymentInstructions] API response:', result);
-      return Array.isArray(result) ? result : result.data || [];
+      console.log('[PaymentInstructions] Is array?', Array.isArray(result));
+      console.log('[PaymentInstructions] Result type:', typeof result);
+      const channels = Array.isArray(result) ? result : result.data || [];
+      console.log('[PaymentInstructions] Returning channels:', channels);
+      return channels;
     },
     enabled: !!landlordId, // Only run query if landlordId exists
   });
 
-  console.log('[PaymentInstructions] Query state:', { channels, isLoading, error });
+  console.log('[PaymentInstructions] Query state:', { channels, channelsLength: channels?.length, isLoading, error });
 
   const copyToClipboard = async (text: string, fieldName: string) => {
     try {
