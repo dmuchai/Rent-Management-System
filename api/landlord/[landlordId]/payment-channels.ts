@@ -14,9 +14,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
   const sql = createDbConnection();
 
   try {
-    // Extract landlordId from the URL path
-    // URL format: /api/landlord/[landlordId]/payment-channels
-    const landlordId = req.url?.split('/')[3];
+    // Extract landlordId from query params (Vercel dynamic routes)
+    const landlordId = req.query.landlordId as string;
     
     if (!landlordId) {
       return res.status(400).json({ error: 'Landlord ID is required' });
