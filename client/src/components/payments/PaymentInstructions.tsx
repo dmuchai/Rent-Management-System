@@ -39,14 +39,21 @@ export default function PaymentInstructions({
   const { toast } = useToast();
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  const { data: channels = [], isLoading } = useQuery<PaymentChannel[]>({
+  console.log('[PaymentInstructions] Received props:', { landlordId, invoiceReferenceCode, amount });
+
+  const { data: channels = [], isLoading, error } = useQuery<PaymentChannel[]>({
     queryKey: [`/api/landlord/${landlordId}/payment-channels`],
     queryFn: async () => {
+      console.log('[PaymentInstructions] Fetching channels for landlordId:', landlordId);
       const response = await apiRequest("GET", `/api/landlord/${landlordId}/payment-channels`);
       const result = await response.json();
+      console.log('[PaymentInstructions] API response:', result);
       return Array.isArray(result) ? result : result.data || [];
     },
+    enabled: !!landlordId, // Only run query if landlordId exists
   });
+
+  console.log('[PaymentInstructions] Query state:', { channels, isLoading, error });
 
   const copyToClipboard = async (text: string, fieldName: string) => {
     try {
