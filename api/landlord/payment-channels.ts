@@ -3,12 +3,64 @@ import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
 import { z } from 'zod';
 
-// GET /api/landlord/payment-channels - List landlord's payment channels
+// GET /api/landlord/payment-channels - List landlord's payment channels (auth required)
+// GET /api/landlord/payment-channels?landlordId=xxx - Get active channels for specific landlord (public, for tenants)
 // POST /api/landlord/payment-channels - Create new payment channel
 // PUT /api/landlord/payment-channels?id=xxx - Update payment channel
 // DELETE /api/landlord/payment-channels?id=xxx - Delete payment channel
 
-export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
+// Wrapper to allow public access for GET with landlordId, auth required for everything else
+export default async (req: VercelRequest, res: VercelResponse) => {
+  // PUBLIC: Allow GET requests with landlordId parameter (for tenants viewing payment instructions)
+  if (req.method === 'GET' && req.query.landlordId) {
+    const landlordId = req.query.landlordId as string;
+    const sql = createDbConnection();
+
+    try {
+      const channels = await sql`
+        SELECT 
+          id,
+          channel_type,
+          paybill_number,
+          till_number,
+          bank_paybill_number,
+          bank_account_number,
+          bank_name,
+          account_number,
+          account_name,
+          is_primary,
+          display_name
+        FROM public.landlord_payment_channels
+        WHERE landlord_id = ${landlordId}
+          AND is_active = true
+        ORDER BY is_primary DESC, created_at DESC
+      `;
+
+      const formattedChannels = channels.map((ch: any) => ({
+        id: ch.id,
+        channelType: ch.channel_type,
+        paybillNumber: ch.paybill_number,
+        tillNumber: ch.till_number,
+        bankPaybillNumber: ch.bank_paybill_number,
+        bankAccountNumber: ch.bank_account_number,
+        bankName: ch.bank_name,
+        accountNumber: ch.account_number,
+        accountName: ch.account_name,
+        isPrimary: ch.is_primary,
+        displayName: ch.display_name,
+      }));
+
+      return res.status(200).json(formattedChannels);
+    } catch (error) {
+      console.error('Error fetching public payment channels:', error);
+      return res.status(500).json({ error: 'Failed to fetch payment channels' });
+    } finally {
+      await sql.end();
+    }
+  }
+
+  // All other requests require authentication
+  return requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   // Only landlords can manage payment channels
   if (auth.role !== 'landlord') {
     return res.status(403).json({ error: 'Only landlords can manage payment channels' });
@@ -386,4 +438,5 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   } finally {
     await sql.end();
   }
-});
+  })(req, res); // Invoke requireAuth with req and res
+};

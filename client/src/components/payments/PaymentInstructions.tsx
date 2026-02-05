@@ -42,10 +42,10 @@ export default function PaymentInstructions({
   console.log('[PaymentInstructions] Received props:', { landlordId, invoiceReferenceCode, amount });
 
   const { data: channels = [], isLoading, error } = useQuery<PaymentChannel[]>({
-    queryKey: [`/api/landlord/${landlordId}/payment-channels`],
+    queryKey: [`/api/landlord/payment-channels`, landlordId],
     queryFn: async () => {
       console.log('[PaymentInstructions] Fetching channels for landlordId:', landlordId);
-      const response = await apiRequest("GET", `/api/landlord/${landlordId}/payment-channels`);
+      const response = await apiRequest("GET", `/api/landlord/payment-channels?landlordId=${landlordId}`);
       const result = await response.json();
       console.log('[PaymentInstructions] API response:', result);
       return Array.isArray(result) ? result : result.data || [];
