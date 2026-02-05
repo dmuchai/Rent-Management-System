@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Copy, Check, Info, Building, CreditCard, Phone } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { getBankByPaybill } from "@/../../shared/bankPaybills";
+import { getBankByPaybill } from "@shared/bankPaybills";
 
 interface PaymentChannel {
   id: string;
@@ -208,6 +208,9 @@ export default function PaymentInstructions({
   function renderChannelDetails(channel: PaymentChannel) {
     switch (channel.channelType) {
       case 'mpesa_paybill':
+        if (!channel.paybillNumber) {
+          return <p className="text-sm text-muted-foreground">Paybill number not configured</p>;
+        }
         return (
           <div className="space-y-2">
             <div className="flex items-center justify-between bg-white p-3 rounded border">
@@ -215,7 +218,7 @@ export default function PaymentInstructions({
                 <p className="text-xs text-muted-foreground">Paybill Number</p>
                 <p className="text-lg font-bold font-mono">{channel.paybillNumber}</p>
               </div>
-              <CopyButton text={channel.paybillNumber!} fieldName="Paybill" />
+              <CopyButton text={channel.paybillNumber} fieldName="Paybill" />
             </div>
 
             {invoiceReferenceCode && (
@@ -249,6 +252,9 @@ export default function PaymentInstructions({
         );
 
       case 'mpesa_till':
+        if (!channel.tillNumber) {
+          return <p className="text-sm text-muted-foreground">Till number not configured</p>;
+        }
         return (
           <div className="space-y-2">
             <div className="flex items-center justify-between bg-white p-3 rounded border">
@@ -256,7 +262,7 @@ export default function PaymentInstructions({
                 <p className="text-xs text-muted-foreground">Till Number</p>
                 <p className="text-lg font-bold font-mono">{channel.tillNumber}</p>
               </div>
-              <CopyButton text={channel.tillNumber!} fieldName="Till Number" />
+              <CopyButton text={channel.tillNumber} fieldName="Till Number" />
             </div>
 
             <div className="mt-4 p-3 bg-gray-50 rounded text-sm">
@@ -275,7 +281,10 @@ export default function PaymentInstructions({
         );
 
       case 'mpesa_to_bank':
-        const bankInfo = channel.bankPaybillNumber ? getBankByPaybill(channel.bankPaybillNumber) : null;
+        if (!channel.bankPaybillNumber || !channel.bankAccountNumber) {
+          return <p className="text-sm text-muted-foreground">Bank account details not configured</p>;
+        }
+        const bankInfo = getBankByPaybill(channel.bankPaybillNumber);
         return (
           <div className="space-y-2">
             <div className="flex items-center justify-between bg-white p-3 rounded border">
@@ -283,7 +292,7 @@ export default function PaymentInstructions({
                 <p className="text-xs text-muted-foreground">Bank Paybill ({bankInfo?.name || 'Bank'})</p>
                 <p className="text-lg font-bold font-mono">{channel.bankPaybillNumber}</p>
               </div>
-              <CopyButton text={channel.bankPaybillNumber!} fieldName="Paybill" />
+              <CopyButton text={channel.bankPaybillNumber} fieldName="Paybill" />
             </div>
 
             <div className="flex items-center justify-between bg-white p-3 rounded border">
@@ -291,7 +300,7 @@ export default function PaymentInstructions({
                 <p className="text-xs text-muted-foreground">Account Number</p>
                 <p className="text-lg font-bold font-mono">{channel.bankAccountNumber}</p>
               </div>
-              <CopyButton text={channel.bankAccountNumber!} fieldName="Account" />
+              <CopyButton text={channel.bankAccountNumber} fieldName="Account" />
             </div>
 
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm">
@@ -315,6 +324,9 @@ export default function PaymentInstructions({
         );
 
       case 'bank_account':
+        if (!channel.accountNumber) {
+          return <p className="text-sm text-muted-foreground">Account number not configured</p>;
+        }
         return (
           <div className="space-y-2">
             <div className="flex items-center justify-between bg-white p-3 rounded border">
@@ -329,7 +341,7 @@ export default function PaymentInstructions({
                 <p className="text-xs text-muted-foreground">Account Number</p>
                 <p className="text-lg font-bold font-mono">{channel.accountNumber}</p>
               </div>
-              <CopyButton text={channel.accountNumber!} fieldName="Account Number" />
+              <CopyButton text={channel.accountNumber} fieldName="Account Number" />
             </div>
 
             {channel.accountName && (

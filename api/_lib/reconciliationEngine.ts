@@ -1,10 +1,11 @@
-import { createDbConnection } from './db';
-
-const sql = createDbConnection();
+import type { Sql } from 'postgres';
 
 /**
  * Payment Reconciliation Engine
  * Implements multi-level matching strategy for automated payment reconciliation
+ * 
+ * Note: All exported functions accept a sql connection parameter to avoid
+ * creating persistent connections in serverless environments.
  */
 
 export interface ExternalPaymentEvent {
@@ -58,6 +59,7 @@ const DEFAULT_CONFIG: ReconciliationConfig = {
  * Exact match using reference code (M-Pesa own paybill)
  */
 async function matchByReferenceCode(
+  sql: Sql,
   payment: ExternalPaymentEvent
 ): Promise<ReconciliationResult> {
   if (!payment.referenceCode) {
@@ -112,6 +114,7 @@ async function matchByReferenceCode(
  * Match using: landlord lookup → amount + date window
  */
 async function matchByBankAccount(
+  sql: Sql,
   payment: ExternalPaymentEvent,
   config: ReconciliationConfig
 ): Promise<ReconciliationResult> {
@@ -143,11 +146,22 @@ async function matchByBankAccount(
   }
 
   // Step 2: Find candidate invoices (amount + date window)
+  // Validate and coerce timestamp to Date object
+  const paymentTimestamp = new Date(payment.timestamp);
+  if (isNaN(paymentTimestamp.getTime())) {
+    return {
+      matched: false,
+      confidence: 'low',
+      method: 'heuristic_l2',
+      reasons: ['Invalid payment timestamp - cannot calculate date window'],
+    };
+  }
+
   const dateWindowStart = new Date(
-    payment.timestamp.getTime() - config.dateWindowHours * 60 * 60 * 1000
+    paymentTimestamp.getTime() - config.dateWindowHours * 60 * 60 * 1000
   );
   const dateWindowEnd = new Date(
-    payment.timestamp.getTime() + config.dateWindowHours * 60 * 60 * 1000
+    paymentTimestamp.getTime() + config.dateWindowHours * 60 * 60 * 1000
   );
 
   const amountTolerance = payment.amount * (config.amountTolerancePercent / 100);
@@ -201,7 +215,7 @@ async function matchByBankAccount(
   }
 
   // Multiple candidates - escalate to Level 3 (phone matching)
-  return matchByPhoneNumber(payment, candidates, config);
+  return matchByPhoneNumber(sql, payment, candidates, config);
 }
 
 /**
@@ -209,6 +223,7 @@ async function matchByBankAccount(
  * When multiple candidates exist, use phone number and payment patterns
  */
 async function matchByPhoneNumber(
+  sql: Sql,
   payment: ExternalPaymentEvent,
   candidates: any[],
   config: ReconciliationConfig
@@ -296,14 +311,18 @@ async function matchByPhoneNumber(
 
 /**
  * Main reconciliation entry point
+ * @param sql - Database connection (caller manages lifecycle)
+ * @param payment - Payment event to reconcile
+ * @param config - Reconciliation configuration
  */
 export async function reconcilePayment(
+  sql: Sql,
   payment: ExternalPaymentEvent,
   config: ReconciliationConfig = DEFAULT_CONFIG
 ): Promise<ReconciliationResult> {
   // Level 1: Try deterministic matching first (if reference code exists)
   if (payment.referenceCode) {
-    const result = await matchByReferenceCode(payment);
+    const result = await matchByReferenceCode(sql, payment);
     if (result.matched) {
       return result;
     }
@@ -311,7 +330,7 @@ export async function reconcilePayment(
 
   // Level 2/3: Try heuristic matching for bank paybill payments
   if (payment.bankAccountNumber && payment.bankPaybillNumber) {
-    return await matchByBankAccount(payment, config);
+    return await matchByBankAccount(sql, payment, config);
   }
 
   // No match possible
@@ -325,44 +344,52 @@ export async function reconcilePayment(
 
 /**
  * Record reconciliation attempt in database
+ * @param sql - Database connection (caller manages lifecycle)
+ * @param paymentEventId - ID of the payment event
+ * @param result - Reconciliation result to record
  */
 export async function recordReconciliation(
+  sql: Sql,
   paymentEventId: string,
   result: ReconciliationResult
 ): Promise<void> {
-  if (result.matched && result.invoiceId) {
-    // Update external_payment_events with matched invoice
-    await sql`
-      UPDATE public.external_payment_events
-      SET 
-        matched_invoice_id = ${result.invoiceId},
-        reconciliation_status = 'matched',
-        reconciliation_method = ${result.method},
-        confidence_score = ${result.score || 100},
-        reconciled_at = NOW(),
-        reconciliation_notes = ${result.reasons.join('; ')}
-      WHERE id = ${paymentEventId}
-    `;
+  // Wrap all DB changes in a transaction to ensure atomicity
+  await sql.begin(async (tx) => {
+    if (result.matched && result.invoiceId) {
+      // Update external_payment_events with matched invoice
+      await tx`
+        UPDATE public.external_payment_events
+        SET 
+          matched_invoice_id = ${result.invoiceId},
+          reconciliation_status = 'matched',
+          reconciliation_method = ${result.method},
+          confidence_score = ${result.score || 100},
+          reconciled_at = NOW(),
+          reconciliation_notes = ${result.reasons.join('; ')}
+        WHERE id = ${paymentEventId}
+      `;
 
-    // Update invoice status
-    await sql`
-      UPDATE public.invoices
-      SET 
-        status = 'paid',
-        paid_at = NOW(),
-        payment_source = 'mpesa'
-      WHERE id = ${result.invoiceId}
-    `;
-  } else {
-    // Mark as requiring manual review
-    await sql`
-      UPDATE public.external_payment_events
-      SET 
-        reconciliation_status = 'pending_review',
-        reconciliation_method = ${result.method},
-        confidence_score = ${result.score || 0},
-        reconciliation_notes = ${result.reasons.join('; ')}
-      WHERE id = ${paymentEventId}
-    `;
-  }
+      // Update invoice status
+      await tx`
+        UPDATE public.invoices
+        SET 
+          status = 'paid',
+          paid_at = NOW(),
+          payment_source = 'mpesa'
+        WHERE id = ${result.invoiceId}
+      `;
+    } else {
+      // Mark as requiring manual review
+      await tx`
+        UPDATE public.external_payment_events
+        SET 
+          reconciliation_status = 'pending_review',
+          reconciliation_method = ${result.method},
+          confidence_score = ${result.score || 0},
+          reconciliation_notes = ${result.reasons.join('; ')}
+        WHERE id = ${paymentEventId}
+      `;
+    }
+    // Transaction automatically commits if no error, rolls back on exception
+  });
 }

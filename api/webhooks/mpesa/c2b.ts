@@ -53,12 +53,27 @@ interface MPesaC2BCallback {
 
 /**
  * Verify request comes from Safaricom
+ * Only trusts x-forwarded-for when running on Vercel to prevent IP spoofing
  */
 function verifySourceIP(req: VercelRequest): boolean {
-  const clientIP = 
-    req.headers['x-forwarded-for']?.toString().split(',')[0].trim() ||
-    req.headers['x-real-ip']?.toString() ||
-    req.socket?.remoteAddress;
+  let clientIP: string | undefined;
+
+  // Only trust proxy headers when running on Vercel
+  // Otherwise, attackers could spoof x-forwarded-for/x-real-ip headers
+  if (process.env.VERCEL === '1' || process.env.VERCEL === 'true') {
+    // On Vercel, trust the first IP in x-forwarded-for (original client)
+    // Format: "client, proxy1, proxy2" - we want "client"
+    const forwardedFor = req.headers['x-forwarded-for']?.toString();
+    if (forwardedFor) {
+      clientIP = forwardedFor.split(',')[0].trim();
+    } else {
+      // Fallback to x-real-ip on Vercel
+      clientIP = req.headers['x-real-ip']?.toString()?.trim();
+    }
+  } else {
+    // Not on Vercel - use socket remoteAddress directly (no proxy)
+    clientIP = req.socket?.remoteAddress;
+  }
 
   if (!clientIP) {
     return false;
@@ -69,10 +84,12 @@ function verifySourceIP(req: VercelRequest): boolean {
 
 /**
  * Prevent replay attacks using timestamp validation
+ * M-Pesa TransTime is in EAT (East Africa Time, UTC+3)
  */
 function validateTimestamp(transTime: string): boolean {
   try {
     // TransTime format: YYYYMMDDHHmmss (e.g., "20230615143022")
+    // This is in EAT (East Africa Time = UTC+3)
     const year = parseInt(transTime.substring(0, 4));
     const month = parseInt(transTime.substring(4, 6)) - 1;
     const day = parseInt(transTime.substring(6, 8));
@@ -80,9 +97,11 @@ function validateTimestamp(transTime: string): boolean {
     const minute = parseInt(transTime.substring(10, 12));
     const second = parseInt(transTime.substring(12, 14));
 
-    const paymentTime = new Date(year, month, day, hour, minute, second);
-    const now = new Date();
-    const ageInMinutes = (now.getTime() - paymentTime.getTime()) / (1000 * 60);
+    // Convert EAT to UTC by subtracting 3 hours
+    // Create UTC timestamp then subtract 3 hours (EAT = UTC+3)
+    const paymentTimeUtc = new Date(Date.UTC(year, month, day, hour - 3, minute, second));
+    const nowUtc = Date.now(); // Already in UTC (milliseconds since epoch)
+    const ageInMinutes = (nowUtc - paymentTimeUtc.getTime()) / (1000 * 60);
 
     // Reject if payment is more than 15 minutes old (replay attack)
     // or in the future (clock skew)
@@ -90,17 +109,6 @@ function validateTimestamp(transTime: string): boolean {
   } catch (error) {
     return false;
   }
-}
-
-/**
- * Check for duplicate transaction
- */
-async function isDuplicateTransaction(transId: string): Promise<boolean> {
-  const [existing] = await sql`
-    SELECT id FROM public.external_payment_events
-    WHERE transaction_id = ${transId}
-  `;
-  return !!existing;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -111,7 +119,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // Security Layer 1: IP Whitelist
     if (!verifySourceIP(req)) {
-      console.error('[M-Pesa C2B] Unauthorized IP:', req.headers['x-forwarded-for']);
+    const callback = req.body as MPesaC2BCallback;
+
+    // Basic validation
+    if (!callback.TransID || !callback.TransTime || !callback.TransAmount || 
+        !callback.BusinessShortCode || !callback.BillRefNumber || !callback.MSISDN) {
+      console.error('[M-Pesa C2B] Missing required fields:', callback);
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -121,15 +136,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!validateTimestamp(callback.TransTime)) {
       console.error('[M-Pesa C2B] Invalid timestamp:', callback.TransTime);
       return res.status(400).json({ error: 'Invalid timestamp' });
-    }
-
-    // Security Layer 3: Duplicate detection
-    if (await isDuplicateTransaction(callback.TransID)) {
-      console.warn('[M-Pesa C2B] Duplicate transaction:', callback.TransID);
-      return res.status(200).json({ 
-        ResultCode: 0, 
-        ResultDesc: 'Already processed' 
-      });
     }
 
     // Parse payment details
@@ -160,72 +166,93 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!channel) {
       // Bank account not registered - store as unmatched
-      await sql`
+      // Use ON CONFLICT to make this idempotent (handle duplicate webhooks)
+      const result = await sql`
         INSERT INTO public.external_payment_events (
-          transaction_id,
-          source,
-          phone_number,
+          event_type,
+          provider,
+          external_transaction_id,
           amount,
-          bank_paybill_number,
-          bank_account_number,
-          timestamp,
-          raw_data,
+          payer_phone,
+          payer_account_ref,
+          transaction_time,
+          raw_payload,
           reconciliation_status
         ) VALUES (
+          'mpesa_c2b',
+          'safaricom',
           ${transactionId},
-          'mpesa_c2b_bank',
-          ${phoneNumber},
           ${amount},
-          ${bankPaybillNumber},
+          ${phoneNumber},
           ${bankAccountNumber},
           ${timestamp.toISOString()},
           ${JSON.stringify(callback)},
-          'unmatched_channel'
+          'unmatched'
         )
+        ON CONFLICT ON CONSTRAINT uq_external_payment_events_provider_txn DO NOTHING
       `;
 
-      console.warn('[M-Pesa C2B] Unknown bank account:', {
-        paybill: bankPaybillNumber,
-        account: bankAccountNumber,
-      });
+      // Check if insert succeeded (new transaction) or was duplicate
+      if (result.count === 0) {
+        console.warn('[M-Pesa C2B] Duplicate transaction (unmatched):', transactionId);
+      } else {
+        console.warn('[M-Pesa C2B] Unknown bank account:', {
+          paybill: bankPaybillNumber,
+          account: bankAccountNumber,
+        });
+      }
 
-      // Still return success to Safaricom to prevent retries
+      // Always return success to Safaricom to prevent retries
       return res.status(200).json({
         ResultCode: 0,
-        ResultDesc: 'Payment received (channel not registered)',
+        ResultDesc: result.count === 0 ? 'Already processed' : 'Payment received (channel not registered)',
       });
     }
 
-    // Store payment event
-    const [paymentEvent] = await sql`
+    // Store payment event (idempotent insert with ON CONFLICT)
+    const result = await sql`
       INSERT INTO public.external_payment_events (
-        transaction_id,
-        source,
-        phone_number,
+        event_type,
+        provider,
+        landlord_id,
+        payment_channel_id,
+        external_transaction_id,
         amount,
-        bank_paybill_number,
-        bank_account_number,
-        timestamp,
-        raw_data,
-        reconciliation_status,
-        landlord_id
+        payer_phone,
+        payer_account_ref,
+        transaction_time,
+        raw_payload,
+        reconciliation_status
       ) VALUES (
+        'mpesa_c2b',
+        'safaricom',
+        ${channel.landlord_id},
+        NULL,
         ${transactionId},
-        'mpesa_c2b_bank',
-        ${phoneNumber},
         ${amount},
-        ${bankPaybillNumber},
+        ${phoneNumber},
         ${bankAccountNumber},
         ${timestamp.toISOString()},
         ${JSON.stringify(callback)},
-        'pending',
-        ${channel.landlord_id}
+        'unmatched'
       )
+      ON CONFLICT ON CONSTRAINT uq_external_payment_events_provider_txn DO NOTHING
       RETURNING id
     `;
 
+    // Check if this is a duplicate transaction
+    if (result.count === 0) {
+      console.warn('[M-Pesa C2B] Duplicate transaction:', transactionId);
+      return res.status(200).json({
+        ResultCode: 0,
+        ResultDesc: 'Already processed',
+      });
+    }
+
+    const [paymentEvent] = result;
+
     // Attempt automatic reconciliation
-    const reconciliationResult = await reconcilePayment({
+    const reconciliationResult = await reconcilePayment(sql, {
       id: paymentEvent.id,
       transactionId,
       phoneNumber,
@@ -237,7 +264,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     // Record reconciliation result
-    await recordReconciliation(paymentEvent.id, reconciliationResult);
+    await recordReconciliation(sql, paymentEvent.id, reconciliationResult);
 
     // Log outcome
     if (reconciliationResult.matched) {

@@ -63,33 +63,97 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     if (req.method === 'POST') {
       const channelSchema = z.object({
         channelType: z.enum(['mpesa_paybill', 'mpesa_till', 'mpesa_to_bank', 'bank_account']),
-        paybillNumber: z.string().regex(/^\d{6,7}$/, 'Paybill must be 6-7 digits').optional(),
-        tillNumber: z.string().regex(/^\d{6,7}$/, 'Till number must be 6-7 digits').optional(),
-        bankPaybillNumber: z.string().regex(/^\d{6,7}$/, 'Bank paybill must be 6-7 digits').optional(),
-        bankAccountNumber: z.string().min(8).max(16).optional(),
-        bankName: z.string().min(1).optional(),
-        accountNumber: z.string().min(1).optional(),
-        accountName: z.string().min(1).optional(),
+        paybillNumber: z.string().optional().or(z.literal('')),
+        tillNumber: z.string().optional().or(z.literal('')),
+        bankPaybillNumber: z.string().optional().or(z.literal('')),
+        bankAccountNumber: z.string().optional().or(z.literal('')),
+        bankName: z.string().optional().or(z.literal('')),
+        accountNumber: z.string().optional().or(z.literal('')),
+        accountName: z.string().optional().or(z.literal('')),
         displayName: z.string().min(1, 'Display name is required'),
         isPrimary: z.boolean().default(false),
-        notes: z.string().optional(),
+        notes: z.string().optional().or(z.literal('')),
       }).refine((data) => {
-        // Validate that required fields for each channel type are present
-        if (data.channelType === 'mpesa_paybill' && !data.paybillNumber) {
-          return false;
+        // Validate format AND presence of required fields for each channel type
+        if (data.channelType === 'mpesa_paybill') {
+          if (!data.paybillNumber || data.paybillNumber.trim() === '') {
+            throw new z.ZodError([{
+              code: 'custom',
+              message: 'Paybill number is required for M-Pesa Paybill',
+              path: ['paybillNumber']
+            }]);
+          }
+          if (!/^\d{6,7}$/.test(data.paybillNumber)) {
+            throw new z.ZodError([{
+              code: 'custom',
+              message: 'Paybill must be 6-7 digits',
+              path: ['paybillNumber']
+            }]);
+          }
         }
-        if (data.channelType === 'mpesa_till' && !data.tillNumber) {
-          return false;
+        if (data.channelType === 'mpesa_till') {
+          if (!data.tillNumber || data.tillNumber.trim() === '') {
+            throw new z.ZodError([{
+              code: 'custom',
+              message: 'Till number is required for M-Pesa Till',
+              path: ['tillNumber']
+            }]);
+          }
+          if (!/^\d{6,7}$/.test(data.tillNumber)) {
+            throw new z.ZodError([{
+              code: 'custom',
+              message: 'Till number must be 6-7 digits',
+              path: ['tillNumber']
+            }]);
+          }
         }
-        if (data.channelType === 'mpesa_to_bank' && (!data.bankPaybillNumber || !data.bankAccountNumber)) {
-          return false;
+        if (data.channelType === 'mpesa_to_bank') {
+          if (!data.bankPaybillNumber || data.bankPaybillNumber.trim() === '') {
+            throw new z.ZodError([{
+              code: 'custom',
+              message: 'Bank paybill number is required',
+              path: ['bankPaybillNumber']
+            }]);
+          }
+          if (!/^\d{6,7}$/.test(data.bankPaybillNumber)) {
+            throw new z.ZodError([{
+              code: 'custom',
+              message: 'Bank paybill must be 6-7 digits',
+              path: ['bankPaybillNumber']
+            }]);
+          }
+          if (!data.bankAccountNumber || data.bankAccountNumber.trim() === '') {
+            throw new z.ZodError([{
+              code: 'custom',
+              message: 'Bank account number is required',
+              path: ['bankAccountNumber']
+            }]);
+          }
+          if (data.bankAccountNumber.length < 8 || data.bankAccountNumber.length > 16) {
+            throw new z.ZodError([{
+              code: 'custom',
+              message: 'Bank account number must be 8-16 characters',
+              path: ['bankAccountNumber']
+            }]);
+          }
         }
-        if (data.channelType === 'bank_account' && (!data.bankName || !data.accountNumber)) {
-          return false;
+        if (data.channelType === 'bank_account') {
+          if (!data.bankName || data.bankName.trim() === '') {
+            throw new z.ZodError([{
+              code: 'custom',
+              message: 'Bank name is required',
+              path: ['bankName']
+            }]);
+          }
+          if (!data.accountNumber || data.accountNumber.trim() === '') {
+            throw new z.ZodError([{
+              code: 'custom',
+              message: 'Account number is required',
+              path: ['accountNumber']
+            }]);
+          }
         }
         return true;
-      }, {
-        message: 'Missing required fields for channel type',
       });
 
       const channelData = channelSchema.parse(req.body);

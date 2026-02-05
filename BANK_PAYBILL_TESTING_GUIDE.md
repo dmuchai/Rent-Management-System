@@ -148,13 +148,16 @@ This guide provides comprehensive testing scenarios for the **M-Pesa to Bank Pay
 
 1. **Simulate M-Pesa Callback**
    ```bash
+   # Generate current timestamp in EAT (YYYYMMDDHHmmss format)
+   TRANS_TIME=$(TZ='Africa/Nairobi' date +%Y%m%d%H%M%S)
+   
    curl -X POST https://your-domain.com/api/webhooks/mpesa/c2b \
      -H "Content-Type: application/json" \
      -H "X-Forwarded-For: 196.201.214.200" \
      -d '{
        "TransactionType": "Pay Bill",
        "TransID": "PGK12H3456",
-       "TransTime": "20240205143022",
+       "TransTime": "'"$TRANS_TIME"'",
        "TransAmount": "25000",
        "BusinessShortCode": "222111",
        "BillRefNumber": "1234567890",
@@ -163,6 +166,8 @@ This guide provides comprehensive testing scenarios for the **M-Pesa to Bank Pay
        "LastName": "DOE"
      }'
    ```
+   
+   **Note:** The webhook validates that `TransTime` is within 15 minutes of current time. The script above generates a current timestamp in EAT timezone (YYYYMMDDHHmmss format) to pass validation.
 
 2. **Expected Results:**
    - ✅ Webhook returns 200 OK
