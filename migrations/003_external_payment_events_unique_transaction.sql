@@ -9,8 +9,10 @@
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint 
-        WHERE conname = 'uq_external_payment_events_provider_txn'
+        SELECT 1 FROM pg_constraint c
+        JOIN pg_namespace n ON n.oid = c.connamespace
+        WHERE c.conname = 'uq_external_payment_events_provider_txn'
+          AND n.nspname = 'public'
     ) THEN
         -- Create the constraint if missing
         ALTER TABLE public.external_payment_events

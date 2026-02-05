@@ -7,7 +7,7 @@ import { useLocation } from "wouter";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import StatsCard from "@/components/dashboard/StatsCard";
-import PaymentForm from "@/components/payments/PaymentForm";
+import PaymentInstructions from "@/components/payments/PaymentInstructions";
 import EnhancedPaymentHistory from "@/components/payments/EnhancedPaymentHistory";
 import MaintenanceRequestForm from "@/components/maintenance/MaintenanceRequestForm";
 import MaintenanceRequestList from "@/components/maintenance/MaintenanceRequestList";
@@ -664,7 +664,11 @@ export default function TenantDashboard() {
                       </CardHeader>
                       <CardContent>
                         {activeLease ? (
-                          <PaymentForm tenantView={true} activeLease={activeLease} />
+                          <PaymentInstructions 
+                            landlordId={activeLease.ownerId}
+                            tenantId={activeLease.tenantId}
+                            invoiceReferenceCode={activeLease.id}
+                          />
                         ) : (
                           <div className="text-center py-8">
                             <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
