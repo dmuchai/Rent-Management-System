@@ -111,10 +111,10 @@ export default function PaymentInstructions({
     );
   }
 
-  const activeChannels = channels.filter(ch => ch.isActive);
-  const primaryChannel = activeChannels.find(ch => ch.isPrimary) || activeChannels[0];
+  // Note: API already filters to only active channels, so no need to filter again
+  const primaryChannel = channels.find(ch => ch.isPrimary) || channels[0];
 
-  if (activeChannels.length === 0) {
+  if (channels.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -165,14 +165,14 @@ export default function PaymentInstructions({
         )}
 
         {/* Other Active Channels */}
-        {activeChannels.filter(ch => !ch.isPrimary).length > 0 && (
+        {channels.filter(ch => !ch.isPrimary).length > 0 && (
           <>
             <Separator className="my-4" />
             <p className="text-sm font-medium text-muted-foreground">Alternative Payment Methods</p>
           </>
         )}
 
-        {activeChannels.filter(ch => !ch.isPrimary).map((channel) => (
+        {channels.filter(ch => !ch.isPrimary).map((channel) => (
           <div key={channel.id} className="border rounded-lg p-4 hover:bg-muted/30 transition-colors">
             <div className="flex items-start justify-between mb-3">
               <h3 className="font-semibold">{channel.displayName}</h3>
