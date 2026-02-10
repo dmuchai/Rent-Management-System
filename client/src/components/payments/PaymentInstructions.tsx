@@ -111,6 +111,28 @@ export default function PaymentInstructions({
     );
   }
 
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5" />
+            Payment Instructions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <Info className="h-4 w-4" />
+            <AlertTitle>Unable to Load Payment Methods</AlertTitle>
+            <AlertDescription>
+              {error instanceof Error ? error.message : 'An error occurred while loading payment methods. Please try again later or contact your landlord.'}
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // Note: API already filters to only active channels, so no need to filter again
   const primaryChannel = channels.find(ch => ch.isPrimary) || channels[0];
 
