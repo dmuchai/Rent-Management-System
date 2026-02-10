@@ -18,6 +18,7 @@ import LeaseTable from "@/components/leases/LeaseTable";
 import LeaseDetailsModal from "@/components/leases/LeaseDetailsModal";
 import PaymentHistory from "@/components/payments/PaymentHistory";
 import PaymentChannelsManager from "@/components/landlord/PaymentChannelsManager";
+import { StatementUpload } from "@/components/reconciliation/StatementUpload";
 import DocumentManager from "@/components/documents/DocumentManager";
 import ReportGenerator from "@/components/reports/ReportGenerator";
 import { LinkedAccountsSection } from "@/components/LinkedAccountsSection";
@@ -1123,7 +1124,15 @@ export default function LandlordDashboard() {
         );
 
       case "payment-settings":
-        return <PaymentChannelsManager />;
+        return (
+          <div className="space-y-6">
+            <PaymentChannelsManager />
+            <StatementUpload onUploadComplete={() => {
+              // Refresh payments after successful upload
+              queryClient.invalidateQueries({ queryKey: ['payments'] });
+            }} />
+          </div>
+        );
 
       case "documents":
         return <DocumentManager />;
