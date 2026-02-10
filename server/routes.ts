@@ -479,6 +479,11 @@ export async function registerRoutes(app: Express) {
       token = req.cookies['supabase-auth-token'];
     }
 
+    // Explicitly handle OPTIONS for this route since app.all catches it
+    if (req.method === 'OPTIONS') {
+      return res.status(200).send('OK');
+    }
+
     if (!token) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -558,8 +563,11 @@ export async function registerRoutes(app: Express) {
       return res.json({ message: "Logged out successfully" });
     }
 
-    // If action is not handled, return 404
-    return res.status(404).json({ error: "Action not found" });
+    // If action is not handled, return 404 (unless it was OPTIONS which is handled above)
+    if (req.method !== 'OPTIONS') {
+      return res.status(404).json({ error: "Action not found" });
+    }
+    return res.status(200).end();
   });
 
   // Create/sync user in custom users table

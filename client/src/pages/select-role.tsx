@@ -10,6 +10,8 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useQueryClient } from "@tanstack/react-query";
 import { AUTH_QUERY_KEYS } from "@/lib/auth-keys";
 
+import { useAuth } from "@/hooks/useAuth";
+
 export default function SelectRole() {
   usePageTitle('Select Your Role');
   const [, setLocation] = useLocation();
@@ -17,6 +19,23 @@ export default function SelectRole() {
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>("");
+
+  // Get auth state to check if we can even reach the server
+  const { user, isLoading: authLoading } = useAuth();
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const handleRetryConnection = async () => {
+    setIsRetrying(true);
+    await queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.user });
+    await queryClient.refetchQueries({ queryKey: AUTH_QUERY_KEYS.user });
+    setTimeout(() => setIsRetrying(false), 1000);
+  };
+
+  // If we are not loading, and we have no user, it means we failed to fetch the user profile
+  // OR the user is genuinely not logged in (but app redirects to login in that case).
+  // However, on mobile, if the API is unreachable, user might be undefined but error is swallowed.
+  // We need to show a connection error in that case.
+  const showConnectionError = !authLoading && user === undefined;
 
   const roles = [
     {
@@ -105,16 +124,14 @@ export default function SelectRole() {
                     key={role.id}
                     onClick={() => setSelectedRole(role.id)}
                     disabled={isLoading}
-                    className={`relative p-6 rounded-lg border-2 transition-all text-left hover:border-primary hover:shadow-md ${
-                      selectedRole === role.id
+                    className={`relative p-6 rounded-lg border-2 transition-all text-left hover:border-primary hover:shadow-md ${selectedRole === role.id
                         ? "border-primary bg-primary/5 shadow-md"
                         : "border-border bg-card"
-                    } ${isLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                      } ${isLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                   >
                     <div className="flex flex-col items-center text-center space-y-3">
-                      <div className={`p-3 rounded-full ${
-                        selectedRole === role.id ? "bg-primary text-primary-foreground" : "bg-muted"
-                      }`}>
+                      <div className={`p-3 rounded-full ${selectedRole === role.id ? "bg-primary text-primary-foreground" : "bg-muted"
+                        }`}>
                         <Icon className="h-8 w-8" />
                       </div>
                       <div>
@@ -152,6 +169,27 @@ export default function SelectRole() {
               })}
             </div>
 
+            {/* Connection Error State */}
+            {showConnectionError && (
+              <div className="mb-6 p-4 bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
+                <div className="flex flex-col items-center text-center gap-2">
+                  <h4 className="font-semibold">Connection Error</h4>
+                  <p className="text-sm">
+                    We couldn't load your profile. This usually means the app cannot connect to the server.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRetryConnection}
+                    disabled={isRetrying}
+                    className="mt-2 border-destructive/50 hover:bg-destructive/20"
+                  >
+                    {isRetrying ? "Retrying..." : "Retry Connection"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Tenant Information */}
             <div className="mb-6 p-4 bg-muted rounded-lg border border-border">
               <div className="flex items-start gap-3">
@@ -159,7 +197,7 @@ export default function SelectRole() {
                 <div>
                   <h4 className="font-medium text-sm mb-1">Are you a Tenant?</h4>
                   <p className="text-sm text-muted-foreground">
-                    Tenants receive an invitation link via email from their landlord or property manager. 
+                    Tenants receive an invitation link via email from their landlord or property manager.
                     Please check your email for your invitation link to create your account.
                   </p>
                 </div>
