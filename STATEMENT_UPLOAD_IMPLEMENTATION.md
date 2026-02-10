@@ -410,7 +410,7 @@ This will:
 ## 🔐 Security
 
 ### File Upload Security
-✅ File type validation (.csv, .txt, .xls, .xlsx only)  
+✅ File type validation (.csv, .txt only - Excel must be converted)  
 ✅ Size limit (5MB max)  
 ✅ Base64 encoding in transit  
 ✅ Landlord-only access (role check)  

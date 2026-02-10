@@ -31,7 +31,7 @@ A comprehensive **bank/M-Pesa statement upload and auto-reconciliation system** 
 - ✅ `STATEMENT_UPLOAD_IMPLEMENTATION.md` - Technical documentation
 - ✅ `STATEMENT_UPLOAD_SUMMARY.md` - This file
 
-#### Test Files (6 files)
+#### Test Files (7 files)
 - ✅ `tests/sample-statements/mpesa_statement_sample.csv`
 - ✅ `tests/sample-statements/equity_statement_sample.csv`
 - ✅ `tests/sample-statements/kcb_statement_sample.csv`
@@ -200,7 +200,7 @@ For each transaction:
 
 ## 🔐 Security Features
 
-✅ File type validation (.csv, .txt, .xls, .xlsx only)  
+✅ File type validation (.csv, .txt only - Excel requires conversion)  
 ✅ File size limit (5MB max)  
 ✅ Landlord-only access (role-based auth)  
 ✅ RLS policies on database  
@@ -261,7 +261,7 @@ For each transaction:
 ## 🔮 Future Enhancements
 
 ### Phase 2 (3 months)
-- [ ] Excel (.xlsx) file support
+- [ ] Native Excel (.xlsx) file support (currently requires manual CSV conversion)
 - [ ] PDF statement parsing (OCR)
 - [ ] Email forwarding (forward@yourdomain.com)
 - [ ] Mobile app upload
@@ -281,7 +281,7 @@ For each transaction:
 ## 🚨 Known Limitations
 
 1. **Manual upload required** - Not automated (yet)
-2. **CSV format only** - Excel/PDF support coming later
+2. **CSV format only** - Excel files must be saved as CSV first, PDF support coming later
 3. **Statement delays** - Depends on bank export timing
 4. **Phone extraction** - May miss some formats
 5. **Date window** - ±3 days for heuristic matching

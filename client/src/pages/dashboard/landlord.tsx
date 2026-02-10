@@ -1129,7 +1129,7 @@ export default function LandlordDashboard() {
             <PaymentChannelsManager />
             <StatementUpload onUploadComplete={() => {
               // Refresh payments after successful upload
-              queryClient.invalidateQueries({ queryKey: ['payments'] });
+              queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
             }} />
           </div>
         );

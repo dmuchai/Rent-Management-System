@@ -5,6 +5,22 @@ import { parseMpesaStatement } from './mpesaParser.js';
 import { parseNCBAStatement } from './ncbaParser.js';
 import { parseGenericCSV } from './genericParser.js';
 
+/**
+ * Placeholder parser for Absa Bank (falls back to generic)
+ */
+function parseAbsaStatement(content: string): ParsedTransaction[] {
+  console.warn('[Absa Parser] Using generic CSV parser as fallback');
+  return parseGenericCSV(content);
+}
+
+/**
+ * Placeholder parser for Family Bank (falls back to generic)
+ */
+function parseFamilyStatement(content: string): ParsedTransaction[] {
+  console.warn('[Family Parser] Using generic CSV parser as fallback');
+  return parseGenericCSV(content);
+}
+
 export interface ParsedTransaction {
   reference: string;
   date: Date;
@@ -90,6 +106,10 @@ export function parseStatement(content: string, format: StatementFormat): Parsed
       return parseNCBAStatement(content);
     case 'mpesa':
       return parseMpesaStatement(content);
+    case 'absa':
+      return parseAbsaStatement(content);
+    case 'family':
+      return parseFamilyStatement(content);
     case 'generic':
       return parseGenericCSV(content);
     default:
@@ -139,15 +159,20 @@ export function extractMpesaReference(description: string): string | undefined {
 }
 
 /**
- * Parse amount from string (handles commas, currency symbols)
+ * Parse amount from string (handles commas, currency symbols, parentheses as negatives)
  */
 export function parseAmount(amountStr: string): number {
+  // Check if parenthesized (indicates negative)
+  const isNegative = /^\s*\(.*\)\s*$/.test(amountStr) || amountStr.trim().startsWith('-');
+  
   const cleaned = amountStr
     .replace(/[KES$,\s]/g, '')
-    .replace(/[()]/g, '')  // Remove parentheses (used for debits)
+    .replace(/[()]/g, '')  // Remove parentheses
+    .replace(/^-/, '')     // Remove leading minus (we'll apply it at the end)
     .trim();
   
-  return parseFloat(cleaned) || 0;
+  const value = parseFloat(cleaned) || 0;
+  return isNegative ? -value : value;
 }
 
 /**

@@ -34,12 +34,12 @@ export function parseMpesaStatement(content: string): ParsedTransaction[] {
       const parts = parseCSVLine(line);
 
       if (isWebFormat) {
-        transactions.push(parseWebFormat(parts));
+        transactions.push(parseWebFormat(parts, i));
       } else if (isAppFormat) {
-        transactions.push(parseAppFormat(parts));
+        transactions.push(parseAppFormat(parts, i));
       } else {
         // Try generic parsing
-        transactions.push(parseGenericMpesa(parts));
+        transactions.push(parseGenericMpesa(parts, i));
       }
     } catch (error) {
       console.warn(`[M-Pesa Parser] Skipping line ${i}:`, error);
@@ -51,7 +51,7 @@ export function parseMpesaStatement(content: string): ParsedTransaction[] {
   return transactions.filter(t => t.type === 'credit' && t.amount > 0);
 }
 
-function parseWebFormat(parts: string[]): ParsedTransaction {
+function parseWebFormat(parts: string[], lineIndex: number): ParsedTransaction {
   // Format: Receipt No., Completion Time, Details, Transaction Status, Paid In, Withdrawn, Balance
   const [receiptNo, completionTime, details, status, paidIn, withdrawn, balance] = parts;
 
@@ -60,7 +60,7 @@ function parseWebFormat(parts: string[]): ParsedTransaction {
   const isCredit = paidInAmount > 0;
 
   return {
-    reference: receiptNo || extractMpesaReference(details) || `MPESA-${Date.now()}`,
+    reference: receiptNo || extractMpesaReference(details) || `MPESA-${Date.now()}-${lineIndex}`,
     date: parseDate(completionTime),
     amount: isCredit ? paidInAmount : withdrawnAmount,
     type: isCredit ? 'credit' : 'debit',
@@ -71,7 +71,7 @@ function parseWebFormat(parts: string[]): ParsedTransaction {
   };
 }
 
-function parseAppFormat(parts: string[]): ParsedTransaction {
+function parseAppFormat(parts: string[], lineIndex: number): ParsedTransaction {
   // Format: Date, Transaction, Details, Status, Amount, Balance
   const [date, transaction, details, status, amount, balance] = parts;
 
@@ -79,7 +79,7 @@ function parseAppFormat(parts: string[]): ParsedTransaction {
   const isCredit = !amount.includes('-') && !amount.includes('(');
 
   return {
-    reference: extractMpesaReference(details) || transaction || `MPESA-${Date.now()}`,
+    reference: extractMpesaReference(details) || transaction || `MPESA-${Date.now()}-${lineIndex}`,
     date: parseDate(date),
     amount: Math.abs(amountValue),
     type: isCredit ? 'credit' : 'debit',
@@ -90,7 +90,7 @@ function parseAppFormat(parts: string[]): ParsedTransaction {
   };
 }
 
-function parseGenericMpesa(parts: string[]): ParsedTransaction {
+function parseGenericMpesa(parts: string[], lineIndex: number): ParsedTransaction {
   // Fallback: Try to find date, amount, and description
   const date = parseDate(parts[0] || parts[1]);
   const description = parts.find(p => p && p.length > 10) || parts.join(' ');
@@ -98,7 +98,7 @@ function parseGenericMpesa(parts: string[]): ParsedTransaction {
   const amount = amountPart ? parseAmount(amountPart) : 0;
 
   return {
-    reference: extractMpesaReference(description) || `MPESA-${Date.now()}`,
+    reference: extractMpesaReference(description) || `MPESA-${Date.now()}-${lineIndex}`,
     date,
     amount: Math.abs(amount),
     type: amount >= 0 ? 'credit' : 'debit',

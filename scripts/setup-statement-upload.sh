@@ -81,6 +81,7 @@ UI_FILES=(
     "client/src/components/ui/progress.tsx"
 )
 
+ALL_EXIST=true
 for file in "${UI_FILES[@]}"; do
     if [ -f "$file" ]; then
         echo -e "${GREEN}  ✓${NC} $file"

@@ -285,8 +285,15 @@ CREATE TABLE public.statement_upload_history (
 ### Issue 4: File upload fails
 **Check**:
 - File size < 5MB
-- File format is .csv, .txt, .xls, or .xlsx
+- File format is .csv or .txt (plain text CSV only)
+- If you have Excel (.xls/.xlsx), save/export as CSV first
 - Browser console for error messages
+
+**Converting Excel to CSV**:
+1. Open your Excel file
+2. Click File → Save As
+3. Choose "CSV (Comma delimited) (*.csv)" from format dropdown
+4. Save and upload the .csv file
 
 ## Advanced Features
 
@@ -323,7 +330,7 @@ Handles:
 
 ## Future Enhancements
 
-- [ ] Excel (.xlsx) file support
+- [ ] Native Excel (.xlsx) file support (currently requires CSV conversion)
 - [ ] PDF statement parsing (OCR)
 - [ ] Scheduled uploads (email forwarding)
 - [ ] Bank API integration (Open Banking)

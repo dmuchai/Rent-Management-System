@@ -39,14 +39,14 @@ export function StatementUpload({ onUploadComplete }: StatementUploadProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      // Validate file type
-      const validTypes = ['.csv', '.txt', '.xls', '.xlsx'];
+      // Validate file type (CSV only - Excel files must be converted first)
+      const validTypes = ['.csv', '.txt'];
       const fileExt = selectedFile.name.toLowerCase().slice(selectedFile.name.lastIndexOf('.'));
       
       if (!validTypes.includes(fileExt)) {
         toast({
           title: 'Invalid File Type',
-          description: 'Please upload a CSV, TXT, or Excel file',
+          description: 'Please upload a CSV or TXT file. If you have an Excel file (.xls/.xlsx), save it as CSV first.',
           variant: 'destructive'
         });
         return;
@@ -154,7 +154,7 @@ export function StatementUpload({ onUploadComplete }: StatementUploadProps) {
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Supported: M-Pesa, Equity Bank, KCB, Co-op Bank, NCBA, and generic CSV formats
+              Supported: M-Pesa, Equity Bank, KCB, Co-op Bank, NCBA, and generic CSV formats (plain text CSV only)
             </AlertDescription>
           </Alert>
 
@@ -164,7 +164,7 @@ export function StatementUpload({ onUploadComplete }: StatementUploadProps) {
               <label className="flex-1">
                 <input
                   type="file"
-                  accept=".csv,.txt,.xls,.xlsx"
+                  accept=".csv,.txt"
                   onChange={handleFileChange}
                   disabled={uploading}
                   className="block w-full text-sm text-slate-500
@@ -279,7 +279,7 @@ export function StatementUpload({ onUploadComplete }: StatementUploadProps) {
                           <div className="text-xs text-muted-foreground mt-1">
                             {new Date(detail.date).toLocaleDateString()}
                             {detail.status === 'matched' && detail.method && (
-                              <span className="ml-2">• {detail.method} ({detail.confidence}%)</span>
+                              <span className="ml-2">• {detail.method} {detail.confidence !== undefined ? `(${detail.confidence}%)` : ''}</span>
                             )}
                             {detail.status === 'unmatched' && detail.reasons && (
                               <span className="ml-2">• {detail.reasons.join(', ')}</span>
@@ -319,6 +319,16 @@ export function StatementUpload({ onUploadComplete }: StatementUploadProps) {
               <li>Navigate to Statements section</li>
               <li>Select account and date range</li>
               <li>Download as CSV format</li>
+            </ol>
+          </div>
+
+          <div>
+            <h4 className="font-semibold mb-1">If You Have Excel File:</h4>
+            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+              <li>Open the Excel file (.xls or .xlsx)</li>
+              <li>Click File → Save As</li>
+              <li>Choose "CSV (Comma delimited) (*.csv)"</li>
+              <li>Save and upload the CSV file</li>
             </ol>
           </div>
         </CardContent>

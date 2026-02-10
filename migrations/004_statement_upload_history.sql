@@ -4,7 +4,7 @@
 -- Create statement upload history table
 CREATE TABLE IF NOT EXISTS public.statement_upload_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  landlord_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  landlord_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   file_name TEXT NOT NULL,
   statement_type TEXT NOT NULL, -- 'equity', 'kcb', 'coop', 'mpesa', etc.
   transactions_total INTEGER NOT NULL DEFAULT 0,
@@ -25,7 +25,12 @@ ALTER TABLE public.statement_upload_history ENABLE ROW LEVEL SECURITY;
 -- Policy: Landlords can view their own upload history
 CREATE POLICY statement_uploads_landlord_select ON public.statement_upload_history
   FOR SELECT
-  USING (auth.uid() = landlord_id);
+  USING (auth.uid()::text = landlord_id);
+
+-- Policy: Landlords can insert their own upload records
+CREATE POLICY statement_uploads_landlord_insert ON public.statement_upload_history
+  FOR INSERT
+  WITH CHECK (auth.uid()::text = landlord_id);
 
 -- Grant access
 GRANT SELECT, INSERT ON public.statement_upload_history TO authenticated;

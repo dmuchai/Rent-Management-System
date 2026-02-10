@@ -33,8 +33,31 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Decode base64 file content
-    const fileContent = Buffer.from(file.content, 'base64').toString('utf-8');
+    // Server-side file validation
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size && file.size > maxSize) {
+      return res.status(400).json({ error: 'File size exceeds 5MB limit' });
+    }
+
+    // Validate file content is present
+    if (!file.content || typeof file.content !== 'string') {
+      return res.status(400).json({ error: 'Invalid file content' });
+    }
+
+    // Decode base64 file content with error handling
+    let fileContent: string;
+    try {
+      fileContent = Buffer.from(file.content, 'base64').toString('utf-8');
+      if (!fileContent || fileContent.trim().length === 0) {
+        throw new Error('Empty file content after decoding');
+      }
+    } catch (decodeError) {
+      console.error('[Statement Upload] Base64 decode error:', decodeError);
+      return res.status(400).json({ 
+        error: 'Invalid or corrupt file content: unable to decode base64'
+      });
+    }
+
     const fileName = file.name;
 
     // Auto-detect format or use provided type
@@ -88,6 +111,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           continue;
         }
 
+        // Validate date before serialization
+        const transactionTime = !isNaN(txn.date.getTime()) ? txn.date.toISOString() : new Date().toISOString();
+
         // Store payment event
         const [paymentEvent] = await sql`
           INSERT INTO public.external_payment_events (
@@ -109,7 +135,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
             ${txn.amount},
             ${txn.phoneNumber || null},
             ${txn.accountRef || null},
-            ${txn.date.toISOString()},
+            ${transactionTime},
             ${JSON.stringify(txn)},
             'unmatched'
           )

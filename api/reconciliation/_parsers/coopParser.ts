@@ -28,7 +28,7 @@ export function parseCoopStatement(content: string): ParsedTransaction[] {
 
       const parts = parseCSVLine(line);
       
-      if (parts.length < 4) {
+      if (parts.length < 5) {
         console.warn(`[Co-op Parser] Invalid line format:`, line);
         continue;
       }

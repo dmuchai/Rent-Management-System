@@ -53,20 +53,20 @@ for (const file of sampleFiles) {
     if (transactions.length > 0) {
       console.log(`\n   Sample transaction:`);
       const tx = transactions[0];
-      console.log(`   - Reference: ${tx.reference}`);
-      console.log(`   - Date: ${tx.date.toISOString().split('T')[0]}`);
-      console.log(`   - Amount: KES ${tx.amount.toLocaleString()}`);
-      console.log(`   - Type: ${tx.type}`);
-      console.log(`   - Description: ${tx.description.substring(0, 50)}...`);
+      console.log(`   - Reference: ${tx.reference || 'N/A'}`);
+      console.log(`   - Date: ${tx.date && !isNaN(tx.date.getTime()) ? tx.date.toISOString().split('T')[0] : 'N/A'}`);
+      console.log(`   - Amount: KES ${typeof tx.amount === 'number' ? tx.amount.toLocaleString() : 'N/A'}`);
+      console.log(`   - Type: ${tx.type || 'N/A'}`);
+      console.log(`   - Description: ${tx.description ? tx.description.substring(0, 50) + '...' : 'N/A'}`);
       if (tx.phoneNumber) {
         console.log(`   - Phone: ${tx.phoneNumber}`);
       }
-      if (tx.balance) {
-        console.log(`   - Balance: KES ${tx.balance.toLocaleString()}`);
+      if (tx.balance !== undefined && tx.balance !== null) {
+        console.log(`   - Balance: KES ${typeof tx.balance === 'number' ? tx.balance.toLocaleString() : 'N/A'}`);
       }
 
       // Summary
-      const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
+      const totalAmount = transactions.reduce((sum, t) => sum + (typeof t.amount === 'number' ? t.amount : 0), 0);
       const withPhones = transactions.filter(t => t.phoneNumber).length;
       
       console.log(`\n   Summary:`);

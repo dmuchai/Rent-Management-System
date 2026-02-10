@@ -21,6 +21,11 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
   const headerParts = parseCSVLine(lines[0]);
   const columnTypes = detectColumnTypes(headerParts);
 
+  // Validate that we found a date column
+  if (columnTypes.date === undefined) {
+    throw new Error('Cannot detect date column');
+  }
+
   const transactions: ParsedTransaction[] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -95,12 +100,7 @@ function detectColumnTypes(headers: string[]): ColumnMapping {
 }
 
 function parseGenericRow(parts: string[], columns: ColumnMapping, rowIndex: number): ParsedTransaction | null {
-  // Must have at least date and description
-  if (columns.date === undefined) {
-    throw new Error('Cannot detect date column');
-  }
-
-  const dateStr = parts[columns.date];
+  const dateStr = parts[columns.date!];  // Safe to use ! since we validated earlier
   const description = columns.description !== undefined ? 
     parts[columns.description] : 
     parts.find(p => p && p.length > 5) || '';
