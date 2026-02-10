@@ -58,12 +58,23 @@ For faster development, you can use live reload:
 
 ### Android APK/AAB
 1. Run `npm run mobile:build`
+   > This command sets `VITE_API_URL=https://property-manager-ke.vercel.app` to ensure the app connects to the production backend.
 2. Open Android Studio: `npm run mobile:android`
 3. Go to **Build > Generate Signed Bundle / APK**
 4. Follow the wizard to create a release build
+ 
+ ### CLI Build (Alternative)
+ If you cannot open Android Studio, you can generate a **Debug APK** via command line:
+ 1. Navigate to the android folder: `cd android`
+ 2. Make gradlew executable: `chmod +x gradlew`
+ 3. Run: `./gradlew assembleDebug`
+ 4. Find the APK at: `android/app/build/outputs/apk/debug/app-debug.apk`
+ 
+ > **Note**: This APK is for testing only. For the Play Store, you must use Android Studio to generate a signed Release Bundle (AAB).
 
 ### iOS IPA
 1. Run `npm run mobile:build`
+   > This command sets `VITE_API_URL=https://property-manager-ke.vercel.app` to ensure the app connects to the production backend.
 2. Open Xcode: `npm run mobile:ios`
 3. Select **Product > Archive**
 4. Follow the wizard to distribute to App Store or TestFlight

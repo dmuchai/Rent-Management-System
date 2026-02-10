@@ -94,6 +94,8 @@ export async function registerRoutes(app: Express) {
       'https://property-manager-ke.vercel.app', // CORRECT Vercel frontend URL
       'https://rent-management-system-chi.vercel.app', // Backup URL
       'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app', // Previous deployment
+      'capacitor://localhost', // Android Native App
+      'http://localhost', // iOS / Android Native App
     ];
 
     const origin = req.headers.origin;
@@ -459,11 +461,11 @@ export async function registerRoutes(app: Express) {
   // This allows the same client code to work in both local dev and production
   app.all("/api/auth", async (req: any, res: any) => {
     const action = req.query.action;
-    
+
     // Extract and verify JWT token manually (since we can't use middleware on app.all)
     let token = null;
     const authHeader = req.headers['authorization'];
-    
+
     // Validate Bearer token scheme
     if (authHeader && typeof authHeader === 'string') {
       const bearerPrefix = 'Bearer ';
@@ -471,7 +473,7 @@ export async function registerRoutes(app: Express) {
         token = authHeader.substring(bearerPrefix.length);
       }
     }
-    
+
     // Fallback to cookie if no valid Bearer token
     if (!token && req.cookies && req.cookies['supabase-auth-token']) {
       token = req.cookies['supabase-auth-token'];
@@ -496,7 +498,7 @@ export async function registerRoutes(app: Express) {
       console.log('Token verification failed:', err instanceof Error ? err.message : 'Unknown error');
       return res.status(401).json({ error: "Unauthorized" });
     }
-    
+
     if (action === "user" && req.method === "GET") {
       try {
         const { data: userData, error } = await supabase
@@ -530,7 +532,7 @@ export async function registerRoutes(app: Express) {
       if (!role || !['landlord', 'property_manager', 'tenant'].includes(role)) {
         return res.status(400).json({ error: "Invalid role" });
       }
-      
+
       try {
         const { error } = await supabase
           .from('users')
@@ -555,7 +557,7 @@ export async function registerRoutes(app: Express) {
       console.log('User logged out successfully');
       return res.json({ message: "Logged out successfully" });
     }
-    
+
     // If action is not handled, return 404
     return res.status(404).json({ error: "Action not found" });
   });
