@@ -86,6 +86,30 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
+  // --- CORS Handling ---
+  const allowedOrigins = [
+    'https://property-manager-ke.vercel.app',
+    'https://rent-management-system-chi.vercel.app',
+    'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app',
+    'capacitor://localhost',
+    'http://localhost',
+  ];
+
+  const origin = req.headers.origin;
+  if (origin && (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production')) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+    );
+  }
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  // --- End CORS Handling ---
   const rawAction = req.query.action;
   let action: string | undefined = Array.isArray(rawAction) ? rawAction[0] : (rawAction as string | undefined);
 
@@ -424,7 +448,7 @@ export default async function handler(
 
       // Determine user role - handle null vs undefined properly
       const userRole = profile?.role || user.user_metadata?.role || null;
-      
+
       console.log(`[Auth] Returning user data:`, {
         id: user.id,
         role: userRole,
@@ -569,7 +593,7 @@ export default async function handler(
       const currentRole = user.role || user.user_metadata?.role;
       if (currentRole && currentRole !== 'admin') {
         console.log(`[Auth] Role change denied: user ${user.id} attempted to change from ${currentRole} to ${role}`);
-        return res.status(403).json({ 
+        return res.status(403).json({
           error: "Unauthorized role change",
           details: "You cannot change your role after initial selection. Contact support if needed."
         });
