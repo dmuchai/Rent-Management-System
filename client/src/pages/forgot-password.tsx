@@ -56,7 +56,7 @@ export default function ForgotPassword() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <img src="/favicon.png" alt="Landee" className="h-12 w-12 mr-3" />
-            <h1 className="text-3xl font-bold">Landee Property Management System</h1>
+            <h1 className="text-3xl font-bold">Landee</h1>
           </div>
           <p className="text-muted-foreground">The #1 Property Management System</p>
         </div>
@@ -150,8 +150,8 @@ export default function ForgotPassword() {
         <div className="text-center mt-8">
           <p className="text-sm text-muted-foreground">
             Having trouble? Contact us at{' '}
-            <a href="mailto:support@landee.co.ke" className="text-primary hover:underline">
-              support@landee.co.ke
+            <a href="mailto:landeemoony@kejalink.co.ke" className="text-primary hover:underline">
+              landeemoony@kejalink.co.ke
             </a>
           </p>
         </div>
