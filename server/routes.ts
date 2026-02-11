@@ -96,6 +96,7 @@ export async function registerRoutes(app: Express) {
       'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app', // Previous deployment
       'capacitor://localhost', // Android Native App
       'http://localhost', // iOS / Android Native App
+      'https://localhost', // Android Capacitor App often serves on https
     ];
 
     const origin = req.headers.origin;

@@ -93,6 +93,7 @@ export default async function handler(
     'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app',
     'capacitor://localhost',
     'http://localhost',
+    'https://localhost', // Android Capacitor App often serves on https
   ];
 
   const origin = req.headers.origin;
@@ -104,6 +105,8 @@ export default async function handler(
       'Access-Control-Allow-Headers',
       'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
     );
+    // Cache preflight response for 24 hours to reduce request volume
+    res.setHeader('Access-Control-Max-Age', '86400');
   }
 
   if (req.method === 'OPTIONS') {
