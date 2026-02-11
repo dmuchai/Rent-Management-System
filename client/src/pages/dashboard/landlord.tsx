@@ -224,6 +224,7 @@ export default function LandlordDashboard() {
       // Ensure we return an array - API may return direct array or {data: []}
       return Array.isArray(result) ? result : (result.data || []);
     },
+    // Keep properties enabled as they are used for the filter dropdown
     retry: false,
   });
 
@@ -236,6 +237,7 @@ export default function LandlordDashboard() {
       // Ensure we return an array
       return Array.isArray(result) ? result : [];
     },
+    enabled: activeSection === "tenants", // Only fetch when section is active
     retry: false,
   });
 
@@ -247,6 +249,7 @@ export default function LandlordDashboard() {
       // Ensure we return an array
       return Array.isArray(result) ? result : [];
     },
+    enabled: activeSection === "leases", // Only fetch when section is active
     retry: false,
   });
 
@@ -258,6 +261,7 @@ export default function LandlordDashboard() {
       // API returns { data: [], pagination: {} }, extract the data array
       return result.data || result || [];
     },
+    enabled: activeSection === "payments", // Only fetch when section is active
     retry: false,
   });
 
@@ -640,7 +644,7 @@ export default function LandlordDashboard() {
                 <CardContent>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">
-                      {properties.length} properties
+                      {dashboardStats?.totalProperties || 0} properties
                     </span>
                     <i className="fas fa-arrow-right text-blue-600 group-hover:translate-x-1 transition-transform"></i>
                   </div>
@@ -662,7 +666,7 @@ export default function LandlordDashboard() {
                 <CardContent>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">
-                      {tenants.length} active tenants
+                      {dashboardStats?.totalTenants || 0} active tenants
                     </span>
                     <i className="fas fa-arrow-right text-green-600 group-hover:translate-x-1 transition-transform"></i>
                   </div>
@@ -684,7 +688,7 @@ export default function LandlordDashboard() {
                 <CardContent>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">
-                      {payments.length} transactions
+                      {dashboardStats?.totalPayments || 0} transactions
                     </span>
                     <i className="fas fa-arrow-right text-purple-600 group-hover:translate-x-1 transition-transform"></i>
                   </div>

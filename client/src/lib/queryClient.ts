@@ -110,7 +110,7 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: 0, // Always consider data stale - this was causing the auth persistence issue
+      staleTime: 60 * 1000, // Consider data fresh for 60 seconds
       retry: false,
     },
     mutations: {
