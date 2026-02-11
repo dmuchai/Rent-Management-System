@@ -2,7 +2,19 @@ import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { usePageTitle } from "@/hooks/usePageTitle";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import mpesaLogo from "@/assets/partners/mpesa.png";
+import pesapalLogo from "@/assets/partners/pesapal.png";
+import pesalinkLogo from "@/assets/partners/pesalink.jpeg";
+import kraLogo from "@/assets/partners/kra.jpeg";
+import brevoLogo from "@/assets/partners/brevo.png";
+import infobipLogo from "@/assets/partners/infobip.png";
 
 export default function Landing() {
   // Set custom title for landing page
@@ -18,6 +30,52 @@ export default function Landing() {
   }, []);
   const [, setLocation] = useLocation();
   const [error, setError] = useState<string | null>(null);
+  const [isDemoOpen, setIsDemoOpen] = useState(false);
+  const demoVideoUrl = "https://www.youtube.com/embed/ysz5S6PUM-U";
+  const partnerLogos = [
+    { name: "M-Pesa", src: mpesaLogo },
+    { name: "Pesapal", src: pesapalLogo },
+    { name: "PesaLink", src: pesalinkLogo },
+    { name: "KRA", src: kraLogo },
+    { name: "Brevo", src: brevoLogo },
+    { name: "Infobip", src: infobipLogo },
+  ];
+  const howItWorksSteps = [
+    {
+      title: "Connect your properties",
+      description: "Add units, tenants, and rent schedules in minutes with guided setup.",
+    },
+    {
+      title: "Automate payments",
+      description: "Enable M-Pesa and bank payments with instant reconciliation.",
+    },
+    {
+      title: "Stay on top of operations",
+      description: "Send reminders, track maintenance, and export clean reports.",
+    },
+  ];
+  const faqItems = [
+    {
+      question: "How fast can I get started?",
+      answer: "Most landlords are live within a day. Import tenants and units, then activate payments.",
+    },
+    {
+      question: "Which payment methods are supported?",
+      answer: "We support M-Pesa, Pesapal, and bank transfers with automatic reconciliation.",
+    },
+    {
+      question: "Do tenants need an app?",
+      answer: "No. Tenants can pay via M-Pesa or bank transfer and still receive receipts instantly.",
+    },
+    {
+      question: "Is my data secure?",
+      answer: "Yes. We use bank-grade security, backups, and role-based access controls.",
+    },
+    {
+      question: "Can I export reports for accounting?",
+      answer: "Yes. Export rent collections, arrears, and statements in a few clicks.",
+    },
+  ];
 
   useEffect(() => {
     // Check for error in URL
@@ -90,6 +148,30 @@ export default function Landing() {
         </div>
       )}
 
+      <Dialog open={isDemoOpen} onOpenChange={setIsDemoOpen}>
+        <DialogContent className="sm:max-w-4xl max-w-[95vw] p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6">
+            <DialogTitle>Landee Product Demo</DialogTitle>
+            <DialogDescription>
+              A quick walkthrough of rent collection, reconciliation, and reporting.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-6 pb-6">
+            <div className="aspect-video w-full overflow-hidden rounded-lg border border-border bg-muted">
+              {isDemoOpen && (
+                <iframe
+                  className="h-full w-full"
+                  src={demoVideoUrl}
+                  title="Landee product demo"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                ></iframe>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Hero Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
         {/* Background gradient */}
@@ -102,14 +184,15 @@ export default function Landing() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
             </span>
-            <span className="text-sm font-medium">Trusted by 100+ landlords</span>
+            <span className="text-sm font-medium">Trusted by landlords and property managers across Kenya</span>
           </div>
 
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
-            Streamline Your <span className="text-primary bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">Property Management</span>
+            Collect rent faster and manage every unit in one
+            <span className="text-primary bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent"> dashboard</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-3xl mx-auto leading-relaxed">
-            Manage properties, track rent payments, handle tenant communications, and generate reports all in one powerful platform designed for modern landlords.
+            Automate M-Pesa and bank payments, reconcile instantly, and keep tenants informed with SMS and email reminders.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
             <Button
@@ -126,6 +209,7 @@ export default function Landing() {
               size="lg"
               data-testid="button-demo"
               className="text-base px-8 py-6"
+              onClick={() => setIsDemoOpen(true)}
             >
               <i className="fas fa-play-circle mr-2"></i>
               Watch Demo
@@ -136,16 +220,35 @@ export default function Landing() {
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <i className="fas fa-check-circle text-primary"></i>
-              <span>No credit card required</span>
+              <span>Instant reconciliation</span>
             </div>
             <div className="flex items-center gap-2">
               <i className="fas fa-check-circle text-primary"></i>
-              <span>14-day free trial</span>
+              <span>Automated rent reminders</span>
             </div>
             <div className="flex items-center gap-2">
               <i className="fas fa-check-circle text-primary"></i>
-              <span>Cancel anytime</span>
+              <span>Dedicated support</span>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Trusted By */}
+      <section className="py-10 bg-muted/20 border-y border-border">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <p className="text-center text-sm text-muted-foreground mb-6">
+            Trusted payment and messaging partners
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-8">
+            {partnerLogos.map((logo) => (
+              <img
+                key={logo.name}
+                src={logo.src}
+                alt={`${logo.name} logo`}
+                className="h-8 md:h-10 w-auto object-contain grayscale opacity-80 hover:opacity-100 hover:grayscale-0 transition"
+              />
+            ))}
           </div>
         </div>
       </section>
@@ -170,6 +273,37 @@ export default function Landing() {
               <div className="text-3xl md:text-4xl font-bold text-chart-5 mb-2">KES 50M+</div>
               <div className="text-sm text-muted-foreground">Rent Collected</div>
             </div>
+          </div>
+          <div className="mt-10 rounded-2xl border border-border bg-muted/40 px-6 py-6 text-center">
+            <p className="text-sm text-muted-foreground">Faster collections, fewer arrears, clearer reporting</p>
+            <p className="text-lg font-semibold mt-2">Designed for landlords and professional property managers</p>
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-background">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <div className="inline-block px-4 py-2 bg-primary/10 border border-primary/20 rounded-full mb-4">
+              <span className="text-sm font-medium text-primary">How It Works</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">Get live in three simple steps</h2>
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+              From onboarding to collections, everything is designed to be quick and clear.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {howItWorksSteps.map((step, index) => (
+              <div
+                key={step.title}
+                className="bg-card border border-border rounded-2xl p-8 hover:shadow-lg transition"
+              >
+                <div className="text-3xl font-bold text-primary mb-4">{index + 1}</div>
+                <h3 className="text-xl font-semibold mb-3">{step.title}</h3>
+                <p className="text-muted-foreground leading-relaxed">{step.description}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -234,6 +368,35 @@ export default function Landing() {
               <h3 className="text-xl font-semibold mb-3">Smart Notifications</h3>
               <p className="text-muted-foreground leading-relaxed">Automated reminders for rent due dates, lease renewals, and maintenance schedules.</p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Integrations */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-muted/20 border-y border-border">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="inline-block px-4 py-2 bg-primary/10 border border-primary/20 rounded-full mb-4">
+              <span className="text-sm font-medium text-primary">Integrations</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">Connected to the tools you already use</h2>
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+              Payments, messaging, and compliance integrations keep your workflow in one place.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 items-center">
+            {partnerLogos.map((logo) => (
+              <div
+                key={`integration-${logo.name}`}
+                className="bg-card border border-border rounded-xl p-4 flex items-center justify-center"
+              >
+                <img
+                  src={logo.src}
+                  alt={`${logo.name} logo`}
+                  className="h-8 w-auto object-contain"
+                />
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -435,6 +598,35 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* FAQ Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-background">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="inline-block px-4 py-2 bg-primary/10 border border-primary/20 rounded-full mb-4">
+              <span className="text-sm font-medium text-primary">FAQ</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">Common questions</h2>
+            <p className="text-lg md:text-xl text-muted-foreground">
+              Quick answers to help you evaluate Landee with confidence.
+            </p>
+          </div>
+          <div className="space-y-4">
+            {faqItems.map((item) => (
+              <details
+                key={item.question}
+                className="group rounded-2xl border border-border bg-card p-6"
+              >
+                <summary className="flex cursor-pointer items-center justify-between text-base font-semibold">
+                  {item.question}
+                  <span className="text-primary group-open:rotate-45 transition">+</span>
+                </summary>
+                <p className="mt-4 text-muted-foreground leading-relaxed">{item.answer}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Contact Section */}
       <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-muted/30">
         <div className="max-w-4xl mx-auto">
@@ -558,6 +750,17 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* Sticky CTA */}
+      <div className="fixed bottom-4 left-4 right-4 z-40 sm:left-auto sm:right-6 sm:w-auto">
+        <Button
+          size="lg"
+          className="w-full sm:w-auto shadow-lg"
+          onClick={() => setIsDemoOpen(true)}
+        >
+          Book a Demo
+        </Button>
+      </div>
 
       {/* Footer */}
       <footer className="bg-card border-t border-border py-12">
