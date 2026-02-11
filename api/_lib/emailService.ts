@@ -25,7 +25,7 @@ export class EmailService {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
           <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
         </div>
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; color: white; text-align: center; margin-bottom: 30px;">
@@ -35,7 +35,7 @@ export class EmailService {
         <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
           <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedFirstName},</h3>
           <p style="color: #4B5563; line-height: 1.6;">
-            We received a request to reset your password for your Landee & Moony account. If you did not make this request, you can safely ignore this email.
+            We received a request to reset your password for your Landee account. If you did not make this request, you can safely ignore this email.
           </p>
         </div>
         <div style="text-align: center; margin: 35px 0;">
@@ -63,7 +63,7 @@ export class EmailService {
         </div>
         <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
           <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
-            © 2026 Landee & Moony. All rights reserved.<br>
+            © 2026 Landee. All rights reserved.<br>
             The #1 Property Management System in Kenya
           </p>
         </div>
@@ -73,7 +73,7 @@ export class EmailService {
     const text = [
       `Hello ${firstName},`,
       '',
-      'We received a request to reset your password for your Landee & Moony account. If you did not make this request, you can safely ignore this email.',
+      'We received a request to reset your password for your Landee account. If you did not make this request, you can safely ignore this email.',
       '',
       'Reset your password by clicking this link:',
       resetLink,
@@ -84,12 +84,12 @@ export class EmailService {
       '',
       'Need help? Contact us at support@landeeandmoony.com',
       '',
-      '© 2026 Landee & Moony - The #1 Property Management System in Kenya'
+      '© 2026 Landee - The #1 Property Management System in Kenya'
     ].join('\n');
 
     await this.sendEmail({
       to: email,
-      subject: `🔑 Reset Your Password - Landee & Moony`,
+      subject: `🔑 Reset Your Password - Landee`,
       html,
       text,
     });
@@ -173,7 +173,7 @@ export class EmailService {
         },
         body: JSON.stringify({
           sender: {
-            name: 'Landee & Moony',
+            name: 'Landee',
             email: process.env.BREVO_SENDER_EMAIL || 'noreply@landeeandmoony.com',
           },
           to: [
@@ -226,19 +226,19 @@ export class EmailService {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
           <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
         </div>
         
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; color: white; text-align: center; margin-bottom: 30px;">
           <h2 style="margin: 0 0 10px 0; font-size: 28px;">Welcome to Your New Home! 🏠</h2>
-          <p style="margin: 0; font-size: 16px; opacity: 0.9;">You've been invited to join Landee & Moony</p>
+          <p style="margin: 0; font-size: 16px; opacity: 0.9;">You've been invited to join Landee</p>
         </div>
         
         <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
           <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedTenantName},</h3>
           <p style="color: #4B5563; line-height: 1.6;">
-            ${escapedLandlordName || 'Your landlord'} has invited you to create your tenant account on Landee & Moony, 
+            ${escapedLandlordName || 'Your landlord'} has invited you to create your tenant account on Landee, 
             Kenya's leading property management platform.
           </p>
           ${escapedPropertyName ? `
@@ -282,7 +282,7 @@ export class EmailService {
         
         <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
           <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
-            © 2026 Landee & Moony. All rights reserved.<br>
+            © 2026 Landee. All rights reserved.<br>
             The #1 Property Management System in Kenya
           </p>
         </div>
@@ -290,7 +290,7 @@ export class EmailService {
     `;
 
     const text = `
-Welcome to Landee & Moony, ${tenantName}!
+Welcome to Landee, ${tenantName}!
 
 ${landlordName || 'Your landlord'} has invited you to create your tenant account.
 
@@ -310,12 +310,12 @@ This invitation link expires in 7 days.
 
 Need help? Contact us at support@landeeandmoony.com
 
-© 2026 Landee & Moony - The #1 Property Management System in Kenya
+© 2026 Landee - The #1 Property Management System in Kenya
     `;
 
     await this.sendEmail({
       to: tenantEmail,
-      subject: `🏠 Welcome to Landee & Moony - Create Your Account`,
+      subject: `🏠 Welcome to Landee - Create Your Account`,
       html,
       text,
     });
@@ -352,7 +352,7 @@ Need help? Contact us at support@landeeandmoony.com
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
           <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
         </div>
         
@@ -386,7 +386,7 @@ Need help? Contact us at support@landeeandmoony.com
         
         <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
           <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
-            © 2026 Landee & Moony. All rights reserved.<br>
+            © 2026 Landee. All rights reserved.<br>
             The #1 Property Management System in Kenya
           </p>
         </div>
@@ -430,7 +430,7 @@ Need help? Contact us at support@landeeandmoony.com
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
           <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
         </div>
         
@@ -455,7 +455,7 @@ Need help? Contact us at support@landeeandmoony.com
         
         <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
           <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
-            © 2026 Landee & Moony. All rights reserved.<br>
+            © 2026 Landee. All rights reserved.<br>
             The #1 Property Management System in Kenya
           </p>
         </div>
@@ -522,7 +522,7 @@ Need help? Contact us at support@landeeandmoony.com
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
           <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
         </div>
         
@@ -554,7 +554,7 @@ Need help? Contact us at support@landeeandmoony.com
         
         <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
           <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
-            © 2026 Landee & Moony. All rights reserved.<br>
+            © 2026 Landee. All rights reserved.<br>
             The #1 Property Management System in Kenya
           </p>
         </div>
@@ -600,7 +600,7 @@ Need help? Contact us at support@landeeandmoony.com
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
           <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
         </div>
         
@@ -624,7 +624,7 @@ Need help? Contact us at support@landeeandmoony.com
         
         <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
           <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
-            © 2026 Landee & Moony. All rights reserved.<br>
+            © 2026 Landee. All rights reserved.<br>
             The #1 Property Management System in Kenya
           </p>
         </div>
@@ -675,7 +675,7 @@ Need help? Contact us at support@landeeandmoony.com
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #3B82F6; margin: 0;">Landee & Moony</h1>
+          <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
           <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
         </div>
         
@@ -687,7 +687,7 @@ Need help? Contact us at support@landeeandmoony.com
         <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
           <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedFirstName},</h3>
           <p style="color: #4B5563; line-height: 1.6;">
-            Thank you for registering with Landee & Moony! To complete your account setup and start managing your properties, 
+            Thank you for registering with Landee! To complete your account setup and start managing your properties, 
             please verify your email address by clicking the button below.
           </p>
         </div>
@@ -706,7 +706,7 @@ Need help? Contact us at support@landeeandmoony.com
         
         <div style="background-color: #FEF3C7; padding: 15px; border-radius: 8px; margin-bottom: 25px; border-left: 4px solid #F59E0B;">
           <p style="color: #92400E; font-size: 14px; margin: 0;">
-            <strong>Security Tip:</strong> If you didn't create an account with Landee & Moony, please ignore this email.
+            <strong>Security Tip:</strong> If you didn't create an account with Landee, please ignore this email.
           </p>
         </div>
         
@@ -720,7 +720,7 @@ Need help? Contact us at support@landeeandmoony.com
         
         <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
           <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
-            © 2026 Landee & Moony. All rights reserved.<br>
+            © 2026 Landee. All rights reserved.<br>
             The #1 Property Management System in Kenya
           </p>
         </div>
@@ -728,23 +728,23 @@ Need help? Contact us at support@landeeandmoony.com
     `;
 
     const text = `
-Welcome to Landee & Moony, ${firstName}!
+Welcome to Landee, ${firstName}!
 
 Thank you for registering! To complete your account setup, please verify your email address by clicking this link:
 ${verificationLink}
 
 This verification link expires in 24 hours.
 
-If you didn't create an account with Landee & Moony, please ignore this email.
+If you didn't create an account with Landee, please ignore this email.
 
 Need help? Contact us at support@landeeandmoony.com
 
-© 2026 Landee & Moony - The #1 Property Management System in Kenya
+© 2026 Landee - The #1 Property Management System in Kenya
     `;
 
     await this.sendEmail({
       to: email,
-      subject: `🔐 Verify Your Email - Landee & Moony`,
+      subject: `🔐 Verify Your Email - Landee`,
       html,
       text,
     });

@@ -285,7 +285,7 @@ export default async function handler(
 
         await smsService.sendSms({
           to: phoneNumber,
-          message: `Your Landee & Moony verification code is: ${code}. Valid for 10 minutes.`
+          message: `Your Landee verification code is: ${code}. Valid for 10 minutes.`
         });
       } catch (smsErr) {
         console.error("[Auth] Failed to send OTP:", smsErr);
@@ -379,7 +379,7 @@ export default async function handler(
 
         await smsService.sendSms({
           to: phoneNumber,
-          message: `Your Landee & Moony verification code is: ${code}. Valid for 10 minutes.`
+          message: `Your Landee verification code is: ${code}. Valid for 10 minutes.`
         });
 
         return res.status(200).json({ message: "OTP sent successfully" });
@@ -656,7 +656,7 @@ export default async function handler(
 
         await smsService.sendSms({
           to: phoneNumber,
-          message: `Your Landee & Moony verification code is: ${code}. Valid for 10 minutes.`
+          message: `Your Landee verification code is: ${code}. Valid for 10 minutes.`
         });
 
         return res.status(200).json({ message: "Verification code sent" });

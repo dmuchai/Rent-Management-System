@@ -107,7 +107,7 @@ export class MpesaService {
                 Authorization: `Bearer ${token.trim()}`,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "LandeeAndMoony/1.0.0",
+                "User-Agent": "Landee/1.0.0",
             },
             body: JSON.stringify(payload),
         });
