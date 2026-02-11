@@ -145,15 +145,7 @@ export default function ResetPassword() {
         {/* Logo/Brand */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <img
-              src="/favicon.png"
-              alt="Landee & Moony"
-              className="h-12 w-12 mr-3"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-            <h1 className="text-3xl font-bold">Landee & Moony</h1>
+            <img src="/logo-full.png" alt="Landee" className="h-12" />
           </div>
           <p className="text-muted-foreground">The #1 Property Management System</p>
         </div>
@@ -251,8 +243,8 @@ export default function ResetPassword() {
         <div className="text-center mt-8">
           <p className="text-sm text-muted-foreground">
             Having trouble? Contact us at{' '}
-            <a href="mailto:support@landeeandmoony.com" className="text-primary hover:underline">
-              support@landeeandmoony.com
+            <a href="mailto:support@landee.co.ke" className="text-primary hover:underline">
+              support@landee.co.ke
             </a>
           </p>
         </div>

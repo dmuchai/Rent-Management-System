@@ -7,7 +7,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 const config: CapacitorConfig = {
   appId: 'com.rentmanagement.app',
-  appName: 'Rent Management System',
+  appName: 'Landee',
   webDir: 'dist/public',
   plugins: {
     SplashScreen: {

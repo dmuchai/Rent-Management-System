@@ -104,15 +104,14 @@ export default function SelectRole() {
         {/* Logo/Brand */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <img src="/favicon.png" alt="Landee & Moony" className="h-12 w-12 mr-3" />
-            <h1 className="text-3xl font-bold">Landee & Moony</h1>
+            <img src="/logo-full.png" alt="Landee" className="h-12" />
           </div>
           <p className="text-muted-foreground">Welcome! Please select your role to get started</p>
         </div>
 
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">How will you use Landee & Moony?</CardTitle>
+            <CardTitle className="text-2xl">How will you use Landee?</CardTitle>
             <CardDescription>Choose the role that best describes you. You can change this later in settings.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -125,8 +124,8 @@ export default function SelectRole() {
                     onClick={() => setSelectedRole(role.id)}
                     disabled={isLoading}
                     className={`relative p-6 rounded-lg border-2 transition-all text-left hover:border-primary hover:shadow-md ${selectedRole === role.id
-                        ? "border-primary bg-primary/5 shadow-md"
-                        : "border-border bg-card"
+                      ? "border-primary bg-primary/5 shadow-md"
+                      : "border-border bg-card"
                       } ${isLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                   >
                     <div className="flex flex-col items-center text-center space-y-3">

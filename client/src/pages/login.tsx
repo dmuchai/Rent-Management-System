@@ -175,15 +175,7 @@ export default function Login() {
         {/* Logo/Brand */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <img
-              src="/favicon.png"
-              alt="Landee & Moony"
-              className="h-12 w-12 mr-3"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-            <h1 className="text-3xl font-bold">Landee & Moony</h1>
+            <img src="/logo-full.png" alt="Landee" className="h-12" />
           </div>
           <p className="text-muted-foreground">Sign in to manage your properties</p>
         </div>

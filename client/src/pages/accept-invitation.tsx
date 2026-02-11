@@ -53,7 +53,7 @@ export default function AcceptInvitation() {
     onSuccess: async (data: any) => {
       toast({
         title: "Account Created! 🎉",
-        description: "Welcome to Landee & Moony! Please login with your new password...",
+        description: "Welcome to Landee Property Management System! Please login with your new password...",
         duration: 4000,
       });
 
@@ -66,7 +66,7 @@ export default function AcceptInvitation() {
       // Check if the error indicates user should login
       const errorMessage = error.message || "Failed to create account";
       const shouldLogin = errorMessage.includes('already been created') || errorMessage.includes('Please login');
-      
+
       toast({
         title: shouldLogin ? "Account Already Exists" : "Error",
         description: errorMessage,
@@ -111,7 +111,7 @@ export default function AcceptInvitation() {
   if (!token || verifyError) {
     const errorMessage = verifyError?.message || "The invitation link you're trying to use is no longer valid.";
     const isExpired = errorMessage.includes('expired') || errorMessage.includes('410');
-    
+
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md border-destructive">
@@ -133,7 +133,7 @@ export default function AcceptInvitation() {
             <p className="text-sm text-muted-foreground">
               Please contact your landlord to request a new invitation.
             </p>
-            <Button 
+            <Button
               onClick={() => setLocation("/")}
               className="w-full"
             >
@@ -151,8 +151,7 @@ export default function AcceptInvitation() {
         {/* Logo/Brand */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <img src="/favicon.png" alt="Landee & Moony" className="h-12 w-12 mr-3" />
-            <h1 className="text-3xl font-bold">Landee & Moony</h1>
+            <img src="/logo-full.png" alt="Landee" className="h-12" />
           </div>
           <p className="text-muted-foreground">Welcome to your new home! 🏠</p>
         </div>
@@ -161,7 +160,7 @@ export default function AcceptInvitation() {
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-2xl text-center">Create Your Account</CardTitle>
             <CardDescription className="text-center">
-              You've been invited to join Landee & Moony
+              You've been invited to join Landee
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -231,9 +230,9 @@ export default function AcceptInvitation() {
                 </div>
               </div>
 
-              <Button 
-                type="submit" 
-                className="w-full" 
+              <Button
+                type="submit"
+                className="w-full"
                 size="lg"
                 disabled={acceptMutation.isPending}
               >

@@ -7,23 +7,23 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 export default function Landing() {
   // Set custom title for landing page
   useEffect(() => {
-    document.title = 'Landee & Moony | The #1 Property Management System in Kenya';
-    
+    document.title = 'Landee Property Management System | The #1 Property Management System in Kenya';
+
     // Add smooth scrolling behavior
     document.documentElement.style.scrollBehavior = 'smooth';
-    
+
     return () => {
       document.documentElement.style.scrollBehavior = 'auto';
     };
   }, []);
   const [, setLocation] = useLocation();
   const [error, setError] = useState<string | null>(null);
-  
+
   useEffect(() => {
     // Check for error in URL
     const params = new URLSearchParams(window.location.search);
     const errorParam = params.get('error');
-    
+
     if (errorParam) {
       if (errorParam === 'no_token') {
         setError('Google Sign-In configuration incomplete. Please contact support or use email/password login.');
@@ -34,7 +34,7 @@ export default function Landing() {
       }
     }
   }, []);
-  
+
   const redirectToLogin = () => {
     setLocation("/login");
   };
@@ -50,11 +50,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center gap-3">
-              <img src="/favicon.png" alt="Landee & Moony" className="h-10 w-10 md:h-12 md:w-12" />
-              <div className="flex flex-col">
-                <span className="text-xl md:text-2xl font-bold text-foreground">Landee & Moony</span>
-                <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Property Management System</p>
-              </div>
+              <img src="/logo-full.png" alt="Landee" className="h-10 md:h-12" />
             </div>
             <nav className="hidden md:flex space-x-8">
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Features</a>
@@ -62,14 +58,14 @@ export default function Landing() {
               <a href="#contact" className="text-muted-foreground hover:text-foreground transition-colors">Contact</a>
             </nav>
             <div className="flex items-center space-x-4">
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 onClick={redirectToLogin}
                 data-testid="button-signin"
               >
                 Sign In
               </Button>
-              <Button 
+              <Button
                 onClick={redirectToLogin}
                 data-testid="button-getstarted"
               >
@@ -94,7 +90,7 @@ export default function Landing() {
       <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
         {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-chart-2/5 pointer-events-none"></div>
-        
+
         <div className="max-w-7xl mx-auto text-center relative z-10">
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 border border-primary/20 rounded-full mb-8">
@@ -112,8 +108,8 @@ export default function Landing() {
             Manage properties, track rent payments, handle tenant communications, and generate reports all in one powerful platform designed for modern landlords.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               onClick={redirectToLogin}
               data-testid="button-freetrial"
               className="text-base px-8 py-6 shadow-lg hover:shadow-xl transition-all"
@@ -121,8 +117,8 @@ export default function Landing() {
               <i className="fas fa-rocket mr-2"></i>
               Start Free Trial
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="lg"
               data-testid="button-demo"
               className="text-base px-8 py-6"
@@ -131,7 +127,7 @@ export default function Landing() {
               Watch Demo
             </Button>
           </div>
-          
+
           {/* Social proof */}
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
@@ -184,7 +180,7 @@ export default function Landing() {
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Everything You Need to Manage Properties</h2>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">Comprehensive tools for landlords and property managers</p>
           </div>
-          
+
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
             {/* Feature Cards */}
             <div className="group bg-card p-8 rounded-2xl border border-border hover:border-primary/50 hover:shadow-xl transition-all duration-300">
@@ -289,8 +285,8 @@ export default function Landing() {
                   <span>Email support</span>
                 </li>
               </ul>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full text-base py-6"
                 onClick={redirectToLogin}
               >
@@ -346,7 +342,7 @@ export default function Landing() {
                   <span>Priority support</span>
                 </li>
               </ul>
-              <Button 
+              <Button
                 className="w-full text-base py-6"
                 onClick={redirectToLogin}
               >
@@ -396,8 +392,8 @@ export default function Landing() {
                   <span>24/7 phone support</span>
                 </li>
               </ul>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full text-base py-6"
                 onClick={handleContactSales}
               >
@@ -510,14 +506,14 @@ export default function Landing() {
                 {' '}or call our support line.
               </p>
               <div className="space-y-4">
-                <Button 
+                <Button
                   className="w-full"
                   onClick={() => window.location.href = 'mailto:support@landee.co.ke'}
                 >
                   <i className="fas fa-envelope mr-2"></i>
                   Send Email
                 </Button>
-                <Button 
+                <Button
                   variant="outline"
                   className="w-full"
                   onClick={redirectToLogin}
@@ -536,19 +532,19 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-5xl font-bold mb-6">Ready to Transform Your Property Management?</h2>
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Join hundreds of landlords who have simplified their workflow with Landee & Moony
+            Join hundreds of landlords who have simplified their workflow with Landee Property Management System
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               onClick={redirectToLogin}
               className="text-base px-8 py-6 shadow-lg hover:shadow-xl transition-all"
             >
               Get Started Free
               <i className="fas fa-arrow-right ml-2"></i>
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="lg"
               className="text-base px-8 py-6"
               onClick={handleContactSales}
@@ -565,8 +561,7 @@ export default function Landing() {
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <img src="/favicon.png" alt="Landee & Moony" className="h-8 w-8" />
-                <span className="text-lg font-bold">Landee & Moony</span>
+                <img src="/logo-full.png" alt="Landee" className="h-8" />
               </div>
               <p className="text-sm text-muted-foreground">Modern property management made simple</p>
             </div>
@@ -595,7 +590,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="border-t border-border pt-8 text-center text-sm text-muted-foreground">
-            <p>&copy; {new Date().getFullYear()} Landee & Moony. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} Landee. All rights reserved.</p>
           </div>
         </div>
       </footer>
