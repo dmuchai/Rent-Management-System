@@ -50,7 +50,11 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center gap-3">
-              <img src="/logo-full.png" alt="Landee" className="h-10 md:h-12" />
+              <img src="/favicon.png" alt="Landee" className="h-10 w-10 md:h-12 md:w-12" />
+              <div className="flex flex-col">
+                <span className="text-xl md:text-2xl font-bold text-foreground">Landee Property Management System</span>
+                <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Modern Property Management</p>
+              </div>
             </div>
             <nav className="hidden md:flex space-x-8">
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Features</a>
@@ -561,7 +565,8 @@ export default function Landing() {
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <img src="/logo-full.png" alt="Landee" className="h-8" />
+                <img src="/favicon.png" alt="Landee" className="h-8 w-8" />
+                <span className="text-lg font-bold">Landee Property Management System</span>
               </div>
               <p className="text-sm text-muted-foreground">Modern property management made simple</p>
             </div>
