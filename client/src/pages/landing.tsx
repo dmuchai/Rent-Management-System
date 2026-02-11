@@ -7,7 +7,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 export default function Landing() {
   // Set custom title for landing page
   useEffect(() => {
-    document.title = 'Landee Property Management System | The #1 Property Management System in Kenya';
+    document.title = 'Landee | The #1 Property Management System in Kenya';
 
     // Add smooth scrolling behavior
     document.documentElement.style.scrollBehavior = 'smooth';
@@ -40,7 +40,7 @@ export default function Landing() {
   };
 
   const handleContactSales = () => {
-    window.location.href = 'mailto:support@landee.co.ke?subject=Enterprise Plan Inquiry';
+    window.location.href = 'mailto:landeemoony@kejalink.co.ke?subject=Enterprise Plan Inquiry';
   };
 
   return (
@@ -52,8 +52,8 @@ export default function Landing() {
             <div className="flex items-center gap-3">
               <img src="/favicon.png" alt="Landee" className="h-10 w-10 md:h-12 md:w-12" />
               <div className="flex flex-col">
-                <span className="text-xl md:text-2xl font-bold text-foreground">Landee Property Management System</span>
-                <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Modern Property Management</p>
+                <span className="text-xl md:text-2xl font-bold text-foreground">Landee</span>
+                <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Smart Property Management</p>
               </div>
             </div>
             <nav className="hidden md:flex space-x-8">
@@ -455,8 +455,8 @@ export default function Landing() {
                 </div>
                 <div>
                   <h3 className="font-semibold mb-1">Email</h3>
-                  <a href="mailto:support@landee.co.ke" className="text-muted-foreground hover:text-primary transition-colors">
-                    support@landee.co.ke
+                  <a href="mailto:landeemoony@kejalink.co.ke" className="text-muted-foreground hover:text-primary transition-colors">
+                    landeemoony@kejalink.co.ke
                   </a>
                 </div>
               </div>
@@ -504,15 +504,15 @@ export default function Landing() {
               <h3 className="text-xl font-bold mb-4">Quick Inquiry</h3>
               <p className="text-muted-foreground mb-6">
                 For immediate assistance, email us at{' '}
-                <a href="mailto:support@landee.co.ke" className="text-primary hover:underline">
-                  support@landee.co.ke
+                <a href="mailto:landeemoony@kejalink.co.ke" className="text-primary hover:underline">
+                  landeemoony@kejalink.co.ke
                 </a>
                 {' '}or call our support line.
               </p>
               <div className="space-y-4">
                 <Button
                   className="w-full"
-                  onClick={() => window.location.href = 'mailto:support@landee.co.ke'}
+                  onClick={() => window.location.href = 'mailto:landeemoony@kejalink.co.ke'}
                 >
                   <i className="fas fa-envelope mr-2"></i>
                   Send Email
@@ -536,7 +536,7 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-5xl font-bold mb-6">Ready to Transform Your Property Management?</h2>
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Join hundreds of landlords who have simplified their workflow with Landee Property Management System
+            Join hundreds of landlords who have simplified their workflow with Landee
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
@@ -566,9 +566,9 @@ export default function Landing() {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <img src="/favicon.png" alt="Landee" className="h-8 w-8" />
-                <span className="text-lg font-bold">Landee Property Management System</span>
+                <span className="text-lg font-bold">Landee</span>
               </div>
-              <p className="text-sm text-muted-foreground">Modern property management made simple</p>
+              <p className="text-sm text-muted-foreground">Smart Property Management</p>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Product</h4>

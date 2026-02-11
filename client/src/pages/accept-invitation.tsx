@@ -53,7 +53,7 @@ export default function AcceptInvitation() {
     onSuccess: async (data: any) => {
       toast({
         title: "Account Created! 🎉",
-        description: "Welcome to Landee Property Management System! Please login with your new password...",
+        description: "Welcome to Landee! Please login with your new password...",
         duration: 4000,
       });
 
@@ -152,7 +152,7 @@ export default function AcceptInvitation() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <img src="/favicon.png" alt="Landee" className="h-12 w-12 mr-3" />
-            <h1 className="text-3xl font-bold">Landee Property Management System</h1>
+            <h1 className="text-3xl font-bold">Landee</h1>
           </div>
           <p className="text-muted-foreground">Welcome to your new home! 🏠</p>
         </div>
