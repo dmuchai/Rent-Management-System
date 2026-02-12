@@ -18,6 +18,8 @@ import AcceptInvitation from "@/pages/accept-invitation";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import SelectRole from "@/pages/select-role";
+import PrivacyPolicy from "@/pages/privacy-policy";
+import TermsOfService from "@/pages/terms-of-service";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -70,6 +72,8 @@ function Router() {
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/auth-callback" component={AuthCallback} />
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/terms-of-service" component={TermsOfService} />
       <Route path="/select-role" component={SelectRole} />
       <Route path="/dashboard" component={() => {
         if (!isAuthenticated) {

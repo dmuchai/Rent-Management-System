@@ -97,6 +97,14 @@ export default function Landing() {
     setLocation("/login");
   };
 
+  const redirectToPrivacyPolicy = () => {
+    setLocation("/privacy-policy");
+  };
+
+  const redirectToTermsOfService = () => {
+    setLocation("/terms-of-service");
+  };
+
   const handleContactSales = () => {
     window.location.href = 'mailto:landeemoony@kejalink.co.ke?subject=Enterprise Plan Inquiry';
   };
@@ -792,8 +800,8 @@ export default function Landing() {
             <div>
               <h4 className="font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><button onClick={redirectToLogin} className="hover:text-foreground transition-colors text-left">Privacy Policy</button></li>
-                <li><button onClick={redirectToLogin} className="hover:text-foreground transition-colors text-left">Terms of Service</button></li>
+                <li><button onClick={redirectToPrivacyPolicy} className="hover:text-foreground transition-colors text-left">Privacy Policy</button></li>
+                <li><button onClick={redirectToTermsOfService} className="hover:text-foreground transition-colors text-left">Terms of Service</button></li>
               </ul>
             </div>
           </div>

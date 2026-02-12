@@ -155,6 +155,22 @@ export default function ForgotPassword() {
             </a>
           </p>
         </div>
+
+        <div className="text-center mt-3 text-xs text-muted-foreground">
+          <button
+            onClick={() => setLocation("/privacy-policy")}
+            className="hover:text-foreground transition-colors"
+          >
+            Privacy Policy
+          </button>
+          <span className="mx-2">•</span>
+          <button
+            onClick={() => setLocation("/terms-of-service")}
+            className="hover:text-foreground transition-colors"
+          >
+            Terms of Service
+          </button>
+        </div>
       </div>
     </div>
   );

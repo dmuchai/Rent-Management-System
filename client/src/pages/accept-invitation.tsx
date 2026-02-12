@@ -274,7 +274,22 @@ export default function AcceptInvitation() {
         </Card>
 
         <p className="text-center text-sm text-muted-foreground mt-6">
-          By creating an account, you agree to our Terms of Service and Privacy Policy
+          By creating an account, you agree to our{' '}
+          <button
+            type="button"
+            onClick={() => setLocation("/terms-of-service")}
+            className="text-primary hover:underline font-medium"
+          >
+            Terms of Service
+          </button>{' '}
+          and{' '}
+          <button
+            type="button"
+            onClick={() => setLocation("/privacy-policy")}
+            className="text-primary hover:underline font-medium"
+          >
+            Privacy Policy
+          </button>
         </p>
       </div>
     </div>
