@@ -109,6 +109,10 @@ export default function Landing() {
     window.location.href = 'mailto:landeemoony@kejalink.co.ke?subject=Enterprise Plan Inquiry';
   };
 
+  const handleAccountDeletionRequest = () => {
+    window.location.href = 'mailto:landeemoony@kejalink.co.ke?subject=Account%20Deletion%20Request';
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -802,6 +806,7 @@ export default function Landing() {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><button onClick={redirectToPrivacyPolicy} className="hover:text-foreground transition-colors text-left">Privacy Policy</button></li>
                 <li><button onClick={redirectToTermsOfService} className="hover:text-foreground transition-colors text-left">Terms of Service</button></li>
+                <li><button onClick={handleAccountDeletionRequest} className="hover:text-foreground transition-colors text-left">Request account deletion</button></li>
               </ul>
             </div>
           </div>
