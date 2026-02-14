@@ -2178,6 +2178,70 @@ export async function registerRoutes(app: Express) {
     }
   });
 
+  app.put("/api/maintenance-requests/:id", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+      const requestId = req.params.id;
+
+      if (role === "tenant") {
+        return res.status(403).json({ message: "Only landlords can update maintenance requests" });
+      }
+
+      const updateSchema = z.object({
+        status: z.enum(["open", "pending", "in_progress", "completed", "cancelled"]).optional(),
+        assignedTo: z.string().optional().nullable(),
+        completedDate: z.string().optional().nullable(),
+      });
+
+      const updateData = updateSchema.parse(req.body);
+
+      const ownerRequests = await supabaseStorage.getMaintenanceRequestsByOwnerId(userId);
+      const ownsRequest = ownerRequests.some((request) => request.id === requestId);
+
+      if (!ownsRequest) {
+        return res.status(404).json({ message: "Maintenance request not found" });
+      }
+
+      const updatePayload: any = {};
+      if (updateData.status !== undefined) updatePayload.status = updateData.status;
+      if (updateData.assignedTo !== undefined) updatePayload.assigned_to = updateData.assignedTo;
+      if (updateData.completedDate !== undefined) updatePayload.completed_date = updateData.completedDate ? new Date(updateData.completedDate).toISOString() : null;
+      updatePayload.updated_at = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from("maintenance_requests")
+        .update(updatePayload)
+        .eq("id", requestId)
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(500).json({ message: "Failed to update maintenance request", details: error.message });
+      }
+
+      res.json({
+        id: data.id,
+        unitId: data.unit_id,
+        tenantId: data.tenant_id,
+        title: data.title,
+        description: data.description,
+        priority: data.priority,
+        status: data.status,
+        assignedTo: data.assigned_to,
+        completedDate: data.completed_date,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      });
+    } catch (error) {
+      console.error("Error updating maintenance request:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update maintenance request" });
+    }
+  });
+
   // Pesapal Routes
   app.post("/api/payments/pesapal/initiate", isAuthenticated, async (req: any, res: any) => {
     try {

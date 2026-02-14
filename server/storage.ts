@@ -537,6 +537,38 @@ export class SupabaseStorage {
     } as MaintenanceRequest;
   }
 
+  async updateMaintenanceRequest(id: string, request: Partial<InsertMaintenanceRequest>): Promise<MaintenanceRequest> {
+    const updateData: any = {};
+
+    if (request.status !== undefined) updateData.status = request.status;
+    if (request.assignedTo !== undefined) updateData.assigned_to = request.assignedTo;
+    if (request.completedDate !== undefined) updateData.completed_date = request.completedDate;
+    updateData.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from("maintenance_requests")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      unitId: data.unit_id,
+      tenantId: data.tenant_id,
+      title: data.title,
+      description: data.description,
+      priority: data.priority,
+      status: data.status,
+      assignedTo: data.assigned_to,
+      completedDate: data.completed_date,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    } as MaintenanceRequest;
+  }
+
   // Document operations
   async getDocumentsByOwnerId(ownerId: string): Promise<Document[]> {
     // TODO: Implement Supabase query

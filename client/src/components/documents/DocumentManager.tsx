@@ -21,6 +21,7 @@ export default function DocumentManager() {
   const queryClient = useQueryClient();
   const [activeCategory, setActiveCategory] = useState("lease");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedDocument, setSelectedDocument] = useState<any | null>(null);
 
   const { data: documents = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/documents", { category: activeCategory }],
@@ -39,6 +40,11 @@ export default function DocumentManager() {
   const recentDocuments = [...filteredDocuments]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5);
+
+  const formatFileSize = (fileSize?: number | null) => {
+    if (!fileSize) return "Unknown size";
+    return `${(fileSize / 1024 / 1024).toFixed(1)} MB`;
+  };
 
   const uploadMutation = useMutation({
     mutationFn: async (documentData: any) => {
@@ -199,94 +205,147 @@ export default function DocumentManager() {
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{categories.find((c) => c.id === activeCategory)?.name}</CardTitle>
-              <CardDescription>Manage and download your documents.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="animate-pulse space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center justify-between p-4 border border-border rounded-lg">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 bg-muted rounded-lg"></div>
-                        <div className="space-y-2">
-                          <div className="h-4 bg-muted rounded w-48"></div>
-                          <div className="h-3 bg-muted rounded w-32"></div>
+          <div className="grid gap-4 lg:grid-cols-[2fr,1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>{categories.find((c) => c.id === activeCategory)?.name}</CardTitle>
+                <CardDescription>Manage and download your documents.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="animate-pulse space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center justify-between p-4 border border-border rounded-lg">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-10 h-10 bg-muted rounded-lg"></div>
+                          <div className="space-y-2">
+                            <div className="h-4 bg-muted rounded w-48"></div>
+                            <div className="h-3 bg-muted rounded w-32"></div>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          <div className="w-8 h-8 bg-muted rounded"></div>
+                          <div className="w-8 h-8 bg-muted rounded"></div>
                         </div>
                       </div>
-                      <div className="flex space-x-2">
-                        <div className="w-8 h-8 bg-muted rounded"></div>
-                        <div className="w-8 h-8 bg-muted rounded"></div>
-                      </div>
+                    ))}
+                  </div>
+                ) : filteredDocuments.length === 0 && searchQuery.trim() ? (
+                  <div className="text-center py-12">
+                    <i className="fas fa-file-alt text-4xl text-muted-foreground mb-4"></i>
+                    <p className="text-muted-foreground text-lg" data-testid="text-no-documents">
+                      No documents match your search
+                    </p>
+                    <p className="text-muted-foreground">Try a different keyword or clear the search.</p>
+                  </div>
+                ) : filteredDocuments.length === 0 ? (
+                  <div className="text-center py-12">
+                    <i className="fas fa-file-alt text-4xl text-muted-foreground mb-4"></i>
+                    <p className="text-muted-foreground text-lg" data-testid="text-no-documents">
+                      No documents in this category
+                    </p>
+                    <p className="text-muted-foreground">Upload a document to get started.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredDocuments.map((document: any) => (
+                      <button
+                        key={document.id}
+                        type="button"
+                        onClick={() => setSelectedDocument(document)}
+                        className={`w-full text-left flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between transition-colors ${
+                          selectedDocument?.id === document.id ? "bg-muted/40" : "hover:bg-muted/20"
+                        }`}
+                        data-testid={`document-item-${document.id}`}
+                      >
+                        <div className="flex items-center space-x-4">
+                          <div className="w-10 h-10 bg-destructive/10 rounded-lg flex items-center justify-center">
+                            <i className="fas fa-file-pdf text-destructive"></i>
+                          </div>
+                          <div>
+                            <p className="font-medium" data-testid={`document-name-${document.id}`}>
+                              {document.name}
+                            </p>
+                            <p className="text-sm text-muted-foreground" data-testid={`document-meta-${document.id}`}>
+                              Uploaded on {new Date(document.createdAt).toLocaleDateString()} • {formatFileSize(document.fileSize)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">{activeCategory}</Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleDownload(document);
+                            }}
+                            data-testid={`button-download-${document.id}`}
+                          >
+                            <i className="fas fa-download"></i>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedDocument(document);
+                            }}
+                            data-testid={`button-view-${document.id}`}
+                          >
+                            <i className="fas fa-eye"></i>
+                          </Button>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Preview</CardTitle>
+                <CardDescription>Document details and quick actions.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {selectedDocument ? (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Name</p>
+                      <p className="text-sm font-medium">{selectedDocument.name}</p>
                     </div>
-                  ))}
-                </div>
-              ) : filteredDocuments.length === 0 && searchQuery.trim() ? (
-                <div className="text-center py-12">
-                  <i className="fas fa-file-alt text-4xl text-muted-foreground mb-4"></i>
-                  <p className="text-muted-foreground text-lg" data-testid="text-no-documents">
-                    No documents match your search
-                  </p>
-                  <p className="text-muted-foreground">Try a different keyword or clear the search.</p>
-                </div>
-              ) : filteredDocuments.length === 0 ? (
-                <div className="text-center py-12">
-                  <i className="fas fa-file-alt text-4xl text-muted-foreground mb-4"></i>
-                  <p className="text-muted-foreground text-lg" data-testid="text-no-documents">
-                    No documents in this category
-                  </p>
-                  <p className="text-muted-foreground">Upload a document to get started.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {filteredDocuments.map((document: any) => (
-                    <div
-                      key={document.id}
-                      className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between"
-                      data-testid={`document-item-${document.id}`}
-                    >
-                      <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 bg-destructive/10 rounded-lg flex items-center justify-center">
-                          <i className="fas fa-file-pdf text-destructive"></i>
-                        </div>
-                        <div>
-                          <p className="font-medium" data-testid={`document-name-${document.id}`}>
-                            {document.name}
-                          </p>
-                          <p className="text-sm text-muted-foreground" data-testid={`document-meta-${document.id}`}>
-                            Uploaded on {new Date(document.createdAt).toLocaleDateString()} • {
-                              document.fileSize ? `${(document.fileSize / 1024 / 1024).toFixed(1)} MB` : 'Unknown size'
-                            }
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">{activeCategory}</Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDownload(document)}
-                          data-testid={`button-download-${document.id}`}
-                        >
-                          <i className="fas fa-download"></i>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDownload(document)}
-                          data-testid={`button-view-${document.id}`}
-                        >
-                          <i className="fas fa-eye"></i>
-                        </Button>
-                      </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Uploaded</p>
+                      <p className="text-sm font-medium">
+                        {selectedDocument.createdAt ? new Date(selectedDocument.createdAt).toLocaleDateString() : "Unknown"}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <div>
+                      <p className="text-sm text-muted-foreground">File size</p>
+                      <p className="text-sm font-medium">{formatFileSize(selectedDocument.fileSize)}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" onClick={() => handleDownload(selectedDocument)}>
+                        Open
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedDocument(null)}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-sm text-muted-foreground">Select a document to preview.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>

@@ -23,10 +23,19 @@ interface ReportData {
   };
 }
 
+interface ExportEntry {
+  id: string;
+  fileName: string;
+  rangeLabel: string;
+  reportType: string;
+  createdAt: string;
+}
+
 export default function ReportGenerator() {
   const [reportType, setReportType] = useState("monthly");
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]);
+  const [exportHistory, setExportHistory] = useState<ExportEntry[]>([]);
 
   const setPresetRange = (preset: "month" | "last-month" | "ytd") => {
     const now = new Date();
@@ -54,6 +63,8 @@ export default function ReportGenerator() {
   const handleExportReport = () => {
     if (!reportData) return;
 
+    const fileName = `rent-report-${startDate}-to-${endDate}.csv`;
+
     // Create CSV content
     const headers = ["Date", "Description", "Amount", "Status", "Method"];
     const csvContent = [
@@ -72,9 +83,20 @@ export default function ReportGenerator() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `rent-report-${startDate}-to-${endDate}.csv`;
+    a.download = fileName;
     a.click();
     window.URL.revokeObjectURL(url);
+
+    setExportHistory((prev) => [
+      {
+        id: `${Date.now()}`,
+        fileName,
+        rangeLabel: `${startDate} to ${endDate}`,
+        reportType,
+        createdAt: new Date().toISOString(),
+      },
+      ...prev,
+    ].slice(0, 10));
   };
 
   return (
@@ -286,6 +308,44 @@ export default function ReportGenerator() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Export History</CardTitle>
+            {exportHistory.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setExportHistory([])}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {exportHistory.length === 0 ? (
+            <p className="text-muted-foreground">No exports yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {exportHistory.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                  <div>
+                    <p className="text-sm font-medium">{entry.fileName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {entry.reportType} • {entry.rangeLabel}
+                    </p>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(entry.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

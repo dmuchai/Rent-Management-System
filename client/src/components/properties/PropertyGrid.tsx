@@ -1,10 +1,12 @@
 import { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Property, Unit } from "@shared/schema";
 import PropertyCard from "./PropertyCard";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Filter, SortAsc } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
 
 interface PropertyGridProps {
   properties: Property[];
@@ -103,6 +105,20 @@ export default function PropertyGrid({ properties, units, loading, onAddProperty
     if (unitStatusFilter === "available") return !unit.isOccupied;
     return true;
   });
+
+  const { data: propertyDocuments = [], isLoading: documentsLoading } = useQuery<any[]>({
+    queryKey: ["/api/documents", { category: "property", relatedId: selectedPropertyId }],
+    queryFn: async () => {
+      if (!selectedPropertyId) return [];
+      const response = await apiRequest("GET", `/api/documents?category=property&relatedId=${selectedPropertyId}`);
+      const result = await response.json();
+      return Array.isArray(result) ? result : (result.data || []);
+    },
+    enabled: !!selectedPropertyId,
+    retry: false,
+  });
+
+  const recentDocuments = propertyDocuments.slice(0, 4);
 
   // Get unique property types for filter
   const propertyTypes = useMemo(() => {
@@ -352,6 +368,54 @@ export default function PropertyGrid({ properties, units, loading, onAddProperty
                             <span className={`text-xs font-medium ${unit.isOccupied ? "text-emerald-600" : "text-muted-foreground"}`}>
                               {unit.isOccupied ? "Occupied" : "Available"}
                             </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-card">
+                  <div className="border-b border-border px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold">Property Documents</h3>
+                        <p className="text-xs text-muted-foreground">Recent files linked to this property.</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {propertyDocuments.length} total
+                      </span>
+                    </div>
+                  </div>
+                  <div className="px-4 py-4">
+                    {documentsLoading ? (
+                      <div className="space-y-3">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="h-10 rounded-md bg-muted/40"></div>
+                        ))}
+                      </div>
+                    ) : recentDocuments.length === 0 ? (
+                      <div className="text-center py-6">
+                        <p className="text-sm text-muted-foreground">No property documents yet.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {recentDocuments.map((doc: any) => (
+                          <div key={doc.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                            <div>
+                              <p className="text-sm font-medium">{doc.name || "Document"}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {doc.createdAt ? `Uploaded ${new Date(doc.createdAt).toLocaleDateString()}` : "Upload date unknown"}
+                                {doc.fileSize ? ` • ${(doc.fileSize / 1024 / 1024).toFixed(1)} MB` : ""}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(doc.fileUrl, "_blank")}
+                            >
+                              Open
+                            </Button>
                           </div>
                         ))}
                       </div>

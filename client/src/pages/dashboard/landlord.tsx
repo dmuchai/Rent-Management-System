@@ -39,7 +39,7 @@ import { AUTH_QUERY_KEYS, clearAuthQueries } from "@/lib/auth-keys";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Lease } from "@/../../shared/schema";
 
-type DashboardSection = "overview" | "properties" | "tenants" | "leases" | "payments" | "payment-settings" | "documents" | "reports" | "profile";
+type DashboardSection = "overview" | "properties" | "tenants" | "leases" | "maintenance" | "payments" | "payment-settings" | "documents" | "reports" | "profile";
 
 // Password validation helper function
 function validatePassword(password: string): { isValid: boolean; failedRequirements: string[] } {
@@ -73,6 +73,7 @@ export default function LandlordDashboard() {
     properties: 'Properties',
     tenants: 'Tenants',
     leases: 'Leases',
+    maintenance: 'Maintenance',
     payments: 'Payments',
     'payment-settings': 'Payment Settings',
     documents: 'Documents',
@@ -196,6 +197,27 @@ export default function LandlordDashboard() {
       return result.data || result || [];
     },
     retry: false,
+  });
+
+  const updateMaintenanceMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { status?: string; assignedTo?: string | null; completedDate?: string | null } }) => {
+      const response = await apiRequest("PUT", `/api/maintenance-requests/${id}`, data);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/maintenance-requests"] });
+      toast({
+        title: "Maintenance updated",
+        description: "Request updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update request",
+        variant: "destructive",
+      });
+    },
   });
 
   const { data: units = [], isLoading: unitsLoading } = useQuery({
@@ -380,6 +402,7 @@ export default function LandlordDashboard() {
     properties: "Properties",
     tenants: "Tenants",
     leases: "Lease Management",
+    maintenance: "Maintenance",
     payments: "Payment Management",
     "payment-settings": "Payment Settings",
     documents: "Document Management",
@@ -1287,6 +1310,175 @@ export default function LandlordDashboard() {
             />
           </div>
         );
+
+      case "maintenance": {
+        const normalizedRequests = Array.isArray(maintenanceRequests) ? maintenanceRequests : [];
+        const openRequests = normalizedRequests.filter((request: any) => ["pending", "open"].includes(String(request.status || "").toLowerCase()));
+        const inProgressRequests = normalizedRequests.filter((request: any) => ["in_progress", "in-progress"].includes(String(request.status || "").toLowerCase()));
+        const completedRequests = normalizedRequests.filter((request: any) => ["completed", "resolved"].includes(String(request.status || "").toLowerCase()));
+        const urgentRequests = normalizedRequests.filter((request: any) => {
+          const priority = String(request.priority || "").toLowerCase();
+          return priority === "urgent" || priority === "high" || request.isUrgent === true;
+        });
+
+        const renderRequestItem = (request: any) => {
+          const normalizedStatus = String(request.status || "").toLowerCase();
+          const isCompleted = normalizedStatus === "completed" || normalizedStatus === "resolved";
+          const isInProgress = normalizedStatus === "in_progress" || normalizedStatus === "in-progress";
+          const tenantName = request.tenant
+            ? `${request.tenant.firstName || ""} ${request.tenant.lastName || ""}`.trim()
+            : "Tenant";
+          const unitLabel = request.unit?.unitNumber ? `Unit ${request.unit.unitNumber}` : "Unit";
+          const propertyName = request.unit?.property?.name || request.property?.name || "Property";
+
+          const handleAssign = () => {
+            const assignee = window.prompt("Assign to (name or team):", request.assignedTo || "");
+            if (assignee === null) return;
+            updateMaintenanceMutation.mutate({
+              id: request.id,
+              data: { assignedTo: assignee.trim() || null },
+            });
+          };
+
+          const handleInProgress = () => {
+            if (isInProgress || isCompleted) return;
+            updateMaintenanceMutation.mutate({
+              id: request.id,
+              data: { status: "in_progress" },
+            });
+          };
+
+          const handleClose = () => {
+            if (isCompleted) return;
+            updateMaintenanceMutation.mutate({
+              id: request.id,
+              data: { status: "completed", completedDate: new Date().toISOString() },
+            });
+          };
+
+          return (
+            <div key={request.id} className="rounded-lg border border-border p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">{request.title || "Maintenance request"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {propertyName} • {unitLabel}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{tenantName}</p>
+                  {request.assignedTo && (
+                    <p className="text-xs text-muted-foreground">Assigned to {request.assignedTo}</p>
+                  )}
+                </div>
+                <Badge variant={String(request.status).toLowerCase() === "completed" ? "default" : "secondary"} className="text-xs">
+                  {request.status || "pending"}
+                </Badge>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={handleAssign}>
+                  Assign
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleInProgress} disabled={isInProgress || isCompleted}>
+                  Mark In Progress
+                </Button>
+                <Button size="sm" onClick={handleClose} disabled={isCompleted}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          );
+        };
+
+        return (
+          <div className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold">Maintenance</h2>
+                <p className="text-sm text-muted-foreground">Track open requests, assignments, and resolution progress.</p>
+              </div>
+              <Button variant="outline" onClick={() => setActiveSection("properties")}>View properties</Button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">Open</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold">{openRequests.length}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">In Progress</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold">{inProgressRequests.length}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">Urgent</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold text-destructive">{urgentRequests.length}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">Completed</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold">{completedRequests.length}</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Open</CardTitle>
+                  <CardDescription>New requests waiting for action.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {openRequests.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No open requests.</p>
+                  ) : (
+                    openRequests.slice(0, 6).map(renderRequestItem)
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>In Progress</CardTitle>
+                  <CardDescription>Requests currently being handled.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {inProgressRequests.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No requests in progress.</p>
+                  ) : (
+                    inProgressRequests.slice(0, 6).map(renderRequestItem)
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Completed</CardTitle>
+                  <CardDescription>Recently resolved requests.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {completedRequests.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No completed requests.</p>
+                  ) : (
+                    completedRequests.slice(0, 6).map(renderRequestItem)
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        );
+      }
 
       case "payments":
         {
