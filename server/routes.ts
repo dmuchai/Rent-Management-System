@@ -230,66 +230,81 @@ export async function registerRoutes(app: Express) {
         displayName: z.string().min(1, "Display name is required"),
         isPrimary: z.boolean().default(false),
         notes: z.string().optional().or(z.literal("")),
-      }).refine((data) => {
+      }).superRefine((data, ctx) => {
         if (data.channelType === "mpesa_paybill") {
           if (!data.paybillNumber || data.paybillNumber.trim() === "") {
-            throw new z.ZodError([
-              { code: "custom", message: "Paybill number is required for M-Pesa Paybill", path: ["paybillNumber"] },
-            ]);
-          }
-          if (!/^\d{6,7}$/.test(data.paybillNumber)) {
-            throw new z.ZodError([
-              { code: "custom", message: "Paybill must be 6-7 digits", path: ["paybillNumber"] },
-            ]);
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Paybill number is required for M-Pesa Paybill",
+              path: ["paybillNumber"],
+            });
+          } else if (!/^\d{6,7}$/.test(data.paybillNumber)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Paybill must be 6-7 digits",
+              path: ["paybillNumber"],
+            });
           }
         }
         if (data.channelType === "mpesa_till") {
           if (!data.tillNumber || data.tillNumber.trim() === "") {
-            throw new z.ZodError([
-              { code: "custom", message: "Till number is required for M-Pesa Till", path: ["tillNumber"] },
-            ]);
-          }
-          if (!/^\d{6,7}$/.test(data.tillNumber)) {
-            throw new z.ZodError([
-              { code: "custom", message: "Till number must be 6-7 digits", path: ["tillNumber"] },
-            ]);
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Till number is required for M-Pesa Till",
+              path: ["tillNumber"],
+            });
+          } else if (!/^\d{6,7}$/.test(data.tillNumber)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Till number must be 6-7 digits",
+              path: ["tillNumber"],
+            });
           }
         }
         if (data.channelType === "mpesa_to_bank") {
           if (!data.bankPaybillNumber || data.bankPaybillNumber.trim() === "") {
-            throw new z.ZodError([
-              { code: "custom", message: "Bank paybill number is required", path: ["bankPaybillNumber"] },
-            ]);
-          }
-          if (!/^\d{6,7}$/.test(data.bankPaybillNumber)) {
-            throw new z.ZodError([
-              { code: "custom", message: "Bank paybill must be 6-7 digits", path: ["bankPaybillNumber"] },
-            ]);
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Bank paybill number is required",
+              path: ["bankPaybillNumber"],
+            });
+          } else if (!/^\d{6,7}$/.test(data.bankPaybillNumber)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Bank paybill must be 6-7 digits",
+              path: ["bankPaybillNumber"],
+            });
           }
           if (!data.bankAccountNumber || data.bankAccountNumber.trim() === "") {
-            throw new z.ZodError([
-              { code: "custom", message: "Bank account number is required", path: ["bankAccountNumber"] },
-            ]);
-          }
-          if (data.bankAccountNumber.length < 8 || data.bankAccountNumber.length > 16) {
-            throw new z.ZodError([
-              { code: "custom", message: "Bank account number must be 8-16 characters", path: ["bankAccountNumber"] },
-            ]);
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Bank account number is required",
+              path: ["bankAccountNumber"],
+            });
+          } else if (data.bankAccountNumber.length < 8 || data.bankAccountNumber.length > 16) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Bank account number must be 8-16 characters",
+              path: ["bankAccountNumber"],
+            });
           }
         }
         if (data.channelType === "bank_account") {
           if (!data.bankName || data.bankName.trim() === "") {
-            throw new z.ZodError([
-              { code: "custom", message: "Bank name is required", path: ["bankName"] },
-            ]);
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Bank name is required",
+              path: ["bankName"],
+            });
           }
           if (!data.accountNumber || data.accountNumber.trim() === "") {
-            throw new z.ZodError([
-              { code: "custom", message: "Account number is required", path: ["accountNumber"] },
-            ]);
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Account number is required",
+              path: ["accountNumber"],
+            });
           }
         }
-        return true;
       });
 
       const channelData = channelSchema.parse(req.body);
@@ -357,59 +372,66 @@ export async function registerRoutes(app: Express) {
         }
       }
 
-      if (channelData.isPrimary) {
-        const { error: unsetPrimaryError } = await supabase
-          .from("landlord_payment_channels")
-          .update({ is_primary: false, updated_at: new Date().toISOString() })
-          .eq("landlord_id", userId);
+      const insertResult = await db.execute(sql`
+        WITH unset_primary AS (
+          UPDATE public.landlord_payment_channels
+          SET is_primary = false, updated_at = NOW()
+          WHERE landlord_id = ${userId}
+            AND ${channelData.isPrimary ?? false}
+        )
+        INSERT INTO public.landlord_payment_channels (
+          landlord_id,
+          channel_type,
+          paybill_number,
+          till_number,
+          bank_paybill_number,
+          bank_account_number,
+          bank_name,
+          account_number,
+          account_name,
+          display_name,
+          is_primary,
+          notes
+        ) VALUES (
+          ${userId},
+          ${channelData.channelType},
+          ${channelData.paybillNumber || null},
+          ${channelData.tillNumber || null},
+          ${channelData.bankPaybillNumber || null},
+          ${channelData.bankAccountNumber || null},
+          ${channelData.bankName || null},
+          ${channelData.accountNumber || null},
+          ${channelData.accountName || null},
+          ${channelData.displayName},
+          ${channelData.isPrimary ?? false},
+          ${channelData.notes || null}
+        )
+        RETURNING *
+      `);
 
-        if (unsetPrimaryError) {
-          console.error("Error unsetting primary channels:", unsetPrimaryError);
-          return res.status(500).json({ error: "Failed to process request", details: unsetPrimaryError.message });
-        }
-      }
+      const channelRow = Array.isArray(insertResult)
+        ? insertResult[0]
+        : (insertResult as any)?.rows?.[0] ?? (insertResult as any)?.[0];
 
-      const insertData = {
-        landlord_id: userId,
-        channel_type: channelData.channelType,
-        paybill_number: channelData.paybillNumber || null,
-        till_number: channelData.tillNumber || null,
-        bank_paybill_number: channelData.bankPaybillNumber || null,
-        bank_account_number: channelData.bankAccountNumber || null,
-        bank_name: channelData.bankName || null,
-        account_number: channelData.accountNumber || null,
-        account_name: channelData.accountName || null,
-        display_name: channelData.displayName,
-        is_primary: channelData.isPrimary ?? false,
-        notes: channelData.notes || null,
-      };
-
-      const { data, error } = await supabase
-        .from("landlord_payment_channels")
-        .insert(insertData)
-        .select()
-        .single();
-
-      if (error) {
-        console.error("Error creating payment channel:", error);
-        return res.status(500).json({ error: "Failed to process request", details: error.message });
+      if (!channelRow) {
+        return res.status(500).json({ error: "Failed to process request", details: "No channel returned" });
       }
 
       return res.status(201).json({
-        id: data.id,
-        channelType: data.channel_type,
-        paybillNumber: data.paybill_number,
-        tillNumber: data.till_number,
-        bankPaybillNumber: data.bank_paybill_number,
-        bankAccountNumber: data.bank_account_number,
-        bankName: data.bank_name,
-        accountNumber: data.account_number,
-        accountName: data.account_name,
-        isPrimary: data.is_primary,
-        isActive: data.is_active,
-        displayName: data.display_name,
-        notes: data.notes,
-        createdAt: data.created_at,
+        id: channelRow.id,
+        channelType: channelRow.channel_type,
+        paybillNumber: channelRow.paybill_number,
+        tillNumber: channelRow.till_number,
+        bankPaybillNumber: channelRow.bank_paybill_number,
+        bankAccountNumber: channelRow.bank_account_number,
+        bankName: channelRow.bank_name,
+        accountNumber: channelRow.account_number,
+        accountName: channelRow.account_name,
+        isPrimary: channelRow.is_primary,
+        isActive: channelRow.is_active,
+        displayName: channelRow.display_name,
+        notes: channelRow.notes,
+        createdAt: channelRow.created_at,
       });
     } catch (error: any) {
       console.error("Error creating payment channel:", error);
@@ -491,6 +513,8 @@ export async function registerRoutes(app: Express) {
         channelType: data.channel_type,
         paybillNumber: data.paybill_number,
         tillNumber: data.till_number,
+        bankPaybillNumber: data.bank_paybill_number,
+        bankAccountNumber: data.bank_account_number,
         bankName: data.bank_name,
         accountNumber: data.account_number,
         accountName: data.account_name,

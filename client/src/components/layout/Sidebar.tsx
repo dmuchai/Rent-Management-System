@@ -121,6 +121,7 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
                       const navButton = (
                         <button
                           onClick={() => handleNavClick(item.id)}
+                          aria-label={item.label}
                           className={cn(
                             "flex items-center w-full px-4 py-2 rounded-lg text-left transition-colors",
                             activeSection === item.id
@@ -134,7 +135,7 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
                             item.icon,
                             "text-sm",
                             isCollapsed ? "" : "mr-3"
-                          )}></i>
+                          )} aria-hidden="true"></i>
                           {!isCollapsed && <span>{item.label}</span>}
                         </button>
                       );

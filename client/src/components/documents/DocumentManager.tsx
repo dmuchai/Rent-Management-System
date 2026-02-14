@@ -36,7 +36,9 @@ export default function DocumentManager() {
   });
 
   const totalDocuments = filteredDocuments.length;
-  const recentDocuments = filteredDocuments.slice(0, 5);
+  const recentDocuments = [...filteredDocuments]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
 
   const uploadMutation = useMutation({
     mutationFn: async (documentData: any) => {
@@ -221,13 +223,21 @@ export default function DocumentManager() {
                     </div>
                   ))}
                 </div>
-              ) : filteredDocuments.length === 0 ? (
+              ) : filteredDocuments.length === 0 && searchQuery.trim() ? (
                 <div className="text-center py-12">
                   <i className="fas fa-file-alt text-4xl text-muted-foreground mb-4"></i>
                   <p className="text-muted-foreground text-lg" data-testid="text-no-documents">
                     No documents match your search
                   </p>
                   <p className="text-muted-foreground">Try a different keyword or clear the search.</p>
+                </div>
+              ) : filteredDocuments.length === 0 ? (
+                <div className="text-center py-12">
+                  <i className="fas fa-file-alt text-4xl text-muted-foreground mb-4"></i>
+                  <p className="text-muted-foreground text-lg" data-testid="text-no-documents">
+                    No documents in this category
+                  </p>
+                  <p className="text-muted-foreground">Upload a document to get started.</p>
                 </div>
               ) : (
                 <div className="space-y-4">

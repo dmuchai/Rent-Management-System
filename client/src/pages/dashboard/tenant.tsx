@@ -277,7 +277,7 @@ export default function TenantDashboard() {
     retry: false,
   });
 
-  const { data: tenantProfile } = useQuery<{ landlordId?: string }>({
+  const { data: tenantProfile, isLoading: tenantProfileLoading } = useQuery<{ landlordId?: string }>({
     queryKey: ["/api/tenants/me"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/tenants/me");
@@ -360,7 +360,7 @@ export default function TenantDashboard() {
   })() : 0;
 
   const daysRemainingInLease = activeLease
-    ? Math.ceil((new Date(activeLease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    ? Math.max(0, Math.ceil((new Date(activeLease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
 
   const ledgerData = calculateLedger(activeLease, payments);
@@ -580,10 +580,23 @@ export default function TenantDashboard() {
                       </CardHeader>
                       <CardContent>
                         {activeLease ? (
-                          <PaymentInstructions
-                            landlordId={landlordId || ""}
-                            invoiceReferenceCode={activeLease.id}
-                          />
+                          tenantProfileLoading ? (
+                            <div className="text-center py-8">
+                              <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                              <p className="text-muted-foreground">Loading payment details...</p>
+                            </div>
+                          ) : landlordId ? (
+                            <PaymentInstructions
+                              landlordId={landlordId}
+                              invoiceReferenceCode={activeLease.id}
+                            />
+                          ) : (
+                            <div className="text-center py-8">
+                              <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                              <p className="text-muted-foreground">Payment instructions unavailable.</p>
+                              <p className="text-xs text-muted-foreground mt-2">Please contact your landlord.</p>
+                            </div>
+                          )
                         ) : (
                           <div className="text-center py-8">
                             <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -847,10 +860,23 @@ export default function TenantDashboard() {
                       </CardHeader>
                       <CardContent>
                         {activeLease ? (
-                          <PaymentInstructions
-                            landlordId={landlordId || ""}
-                            invoiceReferenceCode={activeLease.id}
-                          />
+                          tenantProfileLoading ? (
+                            <div className="text-center py-8">
+                              <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                              <p className="text-muted-foreground">Loading payment details...</p>
+                            </div>
+                          ) : landlordId ? (
+                            <PaymentInstructions
+                              landlordId={landlordId}
+                              invoiceReferenceCode={activeLease.id}
+                            />
+                          ) : (
+                            <div className="text-center py-8">
+                              <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                              <p className="text-muted-foreground">Payment instructions unavailable.</p>
+                              <p className="text-xs text-muted-foreground mt-2">Please contact your landlord.</p>
+                            </div>
+                          )
                         ) : (
                           <div className="text-center py-8">
                             <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -1128,19 +1154,17 @@ export default function TenantDashboard() {
                               {(user as any)?.phoneNumber && (
                                 <Badge variant={(user as any).phoneVerified ? "default" : "destructive"} className={(user as any).phoneVerified ? "bg-green-100 text-green-700" : ""}>
                                   {(user as any).phoneVerified ? (
-                                    <><CheckCircle className="h-3 w-3 mr-1" /> Verified</>
+                                    <>
+                                      <CheckCircle className="h-3 w-3 mr-1" /> Verified
+                                    </>
                                   ) : (
-                                    <><AlertCircle className="h-3 w-3 mr-1" /> Unverified</>
+                                    <>
+                                      <AlertCircle className="h-3 w-3 mr-1" /> Unverified
+                                    </>
                                   )}
                                 </Badge>
                               )}
                             </div>
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium text-muted-foreground">Account Created</label>
-                            <p className="text-foreground bg-muted/30 p-3 rounded-md border">
-                              {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Not available'}
-                            </p>
                           </div>
                         </div>
                       </CardContent>

@@ -147,10 +147,13 @@ export default function PaymentChannelsManager() {
   const deleteChannelMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await apiRequest("DELETE", `/api/landlord/payment-channels?id=${id}`);
-      return await response.json();
+      const text = await response.text();
+      return text ? JSON.parse(text) : null;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/landlord/payment-channels"] });
+      setIsDetailsOpen(false);
+      setSelectedChannel(null);
       toast({
         title: "Channel Deleted",
         description: "Payment channel deleted successfully.",
@@ -192,12 +195,14 @@ export default function PaymentChannelsManager() {
           notes: formData.notes,
           isPrimary: formData.isPrimary,
         },
+      }, {
+        onSuccess: () => {
+          setIsFormOpen(false);
+          resetForm();
+        },
       });
-      setIsFormOpen(false);
-      resetForm();
       return;
     }
-
     createChannelMutation.mutate(formData);
   };
 

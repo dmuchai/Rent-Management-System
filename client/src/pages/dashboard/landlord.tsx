@@ -594,7 +594,7 @@ export default function LandlordDashboard() {
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={processedData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                             <defs>
-                              <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                              <linearGradient id="colorRevenue-overview" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#2563eb" stopOpacity={0.1} />
                                 <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
                               </linearGradient>
@@ -629,7 +629,7 @@ export default function LandlordDashboard() {
                               stroke="#2563eb"
                               strokeWidth={3}
                               fillOpacity={1}
-                              fill="url(#colorRevenue)"
+                              fill="url(#colorRevenue-overview)"
                               animationDuration={1500}
                               activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb' }}
                             />
@@ -789,6 +789,9 @@ export default function LandlordDashboard() {
                     {expiringLeases.map((lease: any) => {
                       const daysUntilExpiry = Math.ceil((new Date(lease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                       const isUrgent = daysUntilExpiry <= 7;
+                      const tenantName = [lease.tenant?.firstName, lease.tenant?.lastName].filter(Boolean).join(' ') || 'Unknown tenant';
+                      const propertyName = lease.property?.name || 'Unknown property';
+                      const unitNumber = lease.unit?.unitNumber || '—';
 
                       return (
                         <div
@@ -801,10 +804,10 @@ export default function LandlordDashboard() {
                             </div>
                             <div className="flex-1">
                               <p className="font-medium text-sm">
-                                {lease.tenant.firstName} {lease.tenant.lastName}
+                                {tenantName}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {lease.property.name} - Unit {lease.unit.unitNumber}
+                                {propertyName} - Unit {unitNumber}
                               </p>
                             </div>
                           </div>
@@ -955,7 +958,7 @@ export default function LandlordDashboard() {
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={processedData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                             <defs>
-                              <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                              <linearGradient id="colorRevenue-performance" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#2563eb" stopOpacity={0.1} />
                                 <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
                               </linearGradient>
@@ -990,7 +993,7 @@ export default function LandlordDashboard() {
                               stroke="#2563eb"
                               strokeWidth={3}
                               fillOpacity={1}
-                              fill="url(#colorRevenue)"
+                              fill="url(#colorRevenue-performance)"
                               animationDuration={1500}
                               activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb' }}
                             />
@@ -1561,10 +1564,10 @@ export default function LandlordDashboard() {
                   payments={payments}
                   loading={paymentsLoading}
                   onViewPayment={(payment) => {
-                    console.log('View payment:', payment);
+                    // TODO: Implement payment details modal
                   }}
                   onEditPayment={(payment) => {
-                    console.log('Edit payment:', payment);
+                    // TODO: Implement payment edit modal
                   }}
                 />
                 <Card>
@@ -1747,13 +1750,13 @@ export default function LandlordDashboard() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Email Notifications</label>
+                    <label className="text-sm font-medium text-muted-foreground">Email Notifications (Coming Soon)</label>
                     <div className="flex items-center space-x-2">
-                      <input type="checkbox" defaultChecked className="rounded border-border" />
+                      <input type="checkbox" defaultChecked disabled className="rounded border-border opacity-50" />
                       <span className="text-sm text-muted-foreground">Receive payment reminders</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <input type="checkbox" defaultChecked className="rounded border-border" />
+                      <input type="checkbox" defaultChecked disabled className="rounded border-border opacity-50" />
                       <span className="text-sm text-muted-foreground">Maintenance alerts</span>
                     </div>
                   </div>
