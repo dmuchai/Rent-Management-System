@@ -35,9 +35,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface PaymentChannel {
   id: string;
-  channelType: "mpesa_paybill" | "mpesa_till" | "bank_account";
+  channelType: "mpesa_paybill" | "mpesa_till" | "mpesa_to_bank" | "bank_account";
   paybillNumber?: string;
   tillNumber?: string;
+  bankPaybillNumber?: string;
+  bankAccountNumber?: string;
   bankName?: string;
   accountNumber?: string;
   accountName?: string;
@@ -53,6 +55,8 @@ export default function PaymentChannelsManager() {
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingChannel, setEditingChannel] = useState<PaymentChannel | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState<PaymentChannel | null>(null);
 
   const [formData, setFormData] = useState<{
     channelType: "mpesa_paybill" | "mpesa_till" | "mpesa_to_bank" | "bank_account";
@@ -88,6 +92,11 @@ export default function PaymentChannelsManager() {
       return await response.json();
     },
   });
+
+  const activeChannels = channels.filter((channel) => channel.isActive).length;
+  const primaryChannels = channels.filter((channel) => channel.isPrimary).length;
+  const mpesaChannels = channels.filter((channel) => channel.channelType.startsWith("mpesa")).length;
+  const bankChannels = channels.filter((channel) => channel.channelType === "bank_account").length;
 
   // Create channel mutation
   const createChannelMutation = useMutation({
@@ -135,6 +144,27 @@ export default function PaymentChannelsManager() {
     },
   });
 
+  const deleteChannelMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("DELETE", `/api/landlord/payment-channels?id=${id}`);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/landlord/payment-channels"] });
+      toast({
+        title: "Channel Deleted",
+        description: "Payment channel deleted successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete channel",
+        variant: "destructive",
+      });
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       channelType: "mpesa_paybill",
@@ -154,7 +184,52 @@ export default function PaymentChannelsManager() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingChannel) {
+      updateChannelMutation.mutate({
+        id: editingChannel.id,
+        data: {
+          displayName: formData.displayName,
+          notes: formData.notes,
+          isPrimary: formData.isPrimary,
+        },
+      });
+      setIsFormOpen(false);
+      resetForm();
+      return;
+    }
+
     createChannelMutation.mutate(formData);
+  };
+
+  const handleViewDetails = (channel: PaymentChannel) => {
+    setSelectedChannel(channel);
+    setIsDetailsOpen(true);
+  };
+
+  const handleEditChannel = (channel: PaymentChannel) => {
+    setEditingChannel(channel);
+    setFormData({
+      channelType: channel.channelType as any,
+      paybillNumber: channel.paybillNumber || "",
+      tillNumber: channel.tillNumber || "",
+      bankPaybillNumber: "",
+      bankAccountNumber: "",
+      bankName: channel.bankName || "",
+      accountNumber: channel.accountNumber || "",
+      accountName: channel.accountName || "",
+      displayName: channel.displayName,
+      isPrimary: channel.isPrimary,
+      notes: channel.notes || "",
+    });
+    setIsFormOpen(true);
+  };
+
+  const handleDeleteChannel = (channel: PaymentChannel) => {
+    const confirmed = window.confirm(
+      `Delete "${channel.displayName}"? You cannot undo this action.`
+    );
+    if (!confirmed) return;
+    deleteChannelMutation.mutate(channel.id);
   };
 
   const handleTogglePrimary = (channel: PaymentChannel) => {
@@ -190,8 +265,27 @@ export default function PaymentChannelsManager() {
     if (channel.channelType === "mpesa_till") {
       return `Till: ${channel.tillNumber}`;
     }
+    if (channel.channelType === "mpesa_to_bank") {
+      return `Bank Paybill: ${channel.bankPaybillNumber || "-"}`;
+    }
     if (channel.channelType === "bank_account") {
       return `${channel.bankName} - ${channel.accountNumber}`;
+    }
+    return channel.displayName;
+  };
+
+  const getChannelDetails = (channel: PaymentChannel) => {
+    if (channel.channelType === "mpesa_paybill") {
+      return `Paybill: ${channel.paybillNumber || "-"}`;
+    }
+    if (channel.channelType === "mpesa_till") {
+      return `Till: ${channel.tillNumber || "-"}`;
+    }
+    if (channel.channelType === "mpesa_to_bank") {
+      return `Bank Paybill: ${channel.bankPaybillNumber || "-"} • Account: ${channel.bankAccountNumber || "-"}`;
+    }
+    if (channel.channelType === "bank_account") {
+      return `${channel.bankName || "Bank"} • ${channel.accountNumber || "-"}`;
     }
     return channel.displayName;
   };
@@ -209,17 +303,52 @@ export default function PaymentChannelsManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Payment Channels</h2>
-          <p className="text-gray-600 mt-1">
-            Configure how tenants pay rent directly to you
+          <h2 className="text-2xl font-semibold">Payment Settings</h2>
+          <p className="text-sm text-muted-foreground">
+            Configure how tenants pay rent directly to you.
           </p>
         </div>
         <Button onClick={() => setIsFormOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add Payment Channel
         </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Active Channels</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{activeChannels}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Primary Channels</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{primaryChannels}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">M-Pesa</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{mpesaChannels}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Bank Accounts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{bankChannels}</p>
+          </CardContent>
+        </Card>
       </div>
 
       {channels.length === 0 ? (
@@ -259,7 +388,7 @@ export default function PaymentChannelsManager() {
                 {channel.notes && (
                   <p className="text-sm text-gray-600 mb-3">{channel.notes}</p>
                 )}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -275,6 +404,28 @@ export default function PaymentChannelsManager() {
                   >
                     {channel.isActive ? "Deactivate" : "Activate"}
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleViewDetails(channel)}
+                  >
+                    View details
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEditChannel(channel)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleDeleteChannel(channel)}
+                    disabled={deleteChannelMutation.isPending}
+                  >
+                    Delete
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -282,38 +433,147 @@ export default function PaymentChannelsManager() {
         </div>
       )}
 
+      {/* Details Dialog */}
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Payment Channel Details</DialogTitle>
+            <DialogDescription>
+              Review the saved payment information for tenants.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedChannel && (
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Display Name</p>
+                <p className="text-sm font-medium">{selectedChannel.displayName}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Channel Type</p>
+                <p className="text-sm font-medium">{selectedChannel.channelType.replace(/_/g, " ")}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Channel Details</p>
+                <p className="text-sm font-medium">{getChannelDetails(selectedChannel)}</p>
+              </div>
+              {selectedChannel.channelType === "mpesa_paybill" && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Paybill Number</p>
+                  <p className="text-sm font-medium">{selectedChannel.paybillNumber || "-"}</p>
+                </div>
+              )}
+              {selectedChannel.channelType === "mpesa_till" && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Till Number</p>
+                  <p className="text-sm font-medium">{selectedChannel.tillNumber || "-"}</p>
+                </div>
+              )}
+              {selectedChannel.channelType === "mpesa_to_bank" && (
+                <>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Bank Paybill Number</p>
+                    <p className="text-sm font-medium">{selectedChannel.bankPaybillNumber || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Bank Name</p>
+                    <p className="text-sm font-medium">{selectedChannel.bankName || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Bank Account Number</p>
+                    <p className="text-sm font-medium">{selectedChannel.bankAccountNumber || "-"}</p>
+                  </div>
+                </>
+              )}
+              {selectedChannel.channelType === "bank_account" && (
+                <>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Bank Name</p>
+                    <p className="text-sm font-medium">{selectedChannel.bankName || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Account Number</p>
+                    <p className="text-sm font-medium">{selectedChannel.accountNumber || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Account Name</p>
+                    <p className="text-sm font-medium">{selectedChannel.accountName || "-"}</p>
+                  </div>
+                </>
+              )}
+              {selectedChannel.notes && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Notes</p>
+                  <p className="text-sm font-medium">{selectedChannel.notes}</p>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setIsDetailsOpen(false);
+                    handleEditChannel(selectedChannel);
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => handleDeleteChannel(selectedChannel)}
+                  disabled={deleteChannelMutation.isPending}
+                >
+                  Delete
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsDetailsOpen(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Add/Edit Channel Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Payment Channel</DialogTitle>
+            <DialogTitle>{editingChannel ? "Edit Payment Channel" : "Add Payment Channel"}</DialogTitle>
             <DialogDescription>
-              Configure how you receive rent payments from your tenants
+              {editingChannel
+                ? "Update display name or notes. Channel details are read-only."
+                : "Configure how you receive rent payments from your tenants"}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="channelType">Channel Type</Label>
-              <Select
-                value={formData.channelType}
-                onValueChange={(value: any) =>
-                  setFormData({ ...formData, channelType: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="mpesa_paybill">M-Pesa Paybill (Own)</SelectItem>
-                  <SelectItem value="mpesa_till">M-Pesa Till Number</SelectItem>
-                  <SelectItem value="mpesa_to_bank">M-Pesa to Bank Account</SelectItem>
-                  <SelectItem value="bank_account">Bank Account (Direct)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {!editingChannel && (
+              <div>
+                <Label htmlFor="channelType">Channel Type</Label>
+                <Select
+                  value={formData.channelType}
+                  onValueChange={(value: any) =>
+                    setFormData({ ...formData, channelType: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mpesa_paybill">M-Pesa Paybill (Own)</SelectItem>
+                    <SelectItem value="mpesa_till">M-Pesa Till Number</SelectItem>
+                    <SelectItem value="mpesa_to_bank">M-Pesa to Bank Account</SelectItem>
+                    <SelectItem value="bank_account">Bank Account (Direct)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-            {formData.channelType === "mpesa_paybill" && (
+            {!editingChannel && formData.channelType === "mpesa_paybill" && (
               <div>
                 <Label htmlFor="paybillNumber">Your Paybill Number</Label>
                 <Input
@@ -330,7 +590,7 @@ export default function PaymentChannelsManager() {
               </div>
             )}
 
-            {formData.channelType === "mpesa_till" && (
+            {!editingChannel && formData.channelType === "mpesa_till" && (
               <div>
                 <Label htmlFor="tillNumber">Till Number</Label>
                 <Input
@@ -347,7 +607,7 @@ export default function PaymentChannelsManager() {
               </div>
             )}
 
-            {formData.channelType === "mpesa_to_bank" && (
+            {!editingChannel && formData.channelType === "mpesa_to_bank" && (
               <>
                 <div>
                   <Label htmlFor="bankName">Select Bank</Label>
@@ -409,7 +669,7 @@ export default function PaymentChannelsManager() {
               </>
             )}
 
-            {formData.channelType === "bank_account" && (
+            {!editingChannel && formData.channelType === "bank_account" && (
               <>
                 <div>
                   <Label htmlFor="bankName">Bank Name</Label>
@@ -502,8 +762,17 @@ export default function PaymentChannelsManager() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createChannelMutation.isPending}>
-                {createChannelMutation.isPending ? "Creating..." : "Create Channel"}
+              <Button
+                type="submit"
+                disabled={createChannelMutation.isPending || updateChannelMutation.isPending}
+              >
+                {editingChannel
+                  ? updateChannelMutation.isPending
+                    ? "Saving..."
+                    : "Save Changes"
+                  : createChannelMutation.isPending
+                    ? "Creating..."
+                    : "Create Channel"}
               </Button>
             </DialogFooter>
           </form>

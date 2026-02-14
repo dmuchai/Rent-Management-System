@@ -277,33 +277,26 @@ export default function TenantDashboard() {
     retry: false,
   });
 
-  // Fetch tenant's active lease with full details
+  const { data: tenantProfile } = useQuery<{ landlordId?: string }>({
+    queryKey: ["/api/tenants/me"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/tenants/me");
+      return await response.json();
+    },
+    retry: false,
+  });
+
   const { data: leases = [], isLoading: leasesLoading } = useQuery({
     queryKey: ["/api/leases"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/leases");
       const result = await response.json();
-      const leasesData = Array.isArray(result) ? result : (result.data || []);
-      console.log('[Tenant Dashboard] Leases data:', leasesData);
-      console.log('[Tenant Dashboard] Current user:', user);
-      return leasesData;
+      return Array.isArray(result) ? result : (result.data || []);
     },
     retry: false,
   });
 
-  // Get the active lease for the current tenant
-  // The API now filters leases by tenant's user_id, so we just need to find the active one
-  const activeLease = leases.find((lease: any) => {
-    console.log('[Tenant Dashboard] Checking lease:', {
-      leaseId: lease.id,
-      isActive: lease.isActive,
-      tenantEmail: lease.tenant?.email,
-      userEmail: user?.email
-    });
-    return lease.isActive === true;
-  }) || null;
-
-  console.log('[Tenant Dashboard] Active lease found:', activeLease);
+  const activeLease = leases.find((lease: any) => lease.isActive === true) || null;
 
   const { data: payments = [], isLoading: paymentsLoading } = useQuery({
     queryKey: ["/api/payments"],
@@ -343,7 +336,6 @@ export default function TenantDashboard() {
     );
   }
 
-  // Don't render dashboard content if not authenticated
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -355,11 +347,9 @@ export default function TenantDashboard() {
     );
   }
 
-  // Calculate next due date and days until due
   const nextDueDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
   const daysUntilDue = Math.ceil((nextDueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
 
-  // Calculate lease progress
   const leaseProgress = activeLease ? (() => {
     const start = new Date(activeLease.startDate).getTime();
     const end = new Date(activeLease.endDate).getTime();
@@ -369,29 +359,22 @@ export default function TenantDashboard() {
     return Math.min(Math.max((elapsed / total) * 100, 0), 100);
   })() : 0;
 
-  const daysRemainingInLease = activeLease ? Math.ceil((new Date(activeLease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 0;
+  const daysRemainingInLease = activeLease
+    ? Math.ceil((new Date(activeLease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
 
-  // Calculate payment stats
-  const totalPaid = payments.reduce((sum: number, payment: any) => {
-    if (payment.status === 'completed') {
-      return sum + parseFloat(payment.amount || 0);
-    }
-    return sum;
-  }, 0);
-
-  const pendingPayments = payments.filter((p: any) => p.status === 'pending').length;
-  const completedPayments = payments.filter((p: any) => p.status === 'completed').length;
-
-  // Maintenance stats
-  const pendingMaintenance = maintenanceRequests.filter((r: any) => r.status === 'pending').length;
-  const inProgressMaintenance = maintenanceRequests.filter((r: any) => r.status === 'in_progress').length;
-  const completedMaintenance = maintenanceRequests.filter((r: any) => r.status === 'completed').length;
-  // Calculate ledger for financial statement
   const ledgerData = calculateLedger(activeLease, payments);
-  const outstandingBalance = ledgerData.currentBalance;
 
-  // Check for overdue rent
-  const hasOverdueRent = pendingPayments > 0 && daysUntilDue < 0;
+  const sectionTitles: Record<string, string> = {
+    overview: "Overview",
+    payments: "Payments",
+    ledger: "Statement",
+    maintenance: "Maintenance",
+    documents: "Documents",
+    profile: "Profile",
+  };
+
+  const landlordId = tenantProfile?.landlordId;
 
   return (
     <div className="min-h-screen bg-background md:flex">
@@ -410,7 +393,7 @@ export default function TenantDashboard() {
       <div className="flex-1 min-w-0">
         <div className="sticky top-0 z-30">
           <Header
-            title="Tenant Dashboard"
+            title={sectionTitles[activeTab] || "Dashboard"}
             showSidebar={true}
             onSectionChange={(section: string) => setActiveTab(section)}
             onMenuClick={() => setIsSidebarOpen(true)}
@@ -421,73 +404,6 @@ export default function TenantDashboard() {
 
         <main className="pt-4 md:pt-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 md:pb-8">
-            {/* Welcome Section with Alerts */}
-            <div className="mb-6 md:mb-8">
-              <h1 className="text-2xl md:text-3xl font-bold mb-2">
-                Welcome back, {user?.firstName || 'Tenant'}! 👋
-              </h1>
-              <p className="text-muted-foreground text-sm md:text-base">
-                Manage your rental, payments, and maintenance requests
-              </p>
-            </div>
-
-            {/* Alert Messages */}
-            {hasOverdueRent && (
-              <Alert variant="destructive" className="mb-6">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Payment Overdue</AlertTitle>
-                <AlertDescription>
-                  You have overdue rent payments. Please make a payment as soon as possible to avoid late fees.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {activeLease && daysRemainingInLease < 30 && daysRemainingInLease > 0 && (
-              <Alert className="mb-6 border-orange-200 bg-orange-50">
-                <Clock className="h-4 w-4 text-orange-600" />
-                <AlertTitle className="text-orange-900">Lease Expiring Soon</AlertTitle>
-                <AlertDescription className="text-orange-800">
-                  Your lease expires in {daysRemainingInLease} days. Please contact your landlord to discuss renewal.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Quick Stats Grid */}
-            <motion.div
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8"
-              initial="hidden"
-              animate="visible"
-              variants={{
-                visible: { transition: { staggerChildren: 0.1 } }
-              }}
-            >
-              {[
-                { title: "Current Rent", value: activeLease ? `KES ${parseFloat(activeLease.monthlyRent).toLocaleString()}` : "N/A", subtitle: "Monthly payment", icon: "fas fa-money-bill-wave", color: "primary" as const, testId: "stat-currentrent", loading: leasesLoading },
-                { title: "Outstanding", value: `KES ${outstandingBalance.toLocaleString()}`, subtitle: outstandingBalance > 0 ? "Amount due" : "Account in credit", icon: "fas fa-exclamation-circle", color: outstandingBalance > 0 ? "destructive" as const : "chart-2" as const, testId: "stat-outstanding", loading: leasesLoading || paymentsLoading },
-                { title: "Total Paid", value: `KES ${totalPaid.toLocaleString()}`, subtitle: `${completedPayments} payments made`, icon: "fas fa-check-circle", color: "chart-1" as const, testId: "stat-totalpaid", loading: paymentsLoading },
-                { title: "Maintenance", value: maintenanceRequests.length, subtitle: `${pendingMaintenance} pending`, icon: "fas fa-tools", color: pendingMaintenance > 0 ? "destructive" as const : "chart-4" as const, testId: "stat-maintenance", loading: maintenanceLoading }
-              ].map((stat, idx) => (
-                <motion.div
-                  key={idx}
-                  variants={{
-                    hidden: { opacity: 0, y: 20 },
-                    visible: { opacity: 1, y: 0 }
-                  }}
-                >
-                  <StatsCard
-                    title={stat.title}
-                    value={stat.value}
-                    subtitle={stat.subtitle}
-                    icon={stat.icon}
-                    color={stat.color as any}
-                    loading={stat.loading}
-                    data-testid={stat.testId}
-                  />
-                </motion.div>
-              ))}
-            </motion.div>
-
-            {/* Tabs Content */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
               {/* Mobile Sticky Navigation Bar */}
               <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border px-2 py-3 shadow-lg">
@@ -507,13 +423,6 @@ export default function TenantDashboard() {
                     <span className="text-[10px] font-medium">Pay</span>
                   </TabsTrigger>
                   <TabsTrigger
-                    value="ledger"
-                    className="flex flex-col items-center justify-center py-1 px-0 h-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                  >
-                    <Clock className="h-5 w-5 mb-1" />
-                    <span className="text-[10px] font-medium">Ledger</span>
-                  </TabsTrigger>
-                  <TabsTrigger
                     value="maintenance"
                     className="flex flex-col items-center justify-center py-1 px-0 h-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
                   >
@@ -526,6 +435,13 @@ export default function TenantDashboard() {
                   >
                     <FileText className="h-5 w-5 mb-1" />
                     <span className="text-[10px] font-medium">Docs</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="ledger"
+                    className="flex flex-col items-center justify-center py-1 px-0 h-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
+                  >
+                    <Clock className="h-5 w-5 mb-1" />
+                    <span className="text-[10px] font-medium">Ledger</span>
                   </TabsTrigger>
                   <TabsTrigger
                     value="profile"
@@ -542,9 +458,9 @@ export default function TenantDashboard() {
                 <TabsList className="mb-8">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="payments">Payments</TabsTrigger>
-                  <TabsTrigger value="ledger">Statement</TabsTrigger>
                   <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
                   <TabsTrigger value="documents">Documents</TabsTrigger>
+                  <TabsTrigger value="ledger">Statement</TabsTrigger>
                   <TabsTrigger value="profile">Profile</TabsTrigger>
                 </TabsList>
               </div>
@@ -664,9 +580,8 @@ export default function TenantDashboard() {
                       </CardHeader>
                       <CardContent>
                         {activeLease ? (
-                          <PaymentInstructions 
-                            landlordId={activeLease.ownerId}
-                            tenantId={activeLease.tenantId}
+                          <PaymentInstructions
+                            landlordId={landlordId || ""}
                             invoiceReferenceCode={activeLease.id}
                           />
                         ) : (
@@ -901,10 +816,107 @@ export default function TenantDashboard() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
+                  className="space-y-6"
                 >
+                  <div className="rounded-lg border border-border bg-muted/40 p-4">
+                    {activeLease ? (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-medium">Next rent due</p>
+                          <p className="text-xs text-muted-foreground">
+                            {nextDueDate.toLocaleDateString()} • {daysUntilDue} days remaining
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-muted-foreground">Amount</p>
+                          <p className="text-lg font-semibold">KES {parseFloat(activeLease.monthlyRent).toLocaleString()}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No active lease on file.</p>
+                    )}
+                  </div>
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center">
+                          <CreditCard className="h-5 w-5 mr-2" />
+                          Pay Now
+                        </CardTitle>
+                        <CardDescription>Pay rent securely using your preferred channel.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {activeLease ? (
+                          <PaymentInstructions
+                            landlordId={landlordId || ""}
+                            invoiceReferenceCode={activeLease.id}
+                          />
+                        ) : (
+                          <div className="text-center py-8">
+                            <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                            <p className="text-muted-foreground" data-testid="text-nopaymentform">
+                              No active lease for payments
+                            </p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between">
+                        <div>
+                          <CardTitle className="flex items-center text-primary">
+                            <Clock className="h-5 w-5 mr-2" />
+                            Ledger Summary
+                          </CardTitle>
+                          <CardDescription>Track charges, payments, and balance.</CardDescription>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => setActiveTab("ledger")}>
+                          View ledger
+                        </Button>
+                      </CardHeader>
+                      <CardContent>
+                        {ledgerData.entries.length === 0 ? (
+                          <div className="text-center py-8">
+                            <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                            <p className="text-muted-foreground">No ledger entries yet.</p>
+                          </div>
+                        ) : (
+                          <div className="grid gap-4">
+                            <div className="flex items-center justify-between rounded-lg border border-border p-4">
+                              <div>
+                                <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Expected</p>
+                                <p className="text-lg font-semibold">KES {ledgerData.totalCharged.toLocaleString()}</p>
+                              </div>
+                              <Badge variant="secondary">Charges</Badge>
+                            </div>
+                            <div className="flex items-center justify-between rounded-lg border border-border p-4">
+                              <div>
+                                <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Paid</p>
+                                <p className="text-lg font-semibold text-green-600">KES {ledgerData.totalPaid.toLocaleString()}</p>
+                              </div>
+                              <Badge variant="secondary">Payments</Badge>
+                            </div>
+                            <div className="flex items-center justify-between rounded-lg border border-border bg-primary/5 p-4">
+                              <div>
+                                <p className="text-xs text-primary uppercase tracking-wider">Current Balance</p>
+                                <p className={`text-lg font-semibold ${ledgerData.currentBalance > 0 ? 'text-destructive' : 'text-green-600'}`}>
+                                  KES {ledgerData.currentBalance.toLocaleString()}
+                                </p>
+                              </div>
+                              <Badge variant={ledgerData.currentBalance > 0 ? "destructive" : "secondary"}>
+                                {ledgerData.currentBalance > 0 ? "Due" : "Clear"}
+                              </Badge>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
                   <Card>
                     <CardHeader>
-                      <CardTitle>Payment History</CardTitle>
+                      <CardTitle>Receipts & History</CardTitle>
                       <CardDescription>Complete record of all your rent payments</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -920,22 +932,86 @@ export default function TenantDashboard() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
+                  className="space-y-6"
                 >
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <div>
-                        <CardTitle>Maintenance Requests</CardTitle>
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-2xl font-semibold">Maintenance</h2>
+                      <p className="text-sm text-muted-foreground">Report issues and track updates in one place.</p>
+                    </div>
+                    <Button onClick={() => setIsMaintenanceFormOpen(true)}>
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      New Request
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                    <StatsCard
+                      title="Open"
+                      value={maintenanceRequests.filter((req: any) => req.status === "pending" || req.status === "open").length}
+                      subtitle="Awaiting action"
+                      icon="fas fa-tools"
+                      color="chart-4"
+                      loading={maintenanceLoading}
+                    />
+                    <StatsCard
+                      title="In Progress"
+                      value={maintenanceRequests.filter((req: any) => req.status === "in_progress").length}
+                      subtitle="Being handled"
+                      icon="fas fa-spinner"
+                      color="chart-2"
+                      loading={maintenanceLoading}
+                    />
+                    <StatsCard
+                      title="Completed"
+                      value={maintenanceRequests.filter((req: any) => req.status === "completed").length}
+                      subtitle="Resolved"
+                      icon="fas fa-check-circle"
+                      color="chart-1"
+                      loading={maintenanceLoading}
+                    />
+                    <StatsCard
+                      title="Total"
+                      value={maintenanceRequests.length}
+                      subtitle="All requests"
+                      icon="fas fa-clipboard-list"
+                      color="primary"
+                      loading={maintenanceLoading}
+                    />
+                  </div>
+
+                  <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Requests</CardTitle>
                         <CardDescription>Track and manage your service requests</CardDescription>
-                      </div>
-                      <Button onClick={() => setIsMaintenanceFormOpen(true)}>
-                        <AlertCircle className="h-4 w-4 mr-2" />
-                        New Request
-                      </Button>
-                    </CardHeader>
-                    <CardContent>
-                      <MaintenanceRequestList limit={20} showViewAll={false} />
-                    </CardContent>
-                  </Card>
+                      </CardHeader>
+                      <CardContent>
+                        <MaintenanceRequestList limit={20} showViewAll={false} />
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Help & Tips</CardTitle>
+                        <CardDescription>Speed up resolution with clear details.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-sm font-medium">Describe the issue</p>
+                            <p className="text-xs text-muted-foreground">Add location, photos, and urgency.</p>
+                          </div>
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-sm font-medium">Track updates</p>
+                            <p className="text-xs text-muted-foreground">You'll see status changes here.</p>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={() => setIsMaintenanceFormOpen(true)}>
+                            Submit a request
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </motion.div>
               </TabsContent>
 
@@ -1001,103 +1077,98 @@ export default function TenantDashboard() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
+                  className="space-y-6"
                 >
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center">
-                        <User className="h-5 w-5 mr-3 text-blue-600" />
-                        Personal Information
-                      </CardTitle>
-                      <CardDescription>
-                        Manage your account details and preferences
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-700">Full Name</label>
-                          <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
-                            {user?.firstName || 'Not provided'} {user?.lastName || ''}
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-700">Email Address</label>
-                          <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
-                            {user?.email || 'Not provided'}
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-700">Phone Number</label>
-                          <div className="flex items-center gap-2">
-                            <p className="text-gray-900 bg-gray-50 p-3 rounded-md border flex-1">
-                              {(user as any)?.phoneNumber || 'Not provided'}
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-2xl font-semibold">Profile & Settings</h2>
+                      <p className="text-sm text-muted-foreground">Manage your account details and preferences.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" onClick={() => setIsProfileEditOpen(true)}>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Profile
+                      </Button>
+                      <Button variant="outline" onClick={() => setIsPasswordChangeOpen(true)}>
+                        <Key className="h-4 w-4 mr-2" />
+                        Change Password
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center">
+                          <User className="h-5 w-5 mr-3 text-blue-600" />
+                          Account Overview
+                        </CardTitle>
+                        <CardDescription>Primary details and verification.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-muted-foreground">Full Name</label>
+                            <p className="text-foreground bg-muted/30 p-3 rounded-md border">
+                              {user?.firstName || 'Not provided'} {user?.lastName || ''}
                             </p>
-                            {(user as any)?.phoneNumber && (
-                              <Badge variant={(user as any).phoneVerified ? "default" : "destructive"} className={(user as any).phoneVerified ? "bg-green-100 text-green-700" : ""}>
-                                {(user as any).phoneVerified ? (
-                                  <><CheckCircle className="h-3 w-3 mr-1" /> Verified</>
-                                ) : (
-                                  <><AlertCircle className="h-3 w-3 mr-1" /> Unverified</>
-                                )}
-                              </Badge>
-                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-muted-foreground">Email Address</label>
+                            <p className="text-foreground bg-muted/30 p-3 rounded-md border">
+                              {user?.email || 'Not provided'}
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                            <div className="flex items-center gap-2">
+                              <p className="text-foreground bg-muted/30 p-3 rounded-md border flex-1">
+                                {(user as any)?.phoneNumber || 'Not provided'}
+                              </p>
+                              {(user as any)?.phoneNumber && (
+                                <Badge variant={(user as any).phoneVerified ? "default" : "destructive"} className={(user as any).phoneVerified ? "bg-green-100 text-green-700" : ""}>
+                                  {(user as any).phoneVerified ? (
+                                    <><CheckCircle className="h-3 w-3 mr-1" /> Verified</>
+                                  ) : (
+                                    <><AlertCircle className="h-3 w-3 mr-1" /> Unverified</>
+                                  )}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-muted-foreground">Account Created</label>
+                            <p className="text-foreground bg-muted/30 p-3 rounded-md border">
+                              {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Not available'}
+                            </p>
                           </div>
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-700">Account Created</label>
-                          <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
-                            {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Not available'}
-                          </p>
-                        </div>
-                      </div>
+                      </CardContent>
+                    </Card>
 
-                      <div className="border-t pt-4 mt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="text-lg font-medium text-gray-900">Account Actions</h3>
-                            <p className="text-sm text-gray-600">Manage your account settings</p>
-                          </div>
-                          <div className="flex space-x-3">
-                            <Button variant="outline" onClick={() => setIsProfileEditOpen(true)}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit Profile
-                            </Button>
-                            <Button variant="outline" onClick={() => setIsPasswordChangeOpen(true)}>
-                              <Key className="h-4 w-4 mr-2" />
-                              Change Password
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center">
-                        <Settings className="h-5 w-5 mr-3 text-gray-600" />
-                        Preferences
-                      </CardTitle>
-                      <CardDescription>
-                        Customize your dashboard experience
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center">
+                          <Settings className="h-5 w-5 mr-3 text-gray-600" />
+                          Preferences
+                        </CardTitle>
+                        <CardDescription>Customize your notifications.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
                         <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-700">Email Notifications</label>
+                          <label className="text-sm font-medium text-muted-foreground">Email Notifications</label>
                           <div className="flex items-center space-x-2">
-                            <input type="checkbox" defaultChecked className="rounded border-gray-300" />
-                            <span className="text-sm text-gray-600">Receive payment reminders</span>
+                            <input type="checkbox" defaultChecked className="rounded border-border" />
+                            <span className="text-sm text-muted-foreground">Receive payment reminders</span>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <input type="checkbox" defaultChecked className="rounded border-gray-300" />
-                            <span className="text-sm text-gray-600">Property maintenance alerts</span>
+                            <input type="checkbox" defaultChecked className="rounded border-border" />
+                            <span className="text-sm text-muted-foreground">Maintenance alerts</span>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </motion.div>
               </TabsContent>
             </Tabs>

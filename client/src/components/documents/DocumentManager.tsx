@@ -6,6 +6,8 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import { Button } from "@/components/ui/button";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const categories = [
   { id: "lease", name: "Lease Agreements" },
@@ -18,11 +20,23 @@ export default function DocumentManager() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeCategory, setActiveCategory] = useState("lease");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: documents = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/documents", { category: activeCategory }],
     retry: false,
   });
+
+  const filteredDocuments = documents.filter((document: any) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const name = document?.name?.toLowerCase() || "";
+    const type = document?.fileType?.toLowerCase() || "";
+    return name.includes(query) || type.includes(query);
+  });
+
+  const totalDocuments = filteredDocuments.length;
+  const recentDocuments = filteredDocuments.slice(0, 5);
 
   const uploadMutation = useMutation({
     mutationFn: async (documentData: any) => {
@@ -95,11 +109,14 @@ export default function DocumentManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">Document Management</h2>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold">Documents</h2>
+          <p className="text-sm text-muted-foreground">Store leases, statements, and maintenance records.</p>
+        </div>
         <ObjectUploader
           maxNumberOfFiles={1}
-          maxFileSize={10485760} // 10MB
+          maxFileSize={10485760}
           onGetUploadParameters={handleGetUploadParameters}
           onComplete={handleUploadComplete}
           buttonClassName="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90"
@@ -108,11 +125,13 @@ export default function DocumentManager() {
         </ObjectUploader>
       </div>
 
-      <div className="grid lg:grid-cols-4 gap-6">
-        {/* Document Categories */}
-        <div className="lg:col-span-1">
-          <div className="bg-card rounded-xl border border-border p-6">
-            <h3 className="font-semibold mb-4">Categories</h3>
+      <div className="grid gap-6 lg:grid-cols-[1fr,3fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Categories</CardTitle>
+            <CardDescription>Select a document category.</CardDescription>
+          </CardHeader>
+          <CardContent>
             <div className="space-y-2">
               {categories.map((category) => (
                 <button
@@ -129,18 +148,61 @@ export default function DocumentManager() {
                 </button>
               ))}
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        {/* Documents List */}
-        <div className="lg:col-span-3">
-          <div className="bg-card rounded-xl border border-border">
-            <div className="p-6 border-b border-border">
-              <h3 className="text-lg font-semibold">
-                {categories.find(c => c.id === activeCategory)?.name}
-              </h3>
-            </div>
-            <div className="p-6">
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Search</CardTitle>
+              <CardDescription>Find documents by name or type.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search documents..."
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-muted-foreground">Total Documents</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold">{totalDocuments}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-muted-foreground">Category</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm font-medium">
+                  {categories.find((c) => c.id === activeCategory)?.name}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-muted-foreground">Recent Uploads</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-semibold">{recentDocuments.length}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{categories.find((c) => c.id === activeCategory)?.name}</CardTitle>
+              <CardDescription>Manage and download your documents.</CardDescription>
+            </CardHeader>
+            <CardContent>
               {isLoading ? (
                 <div className="animate-pulse space-y-4">
                   {[1, 2, 3].map((i) => (
@@ -159,20 +221,20 @@ export default function DocumentManager() {
                     </div>
                   ))}
                 </div>
-              ) : documents.length === 0 ? (
+              ) : filteredDocuments.length === 0 ? (
                 <div className="text-center py-12">
                   <i className="fas fa-file-alt text-4xl text-muted-foreground mb-4"></i>
                   <p className="text-muted-foreground text-lg" data-testid="text-no-documents">
-                    No documents in this category
+                    No documents match your search
                   </p>
-                  <p className="text-muted-foreground">Upload your first document to get started</p>
+                  <p className="text-muted-foreground">Try a different keyword or clear the search.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {documents.map((document: any) => (
-                    <div 
-                      key={document.id} 
-                      className="flex items-center justify-between p-4 border border-border rounded-lg"
+                  {filteredDocuments.map((document: any) => (
+                    <div
+                      key={document.id}
+                      className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between"
                       data-testid={`document-item-${document.id}`}
                     >
                       <div className="flex items-center space-x-4">
@@ -190,7 +252,8 @@ export default function DocumentManager() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">{activeCategory}</Badge>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -212,8 +275,8 @@ export default function DocumentManager() {
                   ))}
                 </div>
               )}
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

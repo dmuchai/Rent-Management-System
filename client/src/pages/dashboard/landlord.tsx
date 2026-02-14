@@ -65,6 +65,7 @@ function validatePassword(password: string): { isValid: boolean; failedRequireme
 export default function LandlordDashboard() {
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
+  const [collectionsRange, setCollectionsRange] = useState<"month" | "all">("month");
 
   // Dynamic page title based on active section
   const sectionTitles: Record<DashboardSection, string> = {
@@ -94,42 +95,36 @@ export default function LandlordDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // State for editing leases
   const [editingLease, setEditingLease] = useState<Lease | null>(null);
   const [viewingLease, setViewingLease] = useState<Lease | null>(null);
 
-  // Form state for profile editing
   const [profileForm, setProfileForm] = useState({
     firstName: "",
     lastName: "",
     email: "",
-    phoneNumber: ""
+    phoneNumber: "",
   });
 
-  // State for phone verification
   const [isOtpDialogOpen, setIsOtpDialogOpen] = useState(false);
   const [otpCode, setOtpCode] = useState("");
 
-  // Form state for password change
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
-    confirmPassword: ""
+    confirmPassword: "",
   });
 
-  // Form state for payment recording
   const [paymentForm, setPaymentForm] = useState({
     tenantId: "",
     propertyId: "",
     amount: "",
-    paymentDate: new Date().toISOString().split('T')[0],
+    paymentDate: new Date().toISOString().split("T")[0],
     paymentMethod: "",
     paymentType: "",
     reference: "",
-    notes: ""
+    notes: "",
   });
 
-  // Authentication guard - redirect unauthenticated users
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       toast({
@@ -137,81 +132,18 @@ export default function LandlordDashboard() {
         description: "You must be logged in to access the dashboard. Redirecting to login...",
         variant: "destructive",
       });
-      // Redirect to login page
       setLocation("/");
     }
   }, [isLoading, isAuthenticated, toast, setLocation]);
 
-  // Logout handler
-  const handleLogout = async () => {
-    // Run both logout operations concurrently, handling each independently
-    const results = await Promise.allSettled([
-      // Supabase signOut - clears local session state
-      supabase.auth.signOut(),
-      // Backend logout - clears httpOnly cookies
-      fetch(`${API_BASE_URL}/api/auth?action=logout`, {
-        method: "POST",
-        credentials: "include",
-      }),
-    ]);
-
-    const [supabaseResult, apiResult] = results;
-
-    // Log individual failures for debugging
-    if (supabaseResult.status === 'rejected') {
-      console.error('Supabase signOut failed:', supabaseResult.reason);
-    }
-
-    let apiSuccess = false;
-    if (apiResult.status === 'rejected') {
-      console.error('API logout failed:', apiResult.reason);
-    } else if (!apiResult.value.ok) {
-      console.error('API logout failed: Server returned status', apiResult.value.status);
-    } else {
-      apiSuccess = true;
-    }
-
-    // Clear auth-related queries from cache using consistent keys
-    clearAuthQueries(queryClient);
-
-    // Determine overall success - we consider it successful if at least API logout worked
-    // (Supabase signOut is just for local cleanup, not critical)
-    if (apiSuccess) {
-      toast({
-        title: "Logged out successfully",
-        description: supabaseResult.status === 'rejected'
-          ? "Logged out (local cleanup had issues, but you're signed out)."
-          : "You have been logged out. Redirecting to login...",
-      });
-      window.location.href = "/";
-    } else if (supabaseResult.status === 'fulfilled') {
-      // API failed but Supabase succeeded - partial logout
-      toast({
-        title: "Partial Logout",
-        description: "Local session cleared, but server logout failed. Redirecting...",
-        variant: "destructive",
-      });
-      window.location.href = "/";
-    } else {
-      // Both failed
-      toast({
-        title: "Logout Error",
-        description: "Failed to logout. Please try again or clear your browser data.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const { data: dashboardStats, isLoading: statsLoading } = useQuery({
     queryKey: ["/api/dashboard/stats", selectedPropertyId],
     queryFn: async () => {
-      console.log('[Dashboard] Fetching dashboard stats for property:', selectedPropertyId);
       const url = selectedPropertyId !== "all"
         ? `/api/dashboard/stats?propertyId=${selectedPropertyId}`
         : "/api/dashboard/stats";
       const response = await apiRequest("GET", url);
-      const data = await response.json();
-      return data;
+      return await response.json();
     },
     retry: false,
   });
@@ -221,10 +153,8 @@ export default function LandlordDashboard() {
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/properties");
       const result = await response.json();
-      // Ensure we return an array - API may return direct array or {data: []}
       return Array.isArray(result) ? result : (result.data || []);
     },
-    // Keep properties enabled as they are used for the filter dropdown
     retry: false,
   });
 
@@ -233,11 +163,8 @@ export default function LandlordDashboard() {
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/tenants");
       const result = await response.json();
-
-      // Ensure we return an array
       return Array.isArray(result) ? result : [];
     },
-    enabled: activeSection === "tenants", // Only fetch when section is active
     retry: false,
   });
 
@@ -246,10 +173,8 @@ export default function LandlordDashboard() {
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/leases");
       const result = await response.json();
-      // Ensure we return an array
       return Array.isArray(result) ? result : [];
     },
-    enabled: activeSection === "leases", // Only fetch when section is active
     retry: false,
   });
 
@@ -258,56 +183,37 @@ export default function LandlordDashboard() {
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/payments");
       const result = await response.json();
-      // API returns { data: [], pagination: {} }, extract the data array
       return result.data || result || [];
     },
-    enabled: activeSection === "payments", // Only fetch when section is active
     retry: false,
   });
 
   const { data: maintenanceRequests = [] } = useQuery({
     queryKey: ["/api/maintenance-requests"],
     queryFn: async () => {
-      console.log('[Dashboard] Fetching maintenance requests...');
       const response = await apiRequest("GET", "/api/maintenance-requests");
       const result = await response.json();
-      console.log('[Dashboard] Maintenance requests response:', result);
-      console.log('[Dashboard] Result type:', typeof result);
-      console.log('[Dashboard] Is result array?', Array.isArray(result));
-      // API returns { data: [], pagination: {} }, extract the data array
-      const data = result.data || result || [];
-      console.log('[Dashboard] Extracted data:', data);
-      console.log('[Dashboard] Is data array?', Array.isArray(data));
-      return data;
+      return result.data || result || [];
     },
     retry: false,
   });
 
-  // Fetch all units for property statistics
   const { data: units = [], isLoading: unitsLoading } = useQuery({
     queryKey: ["/api/units"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/units");
       const result = await response.json();
-      // Ensure we return an array - API may return direct array or {data: []}
       return Array.isArray(result) ? result : (result.data || []);
     },
     retry: false,
   });
 
-  // 🔄 Enable Realtime subscriptions for instant updates
-  // Properties changes affect both /api/properties and /api/dashboard/stats
   useRealtimeSubscription("properties", ["/api/properties", "/api/dashboard/stats"]);
-  // Tenants changes affect both endpoints
   useRealtimeSubscription("tenants", ["/api/tenants", "/api/dashboard/stats"]);
-  // Leases changes affect stats
   useRealtimeSubscription("leases", ["/api/leases", "/api/dashboard/stats"]);
-  // Payments changes affect both endpoints
   useRealtimeSubscription("payments", ["/api/payments", "/api/dashboard/stats"]);
-  // Units changes affect both units endpoint and dashboard stats (totalUnits, occupiedUnits)
   useRealtimeSubscription("units", ["/api/units", "/api/dashboard/stats"]);
 
-  // Profile update mutation
   const profileUpdateMutation = useMutation({
     mutationFn: async (data: { firstName?: string; lastName?: string; email?: string }) => {
       const response = await apiRequest("PUT", "/api/auth?action=update-profile", data);
@@ -320,7 +226,6 @@ export default function LandlordDashboard() {
         description: "Profile updated successfully!",
       });
       setIsProfileEditOpen(false);
-      setProfileForm({ firstName: "", lastName: "", email: "", phoneNumber: "" });
     },
     onError: (error: any) => {
       toast({
@@ -331,7 +236,6 @@ export default function LandlordDashboard() {
     },
   });
 
-  // Phone update mutations
   const requestPhoneUpdateMutation = useMutation({
     mutationFn: async (phoneNumber: string) => {
       const response = await apiRequest("POST", "/api/auth?action=request-phone-update", { phoneNumber });
@@ -350,7 +254,7 @@ export default function LandlordDashboard() {
         description: error.message || "Failed to send verification code",
         variant: "destructive",
       });
-    }
+    },
   });
 
   const verifyPhoneUpdateMutation = useMutation({
@@ -374,10 +278,9 @@ export default function LandlordDashboard() {
         description: error.message || "Invalid OTP code",
         variant: "destructive",
       });
-    }
+    },
   });
 
-  // Password change mutation
   const passwordChangeMutation = useMutation({
     mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
       const response = await apiRequest("POST", "/api/auth/change-password", data);
@@ -400,7 +303,6 @@ export default function LandlordDashboard() {
     },
   });
 
-  // Payment recording mutation
   const recordPaymentMutation = useMutation({
     mutationFn: async (data: {
       leaseId: string;
@@ -427,11 +329,11 @@ export default function LandlordDashboard() {
         tenantId: "",
         propertyId: "",
         amount: "",
-        paymentDate: new Date().toISOString().split('T')[0],
+        paymentDate: new Date().toISOString().split("T")[0],
         paymentMethod: "",
         paymentType: "",
         reference: "",
-        notes: ""
+        notes: "",
       });
     },
     onError: (error: any) => {
@@ -443,14 +345,13 @@ export default function LandlordDashboard() {
     },
   });
 
-  // Initialize form with user data when profile modal opens
   useEffect(() => {
     if (isProfileEditOpen && user) {
       setProfileForm({
         firstName: user.firstName || "",
         lastName: user.lastName || "",
         email: user.email || "",
-        phoneNumber: user.phoneNumber || ""
+        phoneNumber: user.phoneNumber || "",
       });
     }
   }, [isProfileEditOpen, user]);
@@ -463,7 +364,6 @@ export default function LandlordDashboard() {
     );
   }
 
-  // Don't render dashboard content if not authenticated
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -475,7 +375,7 @@ export default function LandlordDashboard() {
     );
   }
 
-  const sectionHeaders = {
+  const sectionHeaders: Record<DashboardSection, string> = {
     overview: "Dashboard Overview",
     properties: "Properties",
     tenants: "Tenants",
@@ -489,22 +389,32 @@ export default function LandlordDashboard() {
 
   const renderMainContent = () => {
     switch (activeSection) {
-      case "overview":
+      case "overview": {
+        const pendingMaintenanceCount = Array.isArray(maintenanceRequests)
+          ? maintenanceRequests.filter((request: any) => request.status !== "completed" && request.status !== "cancelled").length
+          : 0;
+        const expiringLeases = Array.isArray(dashboardStats?.expiringLeases)
+          ? dashboardStats?.expiringLeases
+          : [];
+        const recentPayments = Array.isArray(payments) ? payments.slice(0, 3) : [];
+        const recentLeases = Array.isArray(leases)
+          ? [...leases]
+              .sort((a: any, b: any) => new Date(b.createdAt || b.startDate || 0).getTime() - new Date(a.createdAt || a.startDate || 0).getTime())
+              .slice(0, 3)
+          : [];
+
         return (
           <div className="space-y-8">
-            {/* Personalized Welcome Header */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100 p-6">
-              <div className="flex items-center justify-between">
+            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                    Welcome back, {user?.firstName || user?.email?.split('@')[0] || 'Landlord'}! 👋
-                  </h1>
-                  <p className="text-gray-600 mb-4">
-                    Here's what's happening with your rental properties today
+                  <h1 className="text-2xl md:text-3xl font-semibold">Dashboard</h1>
+                  <p className="text-muted-foreground">
+                    Priorities and performance across your portfolio.
                   </p>
-                  <div className="flex items-center space-x-4 text-sm text-gray-500">
-                    <span className="flex items-center">
-                      <i className="fas fa-calendar mr-1"></i>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                      <i className="fas fa-calendar"></i>
                       {new Date().toLocaleDateString('en-US', {
                         weekday: 'long',
                         year: 'numeric',
@@ -512,116 +422,423 @@ export default function LandlordDashboard() {
                         day: 'numeric'
                       })}
                     </span>
-                    <Badge variant="secondary" className="bg-green-100 text-green-700">
-                      <i className="fas fa-circle text-green-500 mr-1 text-xs"></i>
-                      System Online
+                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                      <i className="fas fa-circle text-emerald-500 mr-1 text-xs"></i>
+                      Live updates
                     </Badge>
                   </div>
                 </div>
-                <div className="hidden md:flex items-center space-x-3">
-                  <Button
-                    onClick={() => setIsPropertyFormOpen(true)}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => setIsPropertyFormOpen(true)}>
                     <i className="fas fa-plus mr-2"></i>
                     Add Property
                   </Button>
-                  <Button
-                    onClick={() => setIsTenantFormOpen(true)}
-                    variant="outline"
-                  >
+                  <Button variant="outline" onClick={() => setIsTenantFormOpen(true)}>
                     <i className="fas fa-user-plus mr-2"></i>
                     Add Tenant
                   </Button>
                   <Button
-                    onClick={handleLogout}
                     variant="outline"
-                    className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                    onClick={() => {
+                      setActiveSection("payments");
+                      setIsPaymentFormOpen(true);
+                    }}
                   >
-                    <i className="fas fa-sign-out-alt mr-2"></i>
-                    Logout
+                    <i className="fas fa-receipt mr-2"></i>
+                    Record Payment
                   </Button>
                 </div>
               </div>
-            </div>
 
-            {/* Dashboard Controls */}
-            <motion.div
-              className="flex flex-col md:flex-row md:items-center justify-between gap-4"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-            >
-              <div className="flex items-center space-x-2">
-                <Label htmlFor="property-filter" className="text-sm font-medium text-gray-700">Filter by Property:</Label>
-                <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
-                  <SelectTrigger id="property-filter" className="w-[200px] bg-white">
-                    <SelectValue placeholder="All Properties" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Properties</SelectItem>
-                    {properties.map((p: any) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedPropertyId !== "all" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedPropertyId("all")}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    Clear
-                  </Button>
-                )}
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Badge variant="outline" className="text-gray-500 py-1">
-                  <i className="fas fa-sync-alt mr-2 text-xs animate-spin-slow"></i>
-                  Live Data
+              <div className="mt-6 flex flex-col gap-4 border-t border-border pt-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Label htmlFor="property-filter" className="text-sm font-medium text-muted-foreground">Filter by Property:</Label>
+                  <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
+                    <SelectTrigger id="property-filter" className="w-[220px] bg-background">
+                      <SelectValue placeholder="All Properties" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Properties</SelectItem>
+                      {properties.map((p: any) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedPropertyId !== "all" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedPropertyId("all")}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <Badge variant="outline" className="text-muted-foreground">
+                  <i className="fas fa-sync-alt mr-2 text-xs"></i>
+                  Live data
                 </Badge>
               </div>
-            </motion.div>
+            </div>
 
-            {/* Stats Cards */}
-            <motion.div
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6"
-              initial="hidden"
-              animate="visible"
-              variants={{
-                visible: { transition: { staggerChildren: 0.1 } }
-              }}
-            >
-              {[
-                { title: "Total Properties", value: dashboardStats?.totalProperties || 0, subtitle: `${dashboardStats?.totalUnits || 0} units`, icon: "fas fa-building", color: "primary" as const, testId: "stat-properties" },
-                { title: "Active Tenants", value: dashboardStats?.totalTenants || 0, subtitle: "Occupied units", icon: "fas fa-users", color: "chart-2" as const, testId: "stat-tenants" },
-                { title: "Occupancy Rate", value: `${dashboardStats?.occupancyRate || 0}%`, subtitle: `${dashboardStats?.occupiedUnits || 0}/${dashboardStats?.totalUnits || 0} occupied`, icon: "fas fa-chart-pie", color: "chart-2" as const, testId: "stat-occupancy" },
-                { title: "Monthly Revenue", value: `KES ${parseFloat(dashboardStats?.monthlyRevenue || 0).toLocaleString()}`, subtitle: "This month", icon: "fas fa-money-bill-wave", color: "chart-4" as const, testId: "stat-revenue" },
-                { title: "Overdue Payments", value: dashboardStats?.overduePayments || 0, subtitle: dashboardStats?.overduePayments > 0 ? "Requires attention" : "All current", icon: "fas fa-exclamation-triangle", color: dashboardStats?.overduePayments > 0 ? "destructive" : "chart-2" as const, testId: "stat-overdue" }
-              ].map((stat, idx) => (
-                <motion.div
-                  key={idx}
-                  variants={{
-                    hidden: { opacity: 0, y: 20 },
-                    visible: { opacity: 1, y: 0 }
-                  }}
-                  whileHover={{ y: -5, transition: { duration: 0.2 } }}
-                >
-                  <StatsCard
-                    title={stat.title}
-                    value={stat.value}
-                    subtitle={stat.subtitle}
-                    icon={stat.icon}
-                    color={stat.color as any}
-                    loading={statsLoading}
-                    data-testid={stat.testId}
-                  />
-                </motion.div>
-              ))}
-            </motion.div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+              <StatsCard
+                title="Collected"
+                value={`KES ${parseFloat(dashboardStats?.monthlyRevenue || 0).toLocaleString()}`}
+                subtitle="This month"
+                icon="fas fa-check-circle"
+                color="chart-2"
+                loading={statsLoading}
+                data-testid="stat-monthly-collected"
+              />
+              <StatsCard
+                title="Overdue"
+                value={dashboardStats?.overduePayments || 0}
+                subtitle={dashboardStats?.overduePayments > 0 ? "Needs attention" : "All current"}
+                icon="fas fa-exclamation-triangle"
+                color={dashboardStats?.overduePayments > 0 ? "destructive" : "chart-4"}
+                loading={statsLoading}
+                data-testid="stat-overdue"
+              />
+              <StatsCard
+                title="Occupancy"
+                value={`${dashboardStats?.occupancyRate || 0}%`}
+                subtitle={`${dashboardStats?.occupiedUnits || 0}/${dashboardStats?.totalUnits || 0} occupied`}
+                icon="fas fa-chart-pie"
+                color="chart-1"
+                loading={statsLoading}
+                data-testid="stat-occupancy"
+              />
+              <StatsCard
+                title="Maintenance"
+                value={pendingMaintenanceCount}
+                subtitle="Open requests"
+                icon="fas fa-tools"
+                color={pendingMaintenanceCount > 0 ? "destructive" : "chart-4"}
+                loading={statsLoading}
+                data-testid="stat-maintenance"
+              />
+            </div>
 
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Next Actions</CardTitle>
+                  <CardDescription>Focus on the items that move rent collections forward.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3">
+                      <div>
+                        <p className="font-medium">Overdue payments</p>
+                        <p className="text-sm text-muted-foreground">{dashboardStats?.overduePayments || 0} accounts need follow-up</p>
+                      </div>
+                      <Button size="sm" onClick={() => setActiveSection("payments")}>
+                        Review
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3">
+                      <div>
+                        <p className="font-medium">Leases expiring soon</p>
+                        <p className="text-sm text-muted-foreground">{expiringLeases.length} leases in the next 30 days</p>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => setActiveSection("leases")}>
+                        View leases
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3">
+                      <div>
+                        <p className="font-medium">New tenants to onboard</p>
+                        <p className="text-sm text-muted-foreground">Keep profiles and leases up to date</p>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => setActiveSection("tenants")}>
+                        Manage
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {statsLoading ? (
+                <Card>
+                  <CardHeader>
+                    <Skeleton className="h-6 w-48 mb-2" />
+                    <Skeleton className="h-4 w-72" />
+                  </CardHeader>
+                  <CardContent>
+                    <Skeleton className="h-[280px] w-full" />
+                  </CardContent>
+                </Card>
+              ) : dashboardStats?.revenueTrend && Array.isArray(dashboardStats.revenueTrend) && dashboardStats.revenueTrend.length > 0 && (() => {
+                const chartData = dashboardStats.revenueTrend.map((item: any) => ({
+                  name: new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'short' }),
+                  revenue: parseFloat(item.revenue) || 0,
+                  fullDate: new Date(item.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                }));
+
+                const processedData = chartData.length === 1
+                  ? [{ name: '', revenue: 0 }, ...chartData]
+                  : chartData;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center text-lg">
+                        <i className="fas fa-chart-line mr-2 text-blue-600"></i>
+                        Revenue Trend
+                      </CardTitle>
+                      <CardDescription>Monthly collections for the last 6 months.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[280px] w-full pt-2">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={processedData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.1} />
+                                <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis
+                              dataKey="name"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: '#64748b' }}
+                              dy={10}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: '#64748b' }}
+                              tickFormatter={(value) => `KSh ${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                borderRadius: '12px',
+                                border: 'none',
+                                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                                padding: '12px'
+                              }}
+                              formatter={(value: any) => [`KES ${value.toLocaleString()}`, 'Revenue']}
+                              labelStyle={{ fontWeight: 'bold', marginBottom: '4px', color: '#1e293b' }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="revenue"
+                              stroke="#2563eb"
+                              strokeWidth={3}
+                              fillOpacity={1}
+                              fill="url(#colorRevenue)"
+                              animationDuration={1500}
+                              activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb' }}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <CardTitle className="text-lg">Latest Payments</CardTitle>
+                  <Button variant="outline" size="sm" onClick={() => setActiveSection("payments")}>
+                    View All
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {paymentsLoading ? (
+                    <div className="space-y-4">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center justify-between rounded-lg border border-border p-3">
+                          <div className="flex items-center space-x-3">
+                            <Skeleton className="h-10 w-10 rounded-full" />
+                            <div>
+                              <Skeleton className="h-4 w-32 mb-2" />
+                              <Skeleton className="h-3 w-24" />
+                            </div>
+                          </div>
+                          <Skeleton className="h-6 w-16" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : recentPayments.length === 0 ? (
+                    <div className="text-center py-6">
+                      <i className="fas fa-receipt text-muted-foreground text-2xl mb-3"></i>
+                      <p className="text-muted-foreground" data-testid="text-nopayments">No payments yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentPayments.map((payment: any) => (
+                        <div key={payment.id} className="flex items-center justify-between rounded-lg border border-border p-3" data-testid={`payment-item-${payment.id}`}>
+                          <div>
+                            <p className="text-sm font-medium">{payment.description || 'Payment'}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(payment.paidDate || payment.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-emerald-600">+KES {parseFloat(payment.amount).toLocaleString()}</p>
+                            <Badge variant="secondary" className="text-xs">{payment.status || 'completed'}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <CardTitle className="text-lg">New Leases</CardTitle>
+                  <Button variant="outline" size="sm" onClick={() => setActiveSection("leases")}>
+                    View All
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {leasesLoading ? (
+                    <div className="space-y-4">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center justify-between rounded-lg border border-border p-3">
+                          <div>
+                            <Skeleton className="h-4 w-32 mb-2" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                          <Skeleton className="h-6 w-16" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : recentLeases.length === 0 ? (
+                    <div className="text-center py-6">
+                      <i className="fas fa-file-contract text-muted-foreground text-2xl mb-3"></i>
+                      <p className="text-muted-foreground">No recent leases</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentLeases.map((lease: any) => (
+                        <div key={lease.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                          <div>
+                            <p className="text-sm font-medium">
+                              {lease.tenant?.firstName ? `${lease.tenant.firstName} ${lease.tenant.lastName}` : 'Tenant'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Unit {lease.unit?.unitNumber || 'N/A'} • {new Date(lease.startDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <Badge variant={lease.isActive ? "default" : "secondary"} className="text-xs">
+                            {lease.isActive ? "Active" : "Pending"}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <CardTitle className="text-lg">Maintenance</CardTitle>
+                  <Button variant="outline" size="sm" onClick={() => setActiveSection("properties")}>
+                    Review
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {maintenanceRequests.length === 0 ? (
+                    <div className="text-center py-6">
+                      <i className="fas fa-tools text-muted-foreground text-2xl mb-3"></i>
+                      <p className="text-muted-foreground">No maintenance requests</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {(Array.isArray(maintenanceRequests) ? maintenanceRequests : []).slice(0, 3).map((request: any) => (
+                        <div key={request.id} className="flex items-center justify-between rounded-lg border border-border p-3" data-testid={`maintenance-item-${request.id}`}>
+                          <div>
+                            <p className="text-sm font-medium">{request.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(request.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <Badge variant={request.status === 'completed' ? 'default' : 'secondary'} className="text-xs">
+                            {request.status || 'pending'}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {expiringLeases.length > 0 && (
+              <Card className="border-yellow-200 bg-yellow-50">
+                <CardHeader>
+                  <CardTitle className="flex items-center text-lg text-yellow-800">
+                    <i className="fas fa-calendar-times mr-2"></i>
+                    Leases Expiring Soon ({expiringLeases.length})
+                  </CardTitle>
+                  <CardDescription className="text-yellow-700">
+                    These leases expire within the next 30 days.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {expiringLeases.map((lease: any) => {
+                      const daysUntilExpiry = Math.ceil((new Date(lease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                      const isUrgent = daysUntilExpiry <= 7;
+
+                      return (
+                        <div
+                          key={lease.id}
+                          className={`flex items-center justify-between rounded-lg p-3 ${isUrgent ? 'bg-red-100 border border-red-200' : 'bg-white border border-yellow-200'}`}
+                        >
+                          <div className="flex items-center space-x-3 flex-1">
+                            <div className={`w-10 h-10 ${isUrgent ? 'bg-red-200' : 'bg-yellow-200'} rounded-full flex items-center justify-center`}>
+                              <i className={`fas fa-${isUrgent ? 'exclamation' : 'clock'} ${isUrgent ? 'text-red-600' : 'text-yellow-600'}`}></i>
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">
+                                {lease.tenant.firstName} {lease.tenant.lastName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {lease.property.name} - Unit {lease.unit.unitNumber}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <Badge variant={isUrgent ? "destructive" : "secondary"} className="mb-1">
+                                {daysUntilExpiry} {daysUntilExpiry === 1 ? 'day' : 'days'} left
+                              </Badge>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(lease.endDate).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="bg-white hover:bg-blue-50 border-blue-300 text-blue-700"
+                              onClick={() => {
+                                const fullLease = leases.find((l: any) => l.id === lease.id);
+                                if (fullLease) {
+                                  setViewingLease(fullLease);
+                                  setIsLeaseDetailsOpen(true);
+                                }
+                              }}
+                            >
+                              Review
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             {/* Quick Actions Grid */}
             <motion.div
               className="grid md:grid-cols-3 gap-6"
@@ -1000,6 +1217,7 @@ export default function LandlordDashboard() {
             </div>
           </div>
         );
+      }
 
       case "properties":
         return (
@@ -1068,64 +1286,332 @@ export default function LandlordDashboard() {
         );
 
       case "payments":
-        return (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <h2 className="text-xl font-semibold">Payment Management</h2>
-              <button
-                className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
-                data-testid="button-recordpayment"
-                onClick={() => setIsPaymentFormOpen(true)}
-              >
-                <i className="fas fa-plus mr-2"></i>Record Payment
-              </button>
-            </div>
+        {
+          const now = new Date();
+          const isSameMonth = (date: Date) => date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+          const filteredPayments = Array.isArray(payments)
+            ? payments.filter((payment: any) => {
+                if (collectionsRange === "all") return true;
+                const dateValue = payment?.paidDate || payment?.createdAt || payment?.dueDate;
+                if (!dateValue) return false;
+                const parsed = new Date(dateValue);
+                return Number.isFinite(parsed.getTime()) && isSameMonth(parsed);
+              })
+            : [];
+          const collectedTotal = filteredPayments.reduce((sum: number, payment: any) => {
+            if (payment?.status !== "completed") return sum;
+            const amountValue = parseFloat(String(payment?.amount ?? 0));
+            return sum + (Number.isFinite(amountValue) ? amountValue : 0);
+          }, 0);
+          const pendingCount = filteredPayments.filter((payment: any) => payment?.status === "pending" || payment?.status === "failed").length;
+          const overdueTotals = filteredPayments.reduce(
+            (acc: { count: number; amount: number }, payment: any) => {
+              const dueDateValue = payment?.dueDate ? new Date(payment.dueDate) : null;
+              const isOverdue =
+                (payment?.status === "pending" || payment?.status === "failed") &&
+                dueDateValue instanceof Date &&
+                !Number.isNaN(dueDateValue.getTime()) &&
+                dueDateValue.getTime() < Date.now();
+              if (isOverdue) {
+                const amountValue = parseFloat(String(payment?.amount ?? 0));
+                acc.count += 1;
+                acc.amount += Number.isFinite(amountValue) ? amountValue : 0;
+              }
+              return acc;
+            },
+            { count: 0, amount: 0 }
+          );
+          const expiringLeases = Array.isArray(dashboardStats?.expiringLeases)
+            ? dashboardStats?.expiringLeases
+            : [];
+          const recentPayments = filteredPayments.slice(0, 4);
+          const propertyTotals = filteredPayments.reduce((acc: Record<string, { name: string; total: number; count: number; pending: number; overdueAmount: number; overdueCount: number }>, payment: any) => {
+                const name =
+                  payment?.property?.name ||
+                  payment?.unit?.property?.name ||
+                  payment?.unit?.propertyName ||
+                  payment?.propertyName ||
+                  "Unassigned";
+                const amountValue = parseFloat(String(payment?.amount ?? 0));
+                const safeAmount = Number.isFinite(amountValue) ? amountValue : 0;
+                if (!acc[name]) {
+                  acc[name] = { name, total: 0, count: 0, pending: 0, overdueAmount: 0, overdueCount: 0 };
+                }
+                acc[name].total += safeAmount;
+                acc[name].count += 1;
+                if (payment?.status === "pending" || payment?.status === "failed") {
+                  acc[name].pending += 1;
+                }
+                const dueDateValue = payment?.dueDate ? new Date(payment.dueDate) : null;
+                const isOverdue =
+                  (payment?.status === "pending" || payment?.status === "failed") &&
+                  dueDateValue instanceof Date &&
+                  !Number.isNaN(dueDateValue.getTime()) &&
+                  dueDateValue.getTime() < Date.now();
+                if (isOverdue) {
+                  acc[name].overdueAmount += safeAmount;
+                  acc[name].overdueCount += 1;
+                }
+                return acc;
+              }, {});
+          const propertyBreakdown = Object.values(propertyTotals)
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 6);
 
-            {/* Payment Summary Cards */}
-            <div className="grid md:grid-cols-3 gap-6">
-              <StatsCard
-                title="This Month"
-                value={`KES ${dashboardStats?.monthlyRevenue?.toLocaleString() || 0}`}
-                subtitle="Collected"
-                icon="fas fa-check-circle"
-                color="chart-2"
-                loading={statsLoading}
-                data-testid="stat-monthcollected"
-              />
-              <StatsCard
-                title="Pending"
-                value={dashboardStats?.pendingPayments?.toString() || "0"}
-                subtitle="Outstanding Payments"
-                icon="fas fa-clock"
-                color="chart-4"
-                loading={statsLoading}
-                data-testid="stat-pending"
-              />
-              <StatsCard
-                title="Total Revenue"
-                value={`KES ${dashboardStats?.totalRevenue?.toLocaleString() || 0}`}
-                subtitle="All time collected"
-                icon="fas fa-chart-line"
-                color="chart-1"
-                loading={statsLoading}
-                data-testid="stat-totalrevenue"
-              />
-            </div>
+          return (
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-2xl font-semibold">Collections</h2>
+                  <p className="text-sm text-muted-foreground">Monitor rent status and follow up quickly.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-1">
+                    <Button
+                      size="sm"
+                      variant={collectionsRange === "month" ? "default" : "ghost"}
+                      onClick={() => setCollectionsRange("month")}
+                    >
+                      This month
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={collectionsRange === "all" ? "default" : "ghost"}
+                      onClick={() => setCollectionsRange("all")}
+                    >
+                      All time
+                    </Button>
+                  </div>
+                  <Button
+                    onClick={() => setIsPaymentFormOpen(true)}
+                    data-testid="button-recordpayment"
+                  >
+                    <i className="fas fa-plus mr-2"></i>Record Payment
+                  </Button>
+                  <Button variant="outline" onClick={() => setActiveSection("reports")}>
+                    <i className="fas fa-file-export mr-2"></i>Export
+                  </Button>
+                </div>
+              </div>
 
-            <PaymentHistory
-              payments={payments}
-              loading={paymentsLoading}
-              onViewPayment={(payment) => {
-                // TODO: Implement view payment modal
-                console.log('View payment:', payment);
-              }}
-              onEditPayment={(payment) => {
-                // TODO: Implement edit payment functionality
-                console.log('Edit payment:', payment);
-              }}
-            />
-          </div>
-        );
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <StatsCard
+                  title="Collected"
+                  value={`KES ${collectedTotal.toLocaleString()}`}
+                  subtitle={collectionsRange === "month" ? "This month" : "All time"}
+                  icon="fas fa-check-circle"
+                  color="chart-2"
+                  loading={statsLoading}
+                  data-testid="stat-monthcollected"
+                />
+                <StatsCard
+                  title="Overdue"
+                  value={overdueTotals.count}
+                  subtitle={`KES ${overdueTotals.amount.toLocaleString()} overdue`}
+                  icon="fas fa-exclamation-triangle"
+                  color={overdueTotals.count > 0 ? "destructive" : "chart-4"}
+                  loading={statsLoading}
+                  data-testid="stat-overdue"
+                />
+                <StatsCard
+                  title="Pending"
+                  value={pendingCount.toString()}
+                  subtitle="Outstanding"
+                  icon="fas fa-clock"
+                  color="chart-4"
+                  loading={statsLoading}
+                  data-testid="stat-pending"
+                />
+                <StatsCard
+                  title="Total Revenue"
+                  value={`KES ${collectedTotal.toLocaleString()}`}
+                  subtitle={collectionsRange === "month" ? "This month" : "All time"}
+                  icon="fas fa-chart-line"
+                  color="chart-1"
+                  loading={statsLoading}
+                  data-testid="stat-totalrevenue"
+                />
+              </div>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Collections by Property</CardTitle>
+                    <CardDescription>Top properties by total collections</CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setActiveSection("properties")}>
+                    View properties
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {paymentsLoading ? (
+                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                      {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="rounded-lg border border-border p-3">
+                          <Skeleton className="h-4 w-32 mb-2" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : propertyBreakdown.length === 0 ? (
+                    <div className="text-center py-6">
+                      <i className="fas fa-building text-muted-foreground text-2xl mb-3"></i>
+                      <p className="text-muted-foreground">No payment data yet.</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                      {propertyBreakdown.map((property) => (
+                        <div key={property.name} className="rounded-lg border border-border p-3">
+                          <p className="text-sm font-medium">{property.name}</p>
+                          <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                            <span>{property.count} payments</span>
+                            {property.pending > 0 ? (
+                              <Badge variant="secondary" className="text-xs">
+                                {property.pending} pending
+                              </Badge>
+                            ) : (
+                              <span>All cleared</span>
+                            )}
+                          </div>
+                          <div className="mt-2 flex items-center justify-between">
+                            <p className="text-sm font-semibold text-emerald-600">
+                              KES {property.total.toLocaleString()}
+                            </p>
+                            {property.overdueAmount > 0 ? (
+                              <span className="text-xs font-medium text-destructive">
+                                Overdue {property.overdueCount} • KES {property.overdueAmount.toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">No overdue</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Collections Focus</CardTitle>
+                    <CardDescription>Prioritize the accounts that impact cash flow.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3">
+                        <div>
+                          <p className="font-medium">Overdue accounts</p>
+                          <p className="text-sm text-muted-foreground">{dashboardStats?.overduePayments || 0} accounts overdue</p>
+                        </div>
+                        <Button size="sm" onClick={() => setActiveSection("tenants")}>Review</Button>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3">
+                        <div>
+                          <p className="font-medium">Pending invoices</p>
+                          <p className="text-sm text-muted-foreground">{dashboardStats?.pendingPayments || 0} invoices outstanding</p>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => setActiveSection("payments")}>View list</Button>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3">
+                        <div>
+                          <p className="font-medium">Leases expiring soon</p>
+                          <p className="text-sm text-muted-foreground">{expiringLeases.length} leases within 30 days</p>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => setActiveSection("leases")}>Renew</Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Reminder Queue</CardTitle>
+                    <CardDescription>Send follow-ups to keep collections on track.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {expiringLeases.length === 0 ? (
+                      <div className="text-center py-8">
+                        <i className="fas fa-bell text-muted-foreground text-2xl mb-3"></i>
+                        <p className="text-muted-foreground">No urgent reminders right now.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {expiringLeases.slice(0, 3).map((lease: any) => (
+                          <div key={lease.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                            <div>
+                              <p className="text-sm font-medium">{lease.tenant.firstName} {lease.tenant.lastName}</p>
+                              <p className="text-xs text-muted-foreground">Unit {lease.unit.unitNumber} • ends {new Date(lease.endDate).toLocaleDateString()}</p>
+                            </div>
+                            <Badge variant="secondary" className="text-xs">Renewal</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-4">
+                      <Button variant="outline" size="sm" onClick={() => setActiveSection("tenants")}>Send reminders</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+                <PaymentHistory
+                  payments={payments}
+                  loading={paymentsLoading}
+                  onViewPayment={(payment) => {
+                    console.log('View payment:', payment);
+                  }}
+                  onEditPayment={(payment) => {
+                    console.log('Edit payment:', payment);
+                  }}
+                />
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Latest Payments</CardTitle>
+                    <CardDescription>Most recent transactions</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {paymentsLoading ? (
+                      <div className="space-y-3">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="flex items-center justify-between rounded-lg border border-border p-3">
+                            <div>
+                              <Skeleton className="h-4 w-24 mb-2" />
+                              <Skeleton className="h-3 w-16" />
+                            </div>
+                            <Skeleton className="h-6 w-14" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : recentPayments.length === 0 ? (
+                      <div className="text-center py-8">
+                        <i className="fas fa-receipt text-muted-foreground text-2xl mb-3"></i>
+                        <p className="text-muted-foreground">No payments yet.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {recentPayments.map((payment: any) => (
+                          <div key={payment.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                            <div>
+                              <p className="text-sm font-medium">{payment.description || 'Payment'}</p>
+                              <p className="text-xs text-muted-foreground">{new Date(payment.paidDate || payment.createdAt).toLocaleDateString()}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-emerald-600">KES {parseFloat(payment.amount).toLocaleString()}</p>
+                              <Badge variant="secondary" className="text-xs">{payment.status || 'completed'}</Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          );
+        }
 
       case "payment-settings":
         return (
@@ -1147,97 +1633,108 @@ export default function LandlordDashboard() {
       case "profile":
         return (
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <i className="fas fa-user-circle mr-3 text-blue-600"></i>
-                  Personal Information
-                </CardTitle>
-                <CardDescription>
-                  Manage your account details and preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Full Name</label>
-                    <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
-                      {user?.firstName || 'Not provided'} {user?.lastName || ''}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Email Address</label>
-                    <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
-                      {user?.email || 'Not provided'}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Phone Number</label>
-                    <div className="flex items-center gap-2">
-                      <p className="text-gray-900 bg-gray-50 p-3 rounded-md border flex-1">
-                        {user?.phoneNumber || 'Not provided'}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold">Profile & Settings</h2>
+                <p className="text-sm text-muted-foreground">Manage account details, security, and preferences.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => setIsProfileEditOpen(true)}>
+                  <i className="fas fa-edit mr-2"></i>Edit Profile
+                </Button>
+                <Button variant="outline" onClick={() => setIsPasswordChangeOpen(true)}>
+                  <i className="fas fa-key mr-2"></i>Change Password
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <i className="fas fa-user-circle mr-3 text-blue-600"></i>
+                    Account Overview
+                  </CardTitle>
+                  <CardDescription>Primary details and identity verification.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-muted-foreground">Full Name</label>
+                      <p className="text-foreground bg-muted/30 p-3 rounded-md border">
+                        {user?.firstName || 'Not provided'} {user?.lastName || ''}
                       </p>
-                      {user?.phoneNumber && (
-                        <Badge variant={user.phoneVerified ? "default" : "destructive"} className={user.phoneVerified ? "bg-green-100 text-green-700" : ""}>
-                          {user.phoneVerified ? (
-                            <><i className="fas fa-check-circle mr-1"></i> Verified</>
-                          ) : (
-                            <><i className="fas fa-exclamation-circle mr-1"></i> Unverified</>
-                          )}
-                        </Badge>
-                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-muted-foreground">Email Address</label>
+                      <p className="text-foreground bg-muted/30 p-3 rounded-md border">
+                        {user?.email || 'Not provided'}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                      <div className="flex items-center gap-2">
+                        <p className="text-foreground bg-muted/30 p-3 rounded-md border flex-1">
+                          {user?.phoneNumber || 'Not provided'}
+                        </p>
+                        {user?.phoneNumber && (
+                          <Badge variant={user.phoneVerified ? "default" : "destructive"} className={user.phoneVerified ? "bg-green-100 text-green-700" : ""}>
+                            {user.phoneVerified ? (
+                              <><i className="fas fa-check-circle mr-1"></i> Verified</>
+                            ) : (
+                              <><i className="fas fa-exclamation-circle mr-1"></i> Unverified</>
+                            )}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-muted-foreground">Role</label>
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 block w-fit">
+                        <i className="fas fa-building mr-1"></i>
+                        {user?.role || 'Landlord/Property Manager'}
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-muted-foreground">Account Created</label>
+                      <p className="text-foreground bg-muted/30 p-3 rounded-md border">
+                        {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Not available'}
+                      </p>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Role</label>
-                    <Badge variant="secondary" className="bg-blue-100 text-blue-700 block w-fit">
-                      <i className="fas fa-building mr-1"></i>
-                      {user?.role || 'Landlord/Property Manager'}
-                    </Badge>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Account Created</label>
-                    <p className="text-gray-900 bg-gray-50 p-3 rounded-md border">
-                      {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Not available'}
-                    </p>
-                  </div>
-                </div>
+                </CardContent>
+              </Card>
 
-                <div className="border-t pt-4 mt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900">Account Actions</h3>
-                      <p className="text-sm text-gray-600">Manage your account settings</p>
-                    </div>
-                    <div className="flex space-x-3">
-                      <Button variant="outline" onClick={() => setIsProfileEditOpen(true)}>
-                        <i className="fas fa-edit mr-2"></i>
-                        Edit Profile
-                      </Button>
-                      <Button variant="outline" onClick={() => setIsPasswordChangeOpen(true)}>
-                        <i className="fas fa-key mr-2"></i>
-                        Change Password
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <i className="fas fa-link mr-3 text-green-600"></i>
+                      Linked Accounts
+                    </CardTitle>
+                    <CardDescription>Manage how you sign in.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <LinkedAccountsSection />
+                  </CardContent>
+                </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <i className="fas fa-link mr-3 text-green-600"></i>
-                  Linked Accounts
-                </CardTitle>
-                <CardDescription>
-                  Manage how you sign in to your account
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <LinkedAccountsSection />
-              </CardContent>
-            </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <i className="fas fa-credit-card mr-3 text-blue-600"></i>
+                      Payment Channels
+                    </CardTitle>
+                    <CardDescription>Configure how you collect rent.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button variant="outline" onClick={() => setActiveSection("payment-settings")}>
+                      Manage payment settings
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
 
             <Card>
               <CardHeader>
@@ -1245,30 +1742,31 @@ export default function LandlordDashboard() {
                   <i className="fas fa-cog mr-3 text-gray-600"></i>
                   Preferences
                 </CardTitle>
-                <CardDescription>
-                  Customize your dashboard experience
-                </CardDescription>
+                <CardDescription>Customize your notifications.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Email Notifications</label>
+                    <label className="text-sm font-medium text-muted-foreground">Email Notifications</label>
                     <div className="flex items-center space-x-2">
-                      <input type="checkbox" defaultChecked className="rounded border-gray-300" />
-                      <span className="text-sm text-gray-600">Receive payment reminders</span>
+                      <input type="checkbox" defaultChecked className="rounded border-border" />
+                      <span className="text-sm text-muted-foreground">Receive payment reminders</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <input type="checkbox" defaultChecked className="rounded border-gray-300" />
-                      <span className="text-sm text-gray-600">Property maintenance alerts</span>
+                      <input type="checkbox" defaultChecked className="rounded border-border" />
+                      <span className="text-sm text-muted-foreground">Maintenance alerts</span>
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Dashboard Theme</label>
-                    <select className="w-full p-2 border border-gray-300 rounded-md">
-                      <option>Light Mode</option>
-                      <option>Dark Mode</option>
-                      <option>Auto</option>
-                    </select>
+                    <label className="text-sm font-medium text-muted-foreground">SMS Notifications</label>
+                    <div className="flex items-center space-x-2">
+                      <input type="checkbox" defaultChecked className="rounded border-border" />
+                      <span className="text-sm text-muted-foreground">Send rent due reminders</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input type="checkbox" className="rounded border-border" />
+                      <span className="text-sm text-muted-foreground">Weekly portfolio summary</span>
+                    </div>
                   </div>
                 </div>
               </CardContent>

@@ -118,6 +118,461 @@ export async function registerRoutes(app: Express) {
   await setupAuth(app);
   const supabaseStorage = new SupabaseStorage();
 
+  // Landlord payment channel routes (public GET for tenants, auth for owners)
+  app.get("/api/landlord/payment-channels", async (req: any, res: any, next: any) => {
+    const landlordId = req.query.landlordId as string | undefined;
+
+    if (landlordId) {
+      try {
+        const { data, error } = await supabase
+          .from("landlord_payment_channels")
+          .select(
+            "id, channel_type, paybill_number, till_number, bank_paybill_number, bank_account_number, bank_name, account_number, account_name, is_primary, display_name"
+          )
+          .eq("landlord_id", landlordId)
+          .eq("is_active", true)
+          .order("is_primary", { ascending: false })
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Error fetching public payment channels:", error);
+          return res.status(500).json({ message: "Failed to fetch payment channels" });
+        }
+
+        const formattedChannels = (data || []).map((ch: any) => ({
+          id: ch.id,
+          channelType: ch.channel_type,
+          paybillNumber: ch.paybill_number,
+          tillNumber: ch.till_number,
+          bankPaybillNumber: ch.bank_paybill_number,
+          bankAccountNumber: ch.bank_account_number,
+          bankName: ch.bank_name,
+          accountNumber: ch.account_number,
+          accountName: ch.account_name,
+          isPrimary: ch.is_primary,
+          displayName: ch.display_name,
+        }));
+
+        return res.json(formattedChannels);
+      } catch (error) {
+        console.error("Error fetching public payment channels:", error);
+        return res.status(500).json({ message: "Failed to fetch payment channels" });
+      }
+    }
+
+    return isAuthenticated(req, res, next);
+  }, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can manage payment channels" });
+      }
+
+      const { data, error } = await supabase
+        .from("landlord_payment_channels")
+        .select(
+          "id, channel_type, paybill_number, till_number, bank_paybill_number, bank_account_number, bank_name, account_number, account_name, is_primary, is_active, display_name, notes, created_at, updated_at"
+        )
+        .eq("landlord_id", userId)
+        .order("is_primary", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching landlord payment channels:", error);
+        return res.status(500).json({ message: "Failed to fetch payment channels" });
+      }
+
+      const formattedChannels = (data || []).map((ch: any) => ({
+        id: ch.id,
+        channelType: ch.channel_type,
+        paybillNumber: ch.paybill_number,
+        tillNumber: ch.till_number,
+        bankPaybillNumber: ch.bank_paybill_number,
+        bankAccountNumber: ch.bank_account_number,
+        bankName: ch.bank_name,
+        accountNumber: ch.account_number,
+        accountName: ch.account_name,
+        isPrimary: ch.is_primary,
+        isActive: ch.is_active,
+        displayName: ch.display_name,
+        notes: ch.notes,
+        createdAt: ch.created_at,
+        updatedAt: ch.updated_at,
+      }));
+
+      return res.json(formattedChannels);
+    } catch (error) {
+      console.error("Error fetching landlord payment channels:", error);
+      return res.status(500).json({ message: "Failed to fetch payment channels" });
+    }
+  });
+
+  app.post("/api/landlord/payment-channels", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can manage payment channels" });
+      }
+
+      const channelSchema = z.object({
+        channelType: z.enum(["mpesa_paybill", "mpesa_till", "mpesa_to_bank", "bank_account"]),
+        paybillNumber: z.string().optional().or(z.literal("")),
+        tillNumber: z.string().optional().or(z.literal("")),
+        bankPaybillNumber: z.string().optional().or(z.literal("")),
+        bankAccountNumber: z.string().optional().or(z.literal("")),
+        bankName: z.string().optional().or(z.literal("")),
+        accountNumber: z.string().optional().or(z.literal("")),
+        accountName: z.string().optional().or(z.literal("")),
+        displayName: z.string().min(1, "Display name is required"),
+        isPrimary: z.boolean().default(false),
+        notes: z.string().optional().or(z.literal("")),
+      }).refine((data) => {
+        if (data.channelType === "mpesa_paybill") {
+          if (!data.paybillNumber || data.paybillNumber.trim() === "") {
+            throw new z.ZodError([
+              { code: "custom", message: "Paybill number is required for M-Pesa Paybill", path: ["paybillNumber"] },
+            ]);
+          }
+          if (!/^\d{6,7}$/.test(data.paybillNumber)) {
+            throw new z.ZodError([
+              { code: "custom", message: "Paybill must be 6-7 digits", path: ["paybillNumber"] },
+            ]);
+          }
+        }
+        if (data.channelType === "mpesa_till") {
+          if (!data.tillNumber || data.tillNumber.trim() === "") {
+            throw new z.ZodError([
+              { code: "custom", message: "Till number is required for M-Pesa Till", path: ["tillNumber"] },
+            ]);
+          }
+          if (!/^\d{6,7}$/.test(data.tillNumber)) {
+            throw new z.ZodError([
+              { code: "custom", message: "Till number must be 6-7 digits", path: ["tillNumber"] },
+            ]);
+          }
+        }
+        if (data.channelType === "mpesa_to_bank") {
+          if (!data.bankPaybillNumber || data.bankPaybillNumber.trim() === "") {
+            throw new z.ZodError([
+              { code: "custom", message: "Bank paybill number is required", path: ["bankPaybillNumber"] },
+            ]);
+          }
+          if (!/^\d{6,7}$/.test(data.bankPaybillNumber)) {
+            throw new z.ZodError([
+              { code: "custom", message: "Bank paybill must be 6-7 digits", path: ["bankPaybillNumber"] },
+            ]);
+          }
+          if (!data.bankAccountNumber || data.bankAccountNumber.trim() === "") {
+            throw new z.ZodError([
+              { code: "custom", message: "Bank account number is required", path: ["bankAccountNumber"] },
+            ]);
+          }
+          if (data.bankAccountNumber.length < 8 || data.bankAccountNumber.length > 16) {
+            throw new z.ZodError([
+              { code: "custom", message: "Bank account number must be 8-16 characters", path: ["bankAccountNumber"] },
+            ]);
+          }
+        }
+        if (data.channelType === "bank_account") {
+          if (!data.bankName || data.bankName.trim() === "") {
+            throw new z.ZodError([
+              { code: "custom", message: "Bank name is required", path: ["bankName"] },
+            ]);
+          }
+          if (!data.accountNumber || data.accountNumber.trim() === "") {
+            throw new z.ZodError([
+              { code: "custom", message: "Account number is required", path: ["accountNumber"] },
+            ]);
+          }
+        }
+        return true;
+      });
+
+      const channelData = channelSchema.parse(req.body);
+
+      if (channelData.paybillNumber) {
+        const { data: existingPaybill, error: existingPaybillError } = await supabase
+          .from("landlord_payment_channels")
+          .select("id")
+          .eq("paybill_number", channelData.paybillNumber)
+          .eq("landlord_id", userId)
+          .limit(1);
+
+        if (existingPaybillError) {
+          console.error("Error checking paybill duplicate:", existingPaybillError);
+          return res.status(500).json({ error: "Failed to process request", details: existingPaybillError.message });
+        }
+
+        if (existingPaybill && existingPaybill.length > 0) {
+          return res.status(400).json({
+            error: "This Paybill number is already registered",
+            details: "You cannot register the same Paybill twice",
+          });
+        }
+      }
+
+      if (channelData.tillNumber) {
+        const { data: existingTill, error: existingTillError } = await supabase
+          .from("landlord_payment_channels")
+          .select("id")
+          .eq("till_number", channelData.tillNumber)
+          .eq("landlord_id", userId)
+          .limit(1);
+
+        if (existingTillError) {
+          console.error("Error checking till duplicate:", existingTillError);
+          return res.status(500).json({ error: "Failed to process request", details: existingTillError.message });
+        }
+
+        if (existingTill && existingTill.length > 0) {
+          return res.status(400).json({
+            error: "This Till number is already registered",
+            details: "You cannot register the same Till number twice",
+          });
+        }
+      }
+
+      if (channelData.bankAccountNumber) {
+        const { data: existingBank, error: existingBankError } = await supabase
+          .from("landlord_payment_channels")
+          .select("id")
+          .eq("bank_account_number", channelData.bankAccountNumber)
+          .eq("landlord_id", userId)
+          .limit(1);
+
+        if (existingBankError) {
+          console.error("Error checking bank account duplicate:", existingBankError);
+          return res.status(500).json({ error: "Failed to process request", details: existingBankError.message });
+        }
+
+        if (existingBank && existingBank.length > 0) {
+          return res.status(400).json({
+            error: "This bank account is already registered",
+            details: "You cannot register the same bank account twice",
+          });
+        }
+      }
+
+      if (channelData.isPrimary) {
+        const { error: unsetPrimaryError } = await supabase
+          .from("landlord_payment_channels")
+          .update({ is_primary: false, updated_at: new Date().toISOString() })
+          .eq("landlord_id", userId);
+
+        if (unsetPrimaryError) {
+          console.error("Error unsetting primary channels:", unsetPrimaryError);
+          return res.status(500).json({ error: "Failed to process request", details: unsetPrimaryError.message });
+        }
+      }
+
+      const insertData = {
+        landlord_id: userId,
+        channel_type: channelData.channelType,
+        paybill_number: channelData.paybillNumber || null,
+        till_number: channelData.tillNumber || null,
+        bank_paybill_number: channelData.bankPaybillNumber || null,
+        bank_account_number: channelData.bankAccountNumber || null,
+        bank_name: channelData.bankName || null,
+        account_number: channelData.accountNumber || null,
+        account_name: channelData.accountName || null,
+        display_name: channelData.displayName,
+        is_primary: channelData.isPrimary ?? false,
+        notes: channelData.notes || null,
+      };
+
+      const { data, error } = await supabase
+        .from("landlord_payment_channels")
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error creating payment channel:", error);
+        return res.status(500).json({ error: "Failed to process request", details: error.message });
+      }
+
+      return res.status(201).json({
+        id: data.id,
+        channelType: data.channel_type,
+        paybillNumber: data.paybill_number,
+        tillNumber: data.till_number,
+        bankPaybillNumber: data.bank_paybill_number,
+        bankAccountNumber: data.bank_account_number,
+        bankName: data.bank_name,
+        accountNumber: data.account_number,
+        accountName: data.account_name,
+        isPrimary: data.is_primary,
+        isActive: data.is_active,
+        displayName: data.display_name,
+        notes: data.notes,
+        createdAt: data.created_at,
+      });
+    } catch (error: any) {
+      console.error("Error creating payment channel:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid input", details: error.errors });
+      }
+      return res.status(500).json({ error: "Failed to process request", details: error?.message || "Unknown error" });
+    }
+  });
+
+  app.put("/api/landlord/payment-channels", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+      const channelId = req.query.id as string | undefined;
+
+      if (!channelId) {
+        return res.status(400).json({ message: "Channel ID is required" });
+      }
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can manage payment channels" });
+      }
+
+      const updateSchema = z.object({
+        displayName: z.string().min(1).optional(),
+        isPrimary: z.boolean().optional(),
+        isActive: z.boolean().optional(),
+        notes: z.string().optional(),
+      });
+
+      const updateData = updateSchema.parse(req.body);
+      const { data: channel, error: channelError } = await supabase
+        .from("landlord_payment_channels")
+        .select("id")
+        .eq("id", channelId)
+        .eq("landlord_id", userId)
+        .single();
+
+      if (channelError || !channel) {
+        return res.status(404).json({ error: "Channel not found" });
+      }
+
+      if (updateData.isPrimary) {
+        const { error: unsetPrimaryError } = await supabase
+          .from("landlord_payment_channels")
+          .update({ is_primary: false, updated_at: new Date().toISOString() })
+          .eq("landlord_id", userId)
+          .neq("id", channelId);
+
+        if (unsetPrimaryError) {
+          console.error("Error unsetting primary channels:", unsetPrimaryError);
+          return res.status(500).json({ error: "Failed to process request", details: unsetPrimaryError.message });
+        }
+      }
+
+      const mappedUpdates: Record<string, any> = { updated_at: new Date().toISOString() };
+
+      if (updateData.displayName !== undefined) mappedUpdates.display_name = updateData.displayName;
+      if (updateData.isPrimary !== undefined) mappedUpdates.is_primary = updateData.isPrimary;
+      if (updateData.isActive !== undefined) mappedUpdates.is_active = updateData.isActive;
+      if (updateData.notes !== undefined) mappedUpdates.notes = updateData.notes || null;
+
+      const { data, error } = await supabase
+        .from("landlord_payment_channels")
+        .update(mappedUpdates)
+        .eq("id", channelId)
+        .eq("landlord_id", userId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error updating payment channel:", error);
+        return res.status(500).json({ error: "Failed to process request", details: error.message });
+      }
+
+      return res.status(200).json({
+        id: data.id,
+        channelType: data.channel_type,
+        paybillNumber: data.paybill_number,
+        tillNumber: data.till_number,
+        bankName: data.bank_name,
+        accountNumber: data.account_number,
+        accountName: data.account_name,
+        isPrimary: data.is_primary,
+        isActive: data.is_active,
+        displayName: data.display_name,
+        notes: data.notes,
+        updatedAt: data.updated_at,
+      });
+    } catch (error: any) {
+      console.error("Error updating payment channel:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid input", details: error.errors });
+      }
+      return res.status(500).json({ error: "Failed to process request", details: error?.message || "Unknown error" });
+    }
+  });
+
+  app.delete("/api/landlord/payment-channels", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+      const channelId = req.query.id as string | undefined;
+
+      if (!channelId) {
+        return res.status(400).json({ message: "Channel ID is required" });
+      }
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can manage payment channels" });
+      }
+
+      const { data: channel, error: channelError } = await supabase
+        .from("landlord_payment_channels")
+        .select("id, is_primary")
+        .eq("id", channelId)
+        .eq("landlord_id", userId)
+        .single();
+
+      if (channelError || !channel) {
+        return res.status(404).json({ error: "Channel not found" });
+      }
+
+      const { data: hasEvents, error: eventsError } = await supabase
+        .from("external_payment_events")
+        .select("id")
+        .eq("payment_channel_id", channelId)
+        .limit(1);
+
+      if (eventsError) {
+        console.error("Error checking payment events:", eventsError);
+        return res.status(500).json({ error: "Failed to process request", details: eventsError.message });
+      }
+
+      if (hasEvents && hasEvents.length > 0) {
+        return res.status(400).json({
+          error: "Cannot delete channel with payment history",
+          details: "This channel has received payments and cannot be deleted. You can deactivate it instead.",
+        });
+      }
+
+      const { error } = await supabase
+        .from("landlord_payment_channels")
+        .delete()
+        .eq("id", channelId)
+        .eq("landlord_id", userId);
+
+      if (error) {
+        console.error("Error deleting payment channel:", error);
+        return res.status(500).json({ error: "Failed to process request", details: error.message });
+      }
+
+      return res.status(200).json({ message: "Payment channel deleted successfully", id: channelId });
+    } catch (error: any) {
+      console.error("Error deleting payment channel:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid input", details: error.errors });
+      }
+      return res.status(500).json({ error: "Failed to process request", details: error?.message || "Unknown error" });
+    }
+  });
+
   // Authentication routes
   app.get("/api/login", (req: any, res: any) => {
     // Validate and sanitize Supabase configuration

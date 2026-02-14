@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SidebarProps {
   activeSection: string;
@@ -11,21 +12,44 @@ interface SidebarProps {
   role?: string;
 }
 
-const navItems = [
-  { id: "overview", label: "Overview", icon: "fas fa-chart-pie", roles: ["landlord", "property_manager", "tenant"] },
-  { id: "properties", label: "Properties", icon: "fas fa-building", roles: ["landlord", "property_manager"] },
-  { id: "tenants", label: "Tenants", icon: "fas fa-users", roles: ["landlord", "property_manager"] },
-  { id: "leases", label: "Leases", icon: "fas fa-file-contract", roles: ["landlord", "property_manager"] },
-  { id: "payments", label: "Payments", icon: "fas fa-credit-card", roles: ["landlord", "property_manager", "tenant"] },
-  { id: "payment-settings", label: "Payment Settings", icon: "fas fa-cog", roles: ["landlord", "property_manager"] },
-  { id: "maintenance", label: "Maintenance", icon: "fas fa-tools", roles: ["tenant"] }, // Added for tenants
-  { id: "documents", label: "Documents", icon: "fas fa-file-alt", roles: ["landlord", "property_manager", "tenant"] },
-  { id: "reports", label: "Reports", icon: "fas fa-chart-line", roles: ["landlord", "property_manager"] },
-  { id: "profile", label: "Profile", icon: "fas fa-user-circle", roles: ["landlord", "property_manager", "tenant"] },
+const navSections = [
+  {
+    id: "main",
+    label: "Main",
+    items: [
+      { id: "overview", label: "Overview", icon: "fas fa-chart-pie", roles: ["landlord", "property_manager", "tenant"] },
+      { id: "properties", label: "Properties", icon: "fas fa-building", roles: ["landlord", "property_manager"] },
+      { id: "tenants", label: "Tenants", icon: "fas fa-users", roles: ["landlord", "property_manager"] },
+      { id: "leases", label: "Leases", icon: "fas fa-file-contract", roles: ["landlord", "property_manager"] },
+      { id: "payments", label: "Payments", icon: "fas fa-credit-card", roles: ["landlord", "property_manager", "tenant"] },
+      { id: "maintenance", label: "Maintenance", icon: "fas fa-tools", roles: ["tenant"] },
+    ],
+  },
+  {
+    id: "tools",
+    label: "Tools",
+    items: [
+      { id: "payment-settings", label: "Payment Settings", icon: "fas fa-cog", roles: ["landlord", "property_manager"] },
+      { id: "documents", label: "Documents", icon: "fas fa-file-alt", roles: ["landlord", "property_manager", "tenant"] },
+      { id: "reports", label: "Reports", icon: "fas fa-chart-line", roles: ["landlord", "property_manager"] },
+    ],
+  },
+  {
+    id: "account",
+    label: "Account",
+    items: [
+      { id: "profile", label: "Profile", icon: "fas fa-user-circle", roles: ["landlord", "property_manager", "tenant"] },
+    ],
+  },
 ];
 
 export default function Sidebar({ activeSection, onSectionChange, isOpen, onClose, isCollapsed = false, role = "landlord" }: SidebarProps) {
-  const filteredNavItems = navItems.filter(item => item.roles.includes(role));
+  const filteredSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.roles.includes(role)),
+    }))
+    .filter((section) => section.items.length > 0);
 
   const handleNavClick = (sectionId: string) => {
     onSectionChange(sectionId);
@@ -83,32 +107,65 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
           </div>
 
           {/* Navigation */}
-          <nav className="px-4 flex-1 overflow-y-auto">
-            <div className="space-y-1">
-              {filteredNavItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => handleNavClick(item.id)}
-                  className={cn(
-                    "flex items-center w-full px-4 py-2 rounded-lg text-left transition-colors",
-                    activeSection === item.id
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-accent",
-                    isCollapsed && "md:justify-center"
-                  )}
-                  data-testid={`nav-${item.id}`}
-                  title={isCollapsed ? item.label : undefined}
-                >
-                  <i className={cn(
-                    item.icon,
-                    "text-sm",
-                    isCollapsed ? "" : "mr-3"
-                  )}></i>
-                  {!isCollapsed && <span>{item.label}</span>}
-                </button>
-              ))}
-            </div>
-          </nav>
+          <TooltipProvider delayDuration={150}>
+            <nav className="px-4 flex-1 overflow-y-auto">
+              <div className="space-y-4">
+                {filteredSections.map((section) => (
+                  <div key={section.id} className="space-y-1">
+                    {!isCollapsed && (
+                      <p className="px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {section.label}
+                      </p>
+                    )}
+                    {section.items.map((item) => {
+                      const navButton = (
+                        <button
+                          onClick={() => handleNavClick(item.id)}
+                          className={cn(
+                            "flex items-center w-full px-4 py-2 rounded-lg text-left transition-colors",
+                            activeSection === item.id
+                              ? "bg-primary text-primary-foreground"
+                              : "text-foreground hover:bg-accent",
+                            isCollapsed && "md:justify-center"
+                          )}
+                          data-testid={`nav-${item.id}`}
+                        >
+                          <i className={cn(
+                            item.icon,
+                            "text-sm",
+                            isCollapsed ? "" : "mr-3"
+                          )}></i>
+                          {!isCollapsed && <span>{item.label}</span>}
+                        </button>
+                      );
+
+                      if (!isCollapsed) {
+                        return (
+                          <div key={item.id}>
+                            {navButton}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <Tooltip key={item.id}>
+                          <TooltipTrigger asChild>
+                            {navButton}
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="py-2">
+                            <div className="space-y-0.5">
+                              <p className="text-sm font-medium">{item.label}</p>
+                              <p className="text-xs text-muted-foreground">{section.label}</p>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </nav>
+          </TooltipProvider>
         </div>
       </div>
     </>

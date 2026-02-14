@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Landee Dashboard Wireframes</title>
+    <style>
+      :root {
+        --bg: #f7f7f7;
+        --ink: #222;
+        --muted: #666;
+        --line: #cfcfcf;
+        --panel: #fff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      .app {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        min-height: 100vh;
+      }
+      .sidebar {
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+        padding: 16px;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+      .brand {
+        font-weight: 700;
+        margin-bottom: 16px;
+      }
+      .nav a {
+        display: block;
+        padding: 8px 10px;
+        color: var(--ink);
+        text-decoration: none;
+        border-radius: 6px;
+        margin-bottom: 4px;
+      }
+      .nav a:hover {
+        background: #eee;
+      }
+      .main {
+        padding: 24px 32px;
+      }
+      .page {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        padding: 20px;
+        margin-bottom: 24px;
+      }
+      .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 12px;
+        margin-bottom: 16px;
+      }
+      .title { font-size: 20px; font-weight: 700; }
+      .actions { display: flex; gap: 8px; }
+      .btn {
+        border: 1px solid var(--line);
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: #f2f2f2;
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 12px;
+      }
+      .grid {
+        display: grid;
+        gap: 12px;
+      }
+      .grid-2 { grid-template-columns: 1fr 1fr; }
+      .grid-3 { grid-template-columns: repeat(3, 1fr); }
+      .box {
+        border: 1px dashed var(--line);
+        padding: 12px;
+        min-height: 80px;
+        background: #fafafa;
+      }
+      .kpi {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .kpi .box { min-height: 48px; }
+      .muted { color: var(--muted); font-size: 12px; }
+      .right-panel {
+        border-left: 1px solid var(--line);
+        padding-left: 12px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        gap: 12px;
+      }
+      @media (max-width: 1000px) {
+        .app { grid-template-columns: 1fr; }
+        .sidebar { position: static; height: auto; }
+        .row { grid-template-columns: 1fr; }
+        .grid-2, .grid-3 { grid-template-columns: 1fr; }
+        .kpi { grid-template-columns: 1fr 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">Landee Wireframes</div>
+        <nav class="nav">
+          <a href="#overview">Overview</a>
+          <a href="#collections">Collections</a>
+          <a href="#properties">Properties & Units</a>
+          <a href="#tenants">Tenants & Leases</a>
+          <a href="#maintenance">Maintenance</a>
+          <a href="#payments">Payments (Tenant)</a>
+          <a href="#reports">Reports</a>
+          <a href="#documents">Documents</a>
+          <a href="#settings">Profile & Settings</a>
+        </nav>
+        <div class="muted" style="margin-top:12px;">Click items to jump between pages.</div>
+      </aside>
+
+      <main class="main">
+        <section id="overview" class="page">
+          <div class="page-header">
+            <div class="title">Overview</div>
+            <div class="actions">
+              <a class="btn" href="#tenants">Add tenant</a>
+              <a class="btn" href="#collections">Record payment</a>
+            </div>
+          </div>
+          <div class="kpi">
+            <div class="box">Collected</div>
+            <div class="box">Overdue</div>
+            <div class="box">Occupancy</div>
+            <div class="box">Pending maintenance</div>
+          </div>
+          <div class="grid grid-2">
+            <div class="box">Next Actions (overdue, expiring, unassigned)</div>
+            <div class="box">Collections Trend Chart</div>
+          </div>
+          <div class="grid grid-3" style="margin-top:12px;">
+            <div class="box">Latest Payments</div>
+            <div class="box">New Tenants/Leases</div>
+            <div class="box">Maintenance Snapshot</div>
+          </div>
+          <div class="box" style="margin-top:12px;">Activity Feed</div>
+        </section>
+
+        <section id="collections" class="page">
+          <div class="page-header">
+            <div class="title">Collections</div>
+            <div class="actions">
+              <a class="btn" href="#collections">Record payment</a>
+              <a class="btn" href="#reports">Export</a>
+            </div>
+          </div>
+          <div class="kpi">
+            <div class="box">Due this month</div>
+            <div class="box">Collected</div>
+            <div class="box">Overdue</div>
+            <div class="box">Late rate</div>
+          </div>
+          <div class="grid grid-2">
+            <div class="box">Rent Status by Property</div>
+            <div class="box">Reminders / Dunning Panel</div>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <div class="box">Payments Table + Filters</div>
+            <div class="box right-panel">Payment Detail / Receipt</div>
+          </div>
+        </section>
+
+        <section id="properties" class="page">
+          <div class="page-header">
+            <div class="title">Properties & Units</div>
+            <div class="actions">
+              <a class="btn" href="#properties">Add property</a>
+              <a class="btn" href="#properties">Add unit</a>
+            </div>
+          </div>
+          <div class="row">
+            <div class="box">Property List (cards)</div>
+            <div class="box right-panel">Property Actions (edit, archive)</div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px;">
+            <div class="box">Property Overview KPIs</div>
+            <div class="box">Occupancy Chart</div>
+          </div>
+          <div class="grid grid-2" style="margin-top:12px;">
+            <div class="box">Units Grid</div>
+            <div class="box">Documents Panel</div>
+          </div>
+        </section>
+
+        <section id="tenants" class="page">
+          <div class="page-header">
+            <div class="title">Tenants & Leases</div>
+            <div class="actions">
+              <a class="btn" href="#tenants">Add tenant</a>
+              <a class="btn" href="#tenants">Create lease</a>
+            </div>
+          </div>
+          <div class="box">Status Filters (Active, Pending, Overdue)</div>
+          <div class="row" style="margin-top:12px;">
+            <div class="box">Tenant List</div>
+            <div class="box right-panel">Tenant Detail + Lease Status</div>
+          </div>
+          <div class="box" style="margin-top:12px;">Lease Timeline / Renewal Calendar</div>
+        </section>
+
+        <section id="maintenance" class="page">
+          <div class="page-header">
+            <div class="title">Maintenance</div>
+            <div class="actions">
+              <a class="btn" href="#maintenance">New request</a>
+              <a class="btn" href="#maintenance">Assign</a>
+            </div>
+          </div>
+          <div class="kpi">
+            <div class="box">Open</div>
+            <div class="box">In progress</div>
+            <div class="box">Urgent</div>
+            <div class="box">Avg resolution</div>
+          </div>
+          <div class="row">
+            <div class="box">Kanban Board</div>
+            <div class="box right-panel">Request Detail / Actions</div>
+          </div>
+          <div class="box" style="margin-top:12px;">Maintenance History</div>
+        </section>
+
+        <section id="payments" class="page">
+          <div class="page-header">
+            <div class="title">Payments (Tenant)</div>
+            <div class="actions">
+              <a class="btn" href="#payments">Pay now</a>
+            </div>
+          </div>
+          <div class="box">Balance Summary + Next Due Date</div>
+          <div class="box" style="margin-top:12px;">Payment Instructions (M-Pesa / Bank)</div>
+          <div class="box" style="margin-top:12px;">Payment History (Receipts)</div>
+        </section>
+
+        <section id="reports" class="page">
+          <div class="page-header">
+            <div class="title">Reports</div>
+            <div class="actions">
+              <a class="btn" href="#reports">Export</a>
+            </div>
+          </div>
+          <div class="grid grid-2">
+            <div class="box">Report Tiles</div>
+            <div class="box">Filters</div>
+          </div>
+          <div class="box" style="margin-top:12px;">Report Preview</div>
+          <div class="box" style="margin-top:12px;">Export History</div>
+        </section>
+
+        <section id="documents" class="page">
+          <div class="page-header">
+            <div class="title">Documents</div>
+            <div class="actions">
+              <a class="btn" href="#documents">Upload</a>
+            </div>
+          </div>
+          <div class="box">Category Chips</div>
+          <div class="row" style="margin-top:12px;">
+            <div class="box">Document Grid/List</div>
+            <div class="box right-panel">Document Preview</div>
+          </div>
+        </section>
+
+        <section id="settings" class="page">
+          <div class="page-header">
+            <div class="title">Profile & Settings</div>
+          </div>
+          <div class="grid grid-2">
+            <div class="box">Profile Card</div>
+            <div class="box">Security (password, 2FA)</div>
+          </div>
+          <div class="box" style="margin-top:12px;">Payment Channels</div>
+          <div class="box" style="margin-top:12px;">Notifications Preferences</div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

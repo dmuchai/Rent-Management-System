@@ -28,6 +28,24 @@ export default function ReportGenerator() {
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]);
 
+  const setPresetRange = (preset: "month" | "last-month" | "ytd") => {
+    const now = new Date();
+    if (preset === "month") {
+      setStartDate(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]);
+      setEndDate(new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0]);
+      return;
+    }
+
+    if (preset === "last-month") {
+      setStartDate(new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0]);
+      setEndDate(new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0]);
+      return;
+    }
+
+    setStartDate(new Date(now.getFullYear(), 0, 1).toISOString().split("T")[0]);
+    setEndDate(now.toISOString().split("T")[0]);
+  };
+
   const { data: reportData, isLoading } = useQuery<ReportData>({
     queryKey: ["/api/reports/payments", { startDate, endDate }],
     retry: false,
@@ -61,9 +79,12 @@ export default function ReportGenerator() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">Financial Reports</h2>
-        <Button 
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold">Reports</h2>
+          <p className="text-sm text-muted-foreground">Generate summaries and export financial data.</p>
+        </div>
+        <Button
           onClick={handleExportReport}
           disabled={!reportData || isLoading}
           data-testid="button-export-report"
@@ -72,10 +93,58 @@ export default function ReportGenerator() {
         </Button>
       </div>
 
-      {/* Report Filters */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Total Expected</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">KES {reportData?.stats.totalExpected?.toLocaleString() || 0}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Collected</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold text-chart-2">KES {reportData?.stats.totalCollected?.toLocaleString() || 0}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Outstanding</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold text-destructive">KES {reportData?.stats.totalOverdue?.toLocaleString() || 0}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Collection Rate</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold text-chart-2">{reportData?.stats.collectionRate?.toFixed(1) || 0}%</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
-        <CardContent className="p-6">
-          <div className="grid md:grid-cols-4 gap-4">
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => setPresetRange("month")}>
+              This month
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setPresetRange("last-month")}>
+              Last month
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setPresetRange("ytd")}>
+              Year to date
+            </Button>
+          </div>
+          <div className="grid gap-4 md:grid-cols-4">
             <div>
               <Label htmlFor="reportType">Report Type</Label>
               <Select value={reportType} onValueChange={setReportType}>
@@ -119,7 +188,7 @@ export default function ReportGenerator() {
       </Card>
 
       {/* Report Summary */}
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid gap-6 md:grid-cols-2">
         {/* Income Summary */}
         <Card>
           <CardHeader>

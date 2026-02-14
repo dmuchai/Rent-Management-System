@@ -233,8 +233,8 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
                 <button className="relative p-2 text-muted-foreground hover:text-foreground transition-colors" data-testid="button-notifications">
                   <i className="fas fa-bell"></i>
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {unreadCount}
+                    <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-[10px] rounded-full min-w-[1rem] h-4 px-1 flex items-center justify-center">
+                      {unreadCount > 9 ? "9+" : unreadCount}
                     </span>
                   )}
                 </button>

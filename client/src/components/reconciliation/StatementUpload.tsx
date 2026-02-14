@@ -139,7 +139,8 @@ export function StatementUpload({ onUploadComplete }: StatementUploadProps) {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+        <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
@@ -294,7 +295,31 @@ export function StatementUpload({ onUploadComplete }: StatementUploadProps) {
             </div>
           )}
         </CardContent>
-      </Card>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>How it works</CardTitle>
+            <CardDescription>Match payments to invoices in minutes.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-sm font-medium">1. Export a CSV</p>
+                <p className="text-xs text-muted-foreground">Download your M-Pesa or bank statement as CSV.</p>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-sm font-medium">2. Upload the file</p>
+                <p className="text-xs text-muted-foreground">We process and match transactions automatically.</p>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-sm font-medium">3. Review results</p>
+                <p className="text-xs text-muted-foreground">Confirm matches or resolve unmatched entries.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Instructions */}
       <Card>
