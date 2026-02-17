@@ -128,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { token, password } = acceptSchema.parse(req.body);
 
       const invitations = await sql`
-        SELECT id, landlord_id, email, first_name, last_name, invitation_sent_at, status, expires_at, property_id, unit_id
+        SELECT id, landlord_id, email, first_name, last_name, invitation_token, invitation_sent_at, status, expires_at, property_id, unit_id
         FROM public.caretaker_invitations
         WHERE invitation_token = ${token}
         AND status IN ('invited', 'pending')
@@ -172,9 +172,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const { data: existingUsers, error: existingAuthError } = await supabaseAdmin.auth.admin.listUsers(
-        ({ page: 1, perPage: 1, filter: `email=eq.${invitation.email}` } as any)
-      );
+      const adminApi = supabaseAdmin.auth.admin as unknown as {
+        getUserByEmail?: (email: string) => Promise<{ data: { user: any | null } | null; error: any }>;
+        listUsers?: (options?: { page?: number; perPage?: number }) => Promise<{ data: { users: any[] } | null; error: any }>;
+      };
+
+      const { data: existingAuthData, error: existingAuthError } = adminApi.getUserByEmail
+        ? await adminApi.getUserByEmail(invitation.email)
+        : await adminApi.listUsers?.({ page: 1, perPage: 1000 }) || { data: { users: [] }, error: null };
 
       if (existingAuthError) {
         return res.status(500).json({
@@ -183,7 +188,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const existingAuthUser = existingUsers?.users?.[0];
+      const existingAuthUser = (() => {
+        if (existingAuthData && "user" in existingAuthData) {
+          return existingAuthData.user;
+        }
+        if (existingAuthData && "users" in existingAuthData) {
+          return existingAuthData.users?.find((user: any) => user.email === invitation.email) || null;
+        }
+        return null;
+      })();
 
       let authUserId: string;
       let createdAuthUserId: string | null = null;
@@ -279,9 +292,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         );
 
         if (updateError) {
+          try {
+            await sql`
+              DELETE FROM public.caretaker_assignments
+              WHERE caretaker_id = ${authUserId}
+                AND landlord_id = ${invitation.landlord_id}
+                AND property_id IS NOT DISTINCT FROM ${invitation.property_id || null}
+                AND unit_id IS NOT DISTINCT FROM ${invitation.unit_id || null}
+            `;
+
+            if (!existingUserRecord) {
+              await sql`
+                DELETE FROM public.users WHERE id = ${authUserId}
+              `;
+            }
+
+            await sql`
+              UPDATE public.caretaker_invitations
+              SET
+                invitation_accepted_at = NULL,
+                status = ${invitation.status},
+                invitation_token = ${invitation.invitation_token},
+                updated_at = NOW()
+              WHERE id = ${invitation.id}
+            `;
+          } catch (rollbackError) {
+            console.error('Failed to rollback caretaker invitation after auth update error:', rollbackError);
+          }
+
           return res.status(500).json({
             error: 'Account update failed',
-            message: 'Account was created, but updating auth failed. Please contact support.'
+            message: 'Failed to update account credentials. Please contact support.'
           });
         }
       }

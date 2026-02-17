@@ -2730,6 +2730,29 @@ export async function registerRoutes(app: Express) {
         }
       }
 
+      if (updateData.unitId) {
+        const { data: unit } = await supabase
+          .from("units")
+          .select("id, property_id")
+          .eq("id", updateData.unitId)
+          .single();
+
+        if (!unit) {
+          return res.status(403).json({ message: "Unit not found or does not belong to you" });
+        }
+
+        const { data: property } = await supabase
+          .from("properties")
+          .select("id")
+          .eq("id", unit.property_id)
+          .eq("owner_id", userId)
+          .single();
+
+        if (!property) {
+          return res.status(403).json({ message: "Unit not found or does not belong to you" });
+        }
+      }
+
       const updates: any = { updated_at: new Date().toISOString() };
       if (updateData.status !== undefined) updates.status = updateData.status;
       if (updateData.propertyId !== undefined) updates.property_id = updateData.propertyId;
