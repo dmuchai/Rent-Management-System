@@ -2108,6 +2108,42 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "User is not a caretaker" });
       }
 
+      if (assignmentData.propertyId) {
+        const { data: property } = await supabase
+          .from("properties")
+          .select("id")
+          .eq("id", assignmentData.propertyId)
+          .eq("owner_id", userId)
+          .single();
+
+        if (!property) {
+          return res.status(403).json({ message: "You do not own the specified property/unit" });
+        }
+      }
+
+      if (assignmentData.unitId) {
+        const { data: unit } = await supabase
+          .from("units")
+          .select("id, property_id")
+          .eq("id", assignmentData.unitId)
+          .single();
+
+        if (!unit) {
+          return res.status(403).json({ message: "You do not own the specified property/unit" });
+        }
+
+        const { data: property } = await supabase
+          .from("properties")
+          .select("id")
+          .eq("id", unit.property_id)
+          .eq("owner_id", userId)
+          .single();
+
+        if (!property) {
+          return res.status(403).json({ message: "You do not own the specified property/unit" });
+        }
+      }
+
       const { data, error } = await supabase
         .from("caretaker_assignments")
         .insert([
@@ -2678,6 +2714,20 @@ export async function registerRoutes(app: Express) {
 
       if (assignment.landlord_id !== userId) {
         return res.status(403).json({ message: "Unauthorized: Assignment does not belong to you" });
+      }
+
+      // Validate new property/unit ownership if being changed
+      if (updateData.propertyId) {
+        const { data: property } = await supabase
+          .from("properties")
+          .select("id")
+          .eq("id", updateData.propertyId)
+          .eq("owner_id", userId)
+          .single();
+
+        if (!property) {
+          return res.status(403).json({ message: "Property not found or does not belong to you" });
+        }
       }
 
       const updates: any = { updated_at: new Date().toISOString() };

@@ -15,6 +15,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 type CaretakerSection = "overview" | "tenants" | "maintenance" | "profile";
 
+const CARETAKER_SECTIONS: ReadonlySet<CaretakerSection> = new Set<CaretakerSection>([
+  "overview",
+  "tenants",
+  "maintenance",
+  "profile",
+]);
+
+const isCaretakerSection = (value: string): value is CaretakerSection =>
+  CARETAKER_SECTIONS.has(value as CaretakerSection);
+
 export default function CaretakerDashboard() {
   const [activeSection, setActiveSection] = useState<CaretakerSection>("overview");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -51,6 +61,7 @@ export default function CaretakerDashboard() {
       const result = await response.json();
       return Array.isArray(result) ? result : [];
     },
+    enabled: isAuthenticated,
     retry: false,
   });
 
@@ -61,6 +72,7 @@ export default function CaretakerDashboard() {
       const result = await response.json();
       return Array.isArray(result) ? result : (result.data || []);
     },
+    enabled: isAuthenticated,
     retry: false,
   });
 
@@ -212,7 +224,11 @@ export default function CaretakerDashboard() {
     <div className="min-h-screen bg-background md:flex">
       <Sidebar
         activeSection={activeSection}
-        onSectionChange={(section) => setActiveSection(section as CaretakerSection)}
+        onSectionChange={(section) => {
+          if (isCaretakerSection(section)) {
+            setActiveSection(section);
+          }
+        }}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         isCollapsed={isSidebarCollapsed}
@@ -223,7 +239,11 @@ export default function CaretakerDashboard() {
         <div className="sticky top-0 z-30">
           <Header
             title={sectionTitles[activeSection]}
-            onSectionChange={(section) => setActiveSection(section as CaretakerSection)}
+            onSectionChange={(section) => {
+              if (isCaretakerSection(section)) {
+                setActiveSection(section);
+              }
+            }}
             onMenuClick={() => setIsSidebarOpen(true)}
             onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             isSidebarCollapsed={isSidebarCollapsed}

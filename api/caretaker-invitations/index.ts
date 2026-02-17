@@ -172,24 +172,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-      const existingAuthUser = existingUsers?.users?.find(user => user.email === invitation.email);
+      const { data: existingUsers, error: existingAuthError } = await supabaseAdmin.auth.admin.listUsers(
+        ({ page: 1, perPage: 1, filter: `email=eq.${invitation.email}` } as any)
+      );
+
+      if (existingAuthError) {
+        return res.status(500).json({
+          error: 'Account lookup failed',
+          message: 'Failed to verify existing account. Please try again.'
+        });
+      }
+
+      const existingAuthUser = existingUsers?.users?.[0];
 
       let authUserId: string;
+      let createdAuthUserId: string | null = null;
+      const shouldUpdateExistingAuth = Boolean(existingAuthUser);
 
       if (existingAuthUser) {
-        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-          existingAuthUser.id,
-          { password, user_metadata: { role: 'caretaker', first_name: invitation.first_name, last_name: invitation.last_name } }
-        );
-
-        if (updateError) {
-          return res.status(500).json({
-            error: 'Account update failed',
-            message: 'Failed to update account. Please contact support.'
-          });
-        }
-
         authUserId = existingAuthUser.id;
       } else {
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -211,6 +211,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         authUserId = authData.user.id;
+        createdAuthUserId = authData.user.id;
       }
 
       try {
@@ -257,9 +258,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       } catch (dbError) {
         console.error('Caretaker invitation DB transaction failed:', dbError);
-        if (!existingAuthUser) {
+        if (createdAuthUserId) {
           try {
-            await supabaseAdmin.auth.admin.deleteUser(authUserId);
+            await supabaseAdmin.auth.admin.deleteUser(createdAuthUserId);
           } catch (deleteError) {
             console.error('Failed to delete orphaned caretaker user:', deleteError);
           }
@@ -269,6 +270,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           error: 'Account creation failed',
           message: 'Failed to complete account setup. Please try again.'
         });
+      }
+
+      if (shouldUpdateExistingAuth && existingAuthUser) {
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+          existingAuthUser.id,
+          { password, user_metadata: { role: 'caretaker', first_name: invitation.first_name, last_name: invitation.last_name } }
+        );
+
+        if (updateError) {
+          return res.status(500).json({
+            error: 'Account update failed',
+            message: 'Account was created, but updating auth failed. Please contact support.'
+          });
+        }
       }
 
       return res.status(201).json({
@@ -383,7 +398,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST' && action === 'resend') {
     return requireAuth(async (req, res, auth) => {
       const sql = createDbConnection();
-
       try {
         if (auth.role !== 'landlord' && auth.role !== 'property_manager') {
           return res.status(403).json({ error: 'Only landlords can resend caretaker invitations' });
@@ -398,10 +412,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const [invitation] = await sql`
           SELECT * FROM public.caretaker_invitations
           WHERE id = ${invitationId} AND landlord_id = ${auth.userId}
+          AND status IN ('pending', 'invited')
         `;
 
         if (!invitation) {
-          return res.status(404).json({ error: 'Invitation not found' });
+          return res.status(404).json({ error: 'Invitation not found or cannot be resent' });
         }
 
         const token = crypto.randomBytes(32).toString('hex');
