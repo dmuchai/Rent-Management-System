@@ -172,14 +172,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const adminApi = supabaseAdmin.auth.admin as unknown as {
-        getUserByEmail?: (email: string) => Promise<{ data: { user: any | null } | null; error: any }>;
-        listUsers?: (options?: { page?: number; perPage?: number }) => Promise<{ data: { users: any[] } | null; error: any }>;
-      };
+      const adminApi = supabaseAdmin.auth.admin;
 
-      const { data: existingAuthData, error: existingAuthError } = adminApi.getUserByEmail
-        ? await adminApi.getUserByEmail(invitation.email)
-        : await adminApi.listUsers?.({ page: 1, perPage: 1000 }) || { data: { users: [] }, error: null };
+      const hasGetUserByEmail = (
+        api: typeof adminApi
+      ): api is typeof adminApi & {
+        getUserByEmail: (email: string) => Promise<{ data: { user: any | null } | null; error: any }>;
+      } => typeof (api as { getUserByEmail?: unknown }).getUserByEmail === 'function';
+
+      const hasListUsers = (
+        api: typeof adminApi
+      ): api is typeof adminApi & {
+        listUsers: (options?: { page?: number; perPage?: number }) => Promise<{ data: { users: any[] } | null; error: any }>;
+      } => typeof (api as { listUsers?: unknown }).listUsers === 'function';
+
+      let existingAuthUser: any | null = null;
+      let existingAuthError: any | null = null;
+
+      if (hasGetUserByEmail(adminApi)) {
+        const { data, error } = await adminApi.getUserByEmail(invitation.email);
+        existingAuthError = error;
+        existingAuthUser = data?.user ?? null;
+      } else if (hasListUsers(adminApi)) {
+        const perPage = 1000;
+        let page = 1;
+
+        while (true) {
+          const { data, error } = await adminApi.listUsers({ page, perPage });
+          if (error) {
+            existingAuthError = error;
+            break;
+          }
+
+          const users = data?.users || [];
+          existingAuthUser = users.find((user: any) => user.email === invitation.email) || null;
+
+          if (existingAuthUser || users.length < perPage) {
+            break;
+          }
+
+          page += 1;
+        }
+      } else {
+        return res.status(500).json({
+          error: 'Account lookup failed',
+          message: 'Admin API does not support user lookup by email. Please update the Supabase client.'
+        });
+      }
 
       if (existingAuthError) {
         return res.status(500).json({
@@ -187,16 +226,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           message: 'Failed to verify existing account. Please try again.'
         });
       }
-
-      const existingAuthUser = (() => {
-        if (existingAuthData && "user" in existingAuthData) {
-          return existingAuthData.user;
-        }
-        if (existingAuthData && "users" in existingAuthData) {
-          return existingAuthData.users?.find((user: any) => user.email === invitation.email) || null;
-        }
-        return null;
-      })();
 
       let authUserId: string;
       let createdAuthUserId: string | null = null;
@@ -293,29 +322,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (updateError) {
           try {
-            await sql`
-              DELETE FROM public.caretaker_assignments
-              WHERE caretaker_id = ${authUserId}
-                AND landlord_id = ${invitation.landlord_id}
-                AND property_id IS NOT DISTINCT FROM ${invitation.property_id || null}
-                AND unit_id IS NOT DISTINCT FROM ${invitation.unit_id || null}
-            `;
-
-            if (!existingUserRecord) {
-              await sql`
-                DELETE FROM public.users WHERE id = ${authUserId}
+            await sql.begin(async (tx: any) => {
+              await tx`
+                DELETE FROM public.caretaker_assignments
+                WHERE caretaker_id = ${authUserId}
+                  AND landlord_id = ${invitation.landlord_id}
+                  AND property_id IS NOT DISTINCT FROM ${invitation.property_id || null}
+                  AND unit_id IS NOT DISTINCT FROM ${invitation.unit_id || null}
               `;
-            }
 
-            await sql`
-              UPDATE public.caretaker_invitations
-              SET
-                invitation_accepted_at = NULL,
-                status = ${invitation.status},
-                invitation_token = ${invitation.invitation_token},
-                updated_at = NOW()
-              WHERE id = ${invitation.id}
-            `;
+              if (!existingUserRecord) {
+                await tx`
+                  DELETE FROM public.users WHERE id = ${authUserId}
+                `;
+              }
+
+              await tx`
+                UPDATE public.caretaker_invitations
+                SET
+                  invitation_accepted_at = NULL,
+                  status = ${invitation.status},
+                  invitation_token = ${invitation.invitation_token},
+                  updated_at = NOW()
+                WHERE id = ${invitation.id}
+              `;
+            });
           } catch (rollbackError) {
             console.error('Failed to rollback caretaker invitation after auth update error:', rollbackError);
           }
@@ -362,11 +393,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           email: z.string().email(),
           firstName: z.string().min(1),
           lastName: z.string().min(1),
-          propertyId: z.string().optional().nullable(),
-          unitId: z.string().optional().nullable(),
-        }).refine((data) => data.propertyId || data.unitId, {
-          message: 'Either propertyId or unitId is required',
-          path: ['propertyId']
+          propertyId: z.string().min(1, 'Property is required'),
         });
 
         const inviteData = inviteSchema.parse(req.body);
@@ -380,17 +407,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
-        if (inviteData.unitId) {
-          const [unit] = await sql`
-            SELECT u.id FROM public.units u
-            JOIN public.properties p ON p.id = u.property_id
-            WHERE u.id = ${inviteData.unitId} AND p.owner_id = ${auth.userId}
-          `;
-          if (!unit) {
-            return res.status(403).json({ error: 'Unit not found for this landlord' });
-          }
-        }
-
         const token = crypto.randomBytes(32).toString('hex');
         const expiresAt = new Date(Date.now() + DEFAULT_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
@@ -400,7 +416,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             invitation_token, status, expires_at, property_id, unit_id
           ) VALUES (
             ${auth.userId}, ${auth.userId}, ${inviteData.email}, ${inviteData.firstName}, ${inviteData.lastName},
-            ${token}, 'pending', ${expiresAt.toISOString()}, ${inviteData.propertyId || null}, ${inviteData.unitId || null}
+            ${token}, 'pending', ${expiresAt.toISOString()}, ${inviteData.propertyId || null}, null
           ) RETURNING *
         `;
 

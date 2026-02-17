@@ -2,6 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { insertTenantSchema, type InsertTenant } from "@shared/schema";
+import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -36,22 +37,49 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface TenantFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tenant?: any;
   mode?: 'view' | 'edit' | 'create';
+  propertyOptions?: Array<{ id: string; name: string }>;
+  requireProperty?: boolean;
 }
 
-export default function TenantForm({ open, onOpenChange, tenant, mode = 'create' }: TenantFormProps) {
+type TenantFormValues = InsertTenant & { propertyId?: string };
+
+export default function TenantForm({
+  open,
+  onOpenChange,
+  tenant,
+  mode = 'create',
+  propertyOptions,
+  requireProperty = false,
+}: TenantFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEdit = mode === 'edit';
   const isView = mode === 'view';
 
-  const form = useForm<InsertTenant>({
-    resolver: zodResolver(insertTenantSchema),
+  const formSchema = insertTenantSchema
+    .extend({
+      propertyId: z.string().optional(),
+    })
+    .refine((data) => !requireProperty || Boolean(data.propertyId), {
+      message: "Property is required",
+      path: ["propertyId"],
+    });
+
+  const form = useForm<TenantFormValues>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       firstName: tenant?.firstName || "",
       lastName: tenant?.lastName || "",
@@ -59,14 +87,16 @@ export default function TenantForm({ open, onOpenChange, tenant, mode = 'create'
       phone: tenant?.phone || "",
       emergencyContact: tenant?.emergencyContact || "",
       userId: tenant?.userId || undefined,
+      propertyId: tenant?.propertyId || "",
     },
   });
 
-  const mutation = useMutation<TenantResponse, Error, InsertTenant>({
-    mutationFn: async (data: InsertTenant) => {
+  const mutation = useMutation<TenantResponse, Error, TenantFormValues>({
+    mutationFn: async (data: TenantFormValues) => {
       const url = isEdit ? `/api/tenants/${tenant.id}` : "/api/tenants";
       const method = isEdit ? "PUT" : "POST";
-      const response = await apiRequest(method, url, data);
+      const payload = { ...data };
+      const response = await apiRequest(method, url, payload);
       return await response.json() as TenantResponse;
     },
     onSuccess: (data: TenantResponse) => {
@@ -125,7 +155,7 @@ export default function TenantForm({ open, onOpenChange, tenant, mode = 'create'
     },
   });
 
-  const onSubmit = (data: InsertTenant) => {
+  const onSubmit = (data: TenantFormValues) => {
     mutation.mutate(data);
   };
 
@@ -169,6 +199,37 @@ export default function TenantForm({ open, onOpenChange, tenant, mode = 'create'
                 )}
               />
             </div>
+
+            {propertyOptions && propertyOptions.length > 0 && (
+              <FormField
+                control={form.control}
+                name="propertyId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Property</FormLabel>
+                    <FormControl>
+                      <Select
+                        value={field.value || ""}
+                        onValueChange={field.onChange}
+                        disabled={isView}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select property" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {propertyOptions.map((property) => (
+                            <SelectItem key={property.id} value={property.id}>
+                              {property.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

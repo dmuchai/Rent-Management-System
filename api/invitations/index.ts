@@ -292,21 +292,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(401).json({ error: 'Invalid or expired token' });
       }
 
-      // Verify tenant belongs to this landlord through authoritative property ownership chain
-      // This protects against landlord_id being stale or tampered with
+      const [userProfile] = await sql`
+        SELECT id, role FROM public.users WHERE id = ${user.id}
+      `;
+
+      const isCaretaker = userProfile?.role === 'caretaker';
+
+      // Verify tenant belongs to this landlord (or assigned caretaker)
       const tenants = await sql`
         SELECT DISTINCT t.*
         FROM public.tenants t
         LEFT JOIN public.leases l ON t.id = l.tenant_id
         LEFT JOIN public.units u ON l.unit_id = u.id
         LEFT JOIN public.properties p ON u.property_id = p.id
+        LEFT JOIN public.caretaker_assignments ca
+          ON ca.property_id = p.id AND ca.caretaker_id = ${user.id} AND ca.status = 'active'
         WHERE t.id = ${tenantId}
         AND t.account_status IN ('pending_invitation', 'invited')
         AND (
-          -- Either tenant has a lease with landlord's property
           p.owner_id = ${user.id}
-          -- OR tenant was created by this landlord (for tenants without leases yet)
           OR t.landlord_id = ${user.id}
+          OR (isCaretaker AND (t.created_by = ${user.id} OR ca.id IS NOT NULL))
         )
       `;
 
@@ -327,11 +333,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           invitation_sent_at = NOW(),
           account_status = 'invited'
         WHERE id = ${tenantId}
-        AND user_id = ${user.id}
       `;
 
+      const landlordId = isCaretaker ? tenants[0].landlord_id : user.id;
       const [landlord] = await sql`
-        SELECT first_name, last_name FROM public.users WHERE id = ${user.id}
+        SELECT first_name, last_name FROM public.users WHERE id = ${landlordId}
       `;
 
       try {

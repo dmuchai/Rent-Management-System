@@ -13,11 +13,12 @@ import MaintenanceRequestList from "@/components/maintenance/MaintenanceRequestL
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type CaretakerSection = "overview" | "tenants" | "maintenance" | "profile";
+type CaretakerSection = "overview" | "tenants" | "properties" | "maintenance" | "profile";
 
 const CARETAKER_SECTIONS: ReadonlySet<CaretakerSection> = new Set<CaretakerSection>([
   "overview",
   "tenants",
+  "properties",
   "maintenance",
   "profile",
 ]);
@@ -37,6 +38,7 @@ export default function CaretakerDashboard() {
   const sectionTitles: Record<CaretakerSection, string> = {
     overview: "Dashboard",
     tenants: "Tenants",
+    properties: "Properties",
     maintenance: "Maintenance",
     profile: "Profile",
   };
@@ -75,6 +77,52 @@ export default function CaretakerDashboard() {
     enabled: isAuthenticated,
     retry: false,
   });
+
+  const { data: assignedProperties = [], isLoading: propertiesLoading } = useQuery({
+    queryKey: ["/api/caretakers/properties"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/caretakers/properties");
+      const result = await response.json();
+      return Array.isArray(result) ? result : [];
+    },
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  const { data: leases = [], isLoading: leasesLoading } = useQuery({
+    queryKey: ["/api/leases"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/leases");
+      const result = await response.json();
+      return Array.isArray(result) ? result : [];
+    },
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  const propertySummaries = useMemo(() => {
+    return assignedProperties.map((property: any) => {
+      const propertyLeases = leases.filter((lease: any) => {
+        const leasePropertyId = lease.property?.id || lease.unit?.property?.id;
+        return leasePropertyId === property.id;
+      });
+
+      const tenantNames = Array.from(new Set(
+        propertyLeases
+          .map((lease: any) => lease.tenant)
+          .filter(Boolean)
+          .map((tenant: any) => `${tenant.firstName || ""} ${tenant.lastName || ""}`.trim())
+          .filter(Boolean)
+      ));
+
+      return {
+        ...property,
+        leaseCount: propertyLeases.length,
+        tenantCount: tenantNames.length,
+        tenantNames,
+      };
+    });
+  }, [assignedProperties, leases]);
 
   const overviewStats = useMemo(() => {
     const pending = maintenanceRequests.filter((req: any) => req.status === "open" || req.status === "pending").length;
@@ -122,7 +170,7 @@ export default function CaretakerDashboard() {
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle>Recent Tenants</CardTitle>
@@ -162,6 +210,35 @@ export default function CaretakerDashboard() {
             <MaintenanceRequestList limit={5} showViewAll={true} />
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Assigned Properties</CardTitle>
+            <CardDescription>Properties you are responsible for.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {propertiesLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((item) => (
+                  <Skeleton key={item} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : assignedProperties.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No properties assigned yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {assignedProperties.slice(0, 5).map((property: any) => (
+                  <div key={property.id} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{property.name}</p>
+                      <p className="text-xs text-muted-foreground">{property.address}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -175,7 +252,15 @@ export default function CaretakerDashboard() {
           <TenantTable
             tenants={tenants}
             loading={tenantsLoading}
-            readOnly={true}
+            readOnly={false}
+            canCreate={true}
+            canResend={true}
+            canEdit={false}
+            canDelete={false}
+            canApprove={false}
+            canAssign={false}
+            propertyOptions={assignedProperties}
+            requireProperty={true}
           />
         );
       case "maintenance":
@@ -187,6 +272,53 @@ export default function CaretakerDashboard() {
             </CardHeader>
             <CardContent>
               <MaintenanceRequestList limit={10} showViewAll={true} />
+            </CardContent>
+          </Card>
+        );
+      case "properties":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Assigned Properties</CardTitle>
+              <CardDescription>Properties and tenants you support.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {propertiesLoading || leasesLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((item) => (
+                    <Skeleton key={item} className="h-10 w-full" />
+                  ))}
+                </div>
+              ) : propertySummaries.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No properties assigned yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {propertySummaries.map((property: any) => (
+                    <div key={property.id} className="rounded-lg border border-border p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{property.name}</p>
+                          <p className="text-xs text-muted-foreground">{property.address}</p>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {property.tenantCount} tenant{property.tenantCount === 1 ? "" : "s"} • {property.leaseCount} lease{property.leaseCount === 1 ? "" : "s"}
+                        </div>
+                      </div>
+                      {property.tenantNames.length === 0 ? (
+                        <p className="mt-3 text-xs text-muted-foreground">No tenants linked to leases yet.</p>
+                      ) : (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {property.tenantNames.map((name: string) => (
+                            <span key={name} className="rounded-full bg-muted px-2 py-1 text-xs">
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         );

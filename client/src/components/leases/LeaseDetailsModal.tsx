@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +24,8 @@ interface LeaseDetailsModalProps {
 
 export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDetailsModalProps) {
   const [activeTab, setActiveTab] = useState("overview");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Fetch payments for this lease
   const { data: payments = [], isLoading: paymentsLoading } = useQuery({
@@ -48,6 +51,20 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
   };
 
   const getLeaseStatus = () => {
+    if (lease.status) {
+      const statusMap: Record<string, { label: string; color: string; variant: "secondary" | "outline" | "default" | "destructive" }> = {
+        draft: { label: "Draft", color: "bg-gray-100 text-gray-700", variant: "secondary" },
+        pending_landlord_signature: { label: "Pending Landlord Signature", color: "bg-amber-100 text-amber-800", variant: "outline" },
+        pending_tenant_signature: { label: "Pending Tenant Signature", color: "bg-blue-100 text-blue-700", variant: "outline" },
+        active: { label: "Active", color: "bg-green-100 text-green-700", variant: "default" },
+        rejected: { label: "Rejected", color: "bg-red-100 text-red-700", variant: "destructive" },
+        cancelled: { label: "Cancelled", color: "bg-gray-100 text-gray-700", variant: "secondary" },
+        expired: { label: "Expired", color: "bg-red-100 text-red-700", variant: "destructive" },
+      };
+
+      return statusMap[lease.status] || { label: "Unknown", color: "bg-gray-100 text-gray-700", variant: "secondary" };
+    }
+
     const now = new Date();
     const startDate = new Date(lease.startDate);
     const endDate = new Date(lease.endDate);
@@ -72,6 +89,31 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
   const status = getLeaseStatus();
   const leaseDuration = Math.ceil((new Date(lease.endDate).getTime() - new Date(lease.startDate).getTime()) / (1000 * 60 * 60 * 24));
   const daysRemaining = Math.ceil((new Date(lease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    const landlordSignMutation = useMutation({
+      mutationFn: async () => {
+        const response = await apiRequest("POST", `/api/leases/${lease.id}/landlord-sign`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || "Failed to sign lease");
+        }
+        return await response.json();
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/leases"] });
+        toast({
+          title: "Lease signed",
+          description: "Waiting on tenant signature.",
+        });
+      },
+      onError: (error: any) => {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to sign lease",
+          variant: "destructive",
+        });
+      },
+    });
+
   
   const totalPaid = payments
     .filter((p: any) => p.status === 'completed')
@@ -130,9 +172,20 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
                   </p>
                 )}
               </div>
-              <Badge variant={status.variant} className="text-lg px-4 py-2">
-                {status.label}
-              </Badge>
+              <div className="flex items-center gap-3">
+                {lease.status === "pending_landlord_signature" && (
+                  <Button
+                    size="sm"
+                    onClick={() => landlordSignMutation.mutate()}
+                    disabled={landlordSignMutation.isLoading}
+                  >
+                    {landlordSignMutation.isLoading ? "Signing..." : "Sign as Landlord"}
+                  </Button>
+                )}
+                <Badge variant={status.variant} className="text-lg px-4 py-2">
+                  {status.label}
+                </Badge>
+              </div>
             </div>
           </div>
 

@@ -218,6 +218,13 @@ export class SupabaseStorage {
           // Get property details for the unit
           const property = unit ? await this.getPropertyById(unit.propertyId) : null;
 
+          const propertyPayload = property ? {
+            id: property.id,
+            name: property.name,
+            address: property.address,
+            propertyType: property.propertyType
+          } : null;
+
           return {
             id: lease.id,
             tenantId: lease.tenant_id,
@@ -227,9 +234,16 @@ export class SupabaseStorage {
             monthlyRent: lease.monthly_rent,
             securityDeposit: lease.security_deposit,
             leaseDocumentUrl: lease.lease_document_url,
+            status: lease.status,
+            landlordSignedAt: lease.landlord_signed_at,
+            tenantSignedAt: lease.tenant_signed_at,
+            landlordSignedBy: lease.landlord_signed_by,
+            tenantSignedBy: lease.tenant_signed_by,
+            createdBy: lease.created_by,
             isActive: lease.is_active,
             createdAt: lease.created_at,
             updatedAt: lease.updated_at,
+            property: propertyPayload,
             // Include related data for display
             unit: unit ? {
               id: unit.id,
@@ -288,6 +302,13 @@ export class SupabaseStorage {
           // Get property details for the unit
           const property = unit ? await this.getPropertyById(unit.propertyId) : null;
 
+          const propertyPayload = property ? {
+            id: property.id,
+            name: property.name,
+            address: property.address,
+            propertyType: property.propertyType
+          } : null;
+
           return {
             id: lease.id,
             tenantId: lease.tenant_id,
@@ -297,9 +318,16 @@ export class SupabaseStorage {
             monthlyRent: lease.monthly_rent,
             securityDeposit: lease.security_deposit,
             leaseDocumentUrl: lease.lease_document_url,
+            status: lease.status,
+            landlordSignedAt: lease.landlord_signed_at,
+            tenantSignedAt: lease.tenant_signed_at,
+            landlordSignedBy: lease.landlord_signed_by,
+            tenantSignedBy: lease.tenant_signed_by,
+            createdBy: lease.created_by,
             isActive: lease.is_active,
             createdAt: lease.created_at,
             updatedAt: lease.updated_at,
+            property: propertyPayload,
             // Include related data for display
             unit: unit ? {
               id: unit.id,
@@ -341,6 +369,12 @@ export class SupabaseStorage {
       monthly_rent: lease.monthlyRent,
       security_deposit: lease.securityDeposit,
       lease_document_url: lease.leaseDocumentUrl,
+      status: lease.status,
+      landlord_signed_at: lease.landlordSignedAt,
+      tenant_signed_at: lease.tenantSignedAt,
+      landlord_signed_by: lease.landlordSignedBy,
+      tenant_signed_by: lease.tenantSignedBy,
+      created_by: lease.createdBy,
       is_active: lease.isActive,
     };
 
@@ -368,6 +402,12 @@ export class SupabaseStorage {
       monthlyRent: data.monthly_rent,
       securityDeposit: data.security_deposit,
       leaseDocumentUrl: data.lease_document_url,
+      status: data.status,
+      landlordSignedAt: data.landlord_signed_at,
+      tenantSignedAt: data.tenant_signed_at,
+      landlordSignedBy: data.landlord_signed_by,
+      tenantSignedBy: data.tenant_signed_by,
+      createdBy: data.created_by,
       isActive: data.is_active,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
@@ -400,6 +440,12 @@ export class SupabaseStorage {
       monthlyRent: d.monthly_rent,
       securityDeposit: d.security_deposit,
       leaseDocumentUrl: d.lease_document_url,
+      status: d.status,
+      landlordSignedAt: d.landlord_signed_at,
+      tenantSignedAt: d.tenant_signed_at,
+      landlordSignedBy: d.landlord_signed_by,
+      tenantSignedBy: d.tenant_signed_by,
+      createdBy: d.created_by,
       isActive: d.is_active,
       createdAt: d.created_at,
       updatedAt: d.updated_at,
@@ -1472,6 +1518,12 @@ export class DatabaseStorage implements IStorage {
         monthlyRent: leases.monthlyRent,
         securityDeposit: leases.securityDeposit,
         leaseDocumentUrl: leases.leaseDocumentUrl,
+        status: leases.status,
+        landlordSignedAt: leases.landlordSignedAt,
+        tenantSignedAt: leases.tenantSignedAt,
+        landlordSignedBy: leases.landlordSignedBy,
+        tenantSignedBy: leases.tenantSignedBy,
+        createdBy: leases.createdBy,
         isActive: leases.isActive,
         createdAt: leases.createdAt,
         updatedAt: leases.updatedAt,

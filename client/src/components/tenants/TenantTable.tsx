@@ -6,12 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Tenant } from "@shared/schema";
 import TenantForm from "./TenantForm";
 import TenantDetailsModal from "./TenantDetailsModal";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, MailCheck, CheckCircle2, Clock, Loader2, Trash2, Search, Filter, Eye, AlertCircle } from "lucide-react";
-import { Lease, Payment } from "@shared/schema";
+import { Mail, MailCheck, CheckCircle2, Clock, Loader2, Trash2, Search, Filter, Eye, AlertCircle, Home } from "lucide-react";
+import { Lease, Payment, Unit, Property } from "@shared/schema";
 import { calculateLedger } from "@/lib/ledger";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,9 +39,32 @@ interface TenantTableProps {
   loading?: boolean;
   onAddTenant?: () => void;
   readOnly?: boolean;
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canResend?: boolean;
+  canApprove?: boolean;
+  canAssign?: boolean;
+  propertyOptions?: Array<{ id: string; name: string }>;
+  requireProperty?: boolean;
 }
 
-export default function TenantTable({ tenants, leases = [], payments = [], loading, onAddTenant, readOnly = false }: TenantTableProps) {
+export default function TenantTable({
+  tenants,
+  leases = [],
+  payments = [],
+  loading,
+  onAddTenant,
+  readOnly = false,
+  canCreate,
+  canEdit,
+  canDelete,
+  canResend,
+  canApprove,
+  canAssign,
+  propertyOptions,
+  requireProperty,
+}: TenantTableProps) {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -48,8 +73,43 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
   const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [assignmentOpen, setAssignmentOpen] = useState(false);
+  const [assignmentTenant, setAssignmentTenant] = useState<Tenant | null>(null);
+  const [assignmentForm, setAssignmentForm] = useState({
+    unitId: "",
+    startDate: "",
+    endDate: "",
+    monthlyRent: "",
+    securityDeposit: "",
+  });
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const allowCreate = canCreate ?? !readOnly;
+  const allowEdit = canEdit ?? !readOnly;
+  const allowDelete = canDelete ?? !readOnly;
+  const allowResend = canResend ?? !readOnly;
+  const allowApprove = canApprove ?? false;
+  const allowAssign = canAssign ?? false;
+
+  const { data: units = [], isLoading: unitsLoading } = useQuery<Unit[]>({
+    queryKey: ["/api/units"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/units");
+      const result = await response.json();
+      return Array.isArray(result) ? result : [];
+    },
+    enabled: allowAssign,
+  });
+
+  const { data: properties = [], isLoading: propertiesLoading } = useQuery<Property[]>({
+    queryKey: ["/api/properties"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/properties");
+      return await response.json();
+    },
+    enabled: allowAssign,
+  });
 
   // Filter and search tenants
   const filteredTenants = useMemo(() => {
@@ -76,6 +136,20 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
       return true;
     });
   }, [tenants, searchQuery, statusFilter]);
+
+  const availableUnits = useMemo(() => {
+    if (!allowAssign) return [];
+
+    return units
+      .filter((unit) => !unit.isOccupied || unit.id === assignmentForm.unitId)
+      .map((unit) => {
+        const property = properties.find((item) => item.id === unit.propertyId);
+        return {
+          ...unit,
+          propertyName: property?.name || "Unknown Property",
+        };
+      });
+  }, [allowAssign, units, properties, assignmentForm.unitId]);
 
   const resendInvitationMutation = useMutation({
     mutationFn: async ({ tenantId, tenantEmail }: { tenantId: string; tenantEmail: string }) => {
@@ -121,6 +195,161 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
       setTenantToDelete(null);
     },
   });
+
+  const approveTenantMutation = useMutation({
+    mutationFn: async (tenantId: string) => {
+      return await apiRequest("PUT", `/api/tenants/${tenantId}/approve`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leases"] });
+      toast({
+        title: "Tenant approved",
+        description: "Approval saved. A lease draft will be created if a unit is assigned.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to approve tenant",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rejectTenantMutation = useMutation({
+    mutationFn: async (tenantId: string) => {
+      return await apiRequest("PUT", `/api/tenants/${tenantId}/reject`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
+      toast({
+        title: "Tenant rejected",
+        description: "Tenant approval status has been updated.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reject tenant",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const assignTenantMutation = useMutation({
+    mutationFn: async () => {
+      if (!assignmentTenant) {
+        throw new Error("No tenant selected");
+      }
+
+      return await apiRequest("PUT", `/api/tenants/${assignmentTenant.id}/assign`, {
+        unitId: assignmentForm.unitId,
+        startDate: assignmentForm.startDate,
+        endDate: assignmentForm.endDate,
+        monthlyRent: assignmentForm.monthlyRent,
+        securityDeposit: assignmentForm.securityDeposit,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leases"] });
+      toast({
+        title: "Assignment saved",
+        description: "Unit assignment updated. Lease draft will be created if tenant is approved.",
+      });
+      setAssignmentOpen(false);
+      setAssignmentTenant(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to assign unit",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAssign = (tenant: Tenant) => {
+    const formatDate = (value?: string | Date | null) => {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      return date.toISOString().split("T")[0];
+    };
+
+    setAssignmentTenant(tenant);
+    setAssignmentForm({
+      unitId: (tenant as any).assignedUnitId || "",
+      startDate: formatDate((tenant as any).assignedStartDate),
+      endDate: formatDate((tenant as any).assignedEndDate),
+      monthlyRent: (tenant as any).assignedMonthlyRent ? String((tenant as any).assignedMonthlyRent) : "",
+      securityDeposit: (tenant as any).assignedSecurityDeposit ? String((tenant as any).assignedSecurityDeposit) : "",
+    });
+    setAssignmentOpen(true);
+  };
+
+  const handleSubmitAssignment = () => {
+    if (!assignmentForm.unitId || !assignmentForm.startDate || !assignmentForm.endDate) {
+      toast({
+        title: "Missing info",
+        description: "Unit, start date, and end date are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (new Date(assignmentForm.endDate) <= new Date(assignmentForm.startDate)) {
+      toast({
+        title: "Invalid dates",
+        description: "End date must be after start date.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    assignTenantMutation.mutate();
+  };
+
+  const getApprovalBadge = (tenant: Tenant) => {
+    const status = (tenant as any).approvalStatus || "pending";
+
+    switch (status) {
+      case "approved":
+        return (
+          <Badge variant="default" className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Approved
+          </Badge>
+        );
+      case "rejected":
+        return (
+          <Badge variant="destructive">
+            <AlertCircle className="h-3 w-3 mr-1" />
+            Rejected
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="outline" className="text-muted-foreground">
+            <Clock className="h-3 w-3 mr-1" />
+            Approval Pending
+          </Badge>
+        );
+    }
+  };
+
+  const getAssignmentBadge = (tenant: Tenant) => {
+    const assignedUnitId = (tenant as any).assignedUnitId;
+    if (!assignedUnitId) return null;
+
+    return (
+      <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 hover:bg-indigo-100">
+        <Home className="h-3 w-3 mr-1" />
+        Assigned
+      </Badge>
+    );
+  };
 
   const getStatusBadge = (tenant: Tenant) => {
     const status = tenant.accountStatus || 'pending_invitation';
@@ -203,7 +432,7 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
           <p className="text-muted-foreground text-lg" data-testid="text-notenants">
             {readOnly ? "No tenants assigned yet" : "No tenants added yet"}
           </p>
-          {!readOnly && (
+          {allowCreate && (
             <>
               <p className="text-muted-foreground mb-4">Add your first tenant to get started</p>
               <Button onClick={handleAdd} data-testid="button-add-first-tenant">
@@ -317,7 +546,11 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
                       {tenant.phone}
                     </td>
                     <td className="py-4 px-6" data-testid={`tenant-status-${tenant.id}`}>
-                      {getStatusBadge(tenant)}
+                      <div className="flex flex-col gap-1">
+                        {getStatusBadge(tenant)}
+                        {getApprovalBadge(tenant)}
+                        {getAssignmentBadge(tenant)}
+                      </div>
                     </td>
                     <td className="py-4 px-6">
                       {(() => {
@@ -346,7 +579,7 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2">
-                        {!readOnly && (tenant.accountStatus === 'invited' || tenant.accountStatus === 'pending_invitation') && (
+                        {allowResend && (tenant.accountStatus === 'invited' || tenant.accountStatus === 'pending_invitation') && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -363,7 +596,7 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
                             )}
                           </Button>
                         )}
-                        {!readOnly && (
+                        {allowEdit && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -385,7 +618,43 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {!readOnly && (
+                        {allowAssign && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleAssign(tenant)}
+                            data-testid={`button-assign-tenant-${tenant.id}`}
+                            className="hover:bg-indigo-100 hover:text-indigo-700"
+                            title="Assign unit"
+                          >
+                            <Home className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {allowApprove && ((tenant as any).approvalStatus || "pending") !== "approved" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => approveTenantMutation.mutate(tenant.id)}
+                            data-testid={`button-approve-tenant-${tenant.id}`}
+                            className="hover:bg-emerald-100 hover:text-emerald-700"
+                            title="Approve tenant"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {allowApprove && ((tenant as any).approvalStatus || "pending") !== "rejected" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => rejectTenantMutation.mutate(tenant.id)}
+                            data-testid={`button-reject-tenant-${tenant.id}`}
+                            className="hover:bg-red-100 hover:text-red-700"
+                            title="Reject tenant"
+                          >
+                            <AlertCircle className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {allowDelete && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -406,12 +675,14 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
         </div>
       </div>
 
-      {!readOnly && (
+      {allowCreate && (
         <TenantForm
           open={formOpen}
           onOpenChange={setFormOpen}
           tenant={selectedTenant}
           mode={formMode}
+          propertyOptions={propertyOptions}
+          requireProperty={requireProperty}
         />
       )}
 
@@ -421,7 +692,97 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
         tenant={selectedTenant}
       />
 
-      {!readOnly && (
+      <Dialog open={assignmentOpen} onOpenChange={setAssignmentOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Assign Unit</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Unit</Label>
+              <Select
+                value={assignmentForm.unitId}
+                onValueChange={(value) => {
+                  const selectedUnit = availableUnits.find((unit) => unit.id === value);
+                  setAssignmentForm((prev) => ({
+                    ...prev,
+                    unitId: value,
+                    monthlyRent: prev.monthlyRent || (selectedUnit?.rentAmount ? String(selectedUnit.rentAmount) : ""),
+                  }));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={unitsLoading || propertiesLoading ? "Loading units..." : "Select unit"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableUnits.length === 0 ? (
+                    <SelectItem value="none" disabled>No available units</SelectItem>
+                  ) : (
+                    availableUnits.map((unit) => (
+                      <SelectItem key={unit.id} value={unit.id}>
+                        {unit.propertyName} - {unit.unitNumber}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Start Date</Label>
+                <Input
+                  type="date"
+                  value={assignmentForm.startDate}
+                  onChange={(event) => setAssignmentForm((prev) => ({ ...prev, startDate: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>End Date</Label>
+                <Input
+                  type="date"
+                  value={assignmentForm.endDate}
+                  onChange={(event) => setAssignmentForm((prev) => ({ ...prev, endDate: event.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Monthly Rent (KES)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={assignmentForm.monthlyRent}
+                  onChange={(event) => setAssignmentForm((prev) => ({ ...prev, monthlyRent: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Security Deposit (KES)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={assignmentForm.securityDeposit}
+                  onChange={(event) => setAssignmentForm((prev) => ({ ...prev, securityDeposit: event.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAssignmentOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSubmitAssignment} disabled={assignTenantMutation.isPending}>
+                {assignTenantMutation.isPending ? "Saving..." : "Save Assignment"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {allowDelete && (
         <AlertDialog open={!!tenantToDelete} onOpenChange={() => setTenantToDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>

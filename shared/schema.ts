@@ -91,6 +91,16 @@ export const tenants = pgTable("tenants", {
   email: varchar("email").notNull(),
   phone: varchar("phone").notNull(),
   emergencyContact: varchar("emergency_contact"),
+  approvalStatus: varchar("approval_status").default("pending"),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  assignedUnitId: varchar("assigned_unit_id").references(() => units.id),
+  assignedStartDate: timestamp("assigned_start_date"),
+  assignedEndDate: timestamp("assigned_end_date"),
+  assignedMonthlyRent: decimal("assigned_monthly_rent", { precision: 10, scale: 2 }),
+  assignedSecurityDeposit: decimal("assigned_security_deposit", { precision: 10, scale: 2 }),
+  assignedAt: timestamp("assigned_at"),
+  assignedBy: varchar("assigned_by").references(() => users.id),
   invitationToken: varchar("invitation_token").unique(),
   // invitationExpiresAt: timestamp("invitation_expires_at"), // Not in database - expiration calculated from invitationSentAt + 7 days
   invitationSentAt: timestamp("invitation_sent_at"),
@@ -99,6 +109,16 @@ export const tenants = pgTable("tenants", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+export const leaseStatusEnum = pgEnum("lease_status", [
+  "draft",
+  "pending_landlord_signature",
+  "pending_tenant_signature",
+  "active",
+  "rejected",
+  "cancelled",
+  "expired",
+]);
 
 // Lease agreements table
 export const leases = pgTable("leases", {
@@ -110,6 +130,12 @@ export const leases = pgTable("leases", {
   monthlyRent: decimal("monthly_rent", { precision: 10, scale: 2 }).notNull(),
   securityDeposit: decimal("security_deposit", { precision: 10, scale: 2 }),
   leaseDocumentUrl: varchar("lease_document_url"),
+  status: leaseStatusEnum("status").default("active"),
+  landlordSignedAt: timestamp("landlord_signed_at"),
+  tenantSignedAt: timestamp("tenant_signed_at"),
+  landlordSignedBy: varchar("landlord_signed_by").references(() => users.id),
+  tenantSignedBy: varchar("tenant_signed_by").references(() => users.id),
+  createdBy: varchar("created_by").references(() => users.id),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

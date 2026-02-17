@@ -132,7 +132,11 @@ export default function LandlordDashboard() {
     lastName: "",
     email: "",
     propertyId: "",
-    unitId: "",
+  });
+
+  const [caretakerAssignmentForm, setCaretakerAssignmentForm] = useState({
+    caretakerId: "",
+    propertyId: "",
   });
 
   const [caretakerAssignmentSearch, setCaretakerAssignmentSearch] = useState("");
@@ -192,6 +196,16 @@ export default function LandlordDashboard() {
     retry: false,
   });
 
+  const { data: caretakers = [], isLoading: caretakersLoading } = useQuery({
+    queryKey: ["/api/caretakers"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/caretakers");
+      const result = await response.json();
+      return Array.isArray(result) ? result : [];
+    },
+    retry: false,
+  });
+
   const { data: caretakerAssignments = [], isLoading: assignmentsLoading } = useQuery({
     queryKey: ["/api/caretakers/assignments"],
     queryFn: async () => {
@@ -233,7 +247,7 @@ export default function LandlordDashboard() {
   });
 
   const createCaretakerInviteMutation = useMutation({
-    mutationFn: async (data: { firstName: string; lastName: string; email: string; propertyId?: string; unitId?: string }) => {
+    mutationFn: async (data: { firstName: string; lastName: string; email: string; propertyId?: string }) => {
       const response = await apiRequest("POST", "/api/caretaker-invitations?action=create", data);
       return await response.json();
     },
@@ -243,7 +257,7 @@ export default function LandlordDashboard() {
         title: "Caretaker invited",
         description: "Invitation email sent successfully.",
       });
-      setCaretakerInviteForm({ firstName: "", lastName: "", email: "", propertyId: "", unitId: "" });
+      setCaretakerInviteForm({ firstName: "", lastName: "", email: "", propertyId: "" });
     },
     onError: (error: any) => {
       toast({
@@ -270,6 +284,70 @@ export default function LandlordDashboard() {
       toast({
         title: "Error",
         description: error.message || "Failed to resend invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const assignCaretakerMutation = useMutation({
+    mutationFn: async (data: { caretakerId: string; propertyId?: string }) => {
+      const response = await apiRequest("POST", "/api/caretakers/assign", data);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/caretakers/assignments"] });
+      toast({
+        title: "Assignment created",
+        description: "Caretaker assignment saved successfully.",
+      });
+      setCaretakerAssignmentForm({ caretakerId: "", propertyId: "" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to assign caretaker",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateCaretakerAssignmentMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { status?: string } }) => {
+      const response = await apiRequest("PUT", `/api/caretakers/assignments/${id}`, data);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/caretakers/assignments"] });
+      toast({
+        title: "Assignment updated",
+        description: "Caretaker assignment updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update assignment",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteCaretakerAssignmentMutation = useMutation({
+    mutationFn: async (assignmentId: string) => {
+      const response = await apiRequest("DELETE", `/api/caretakers/assignments/${assignmentId}`);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/caretakers/assignments"] });
+      toast({
+        title: "Assignment removed",
+        description: "Caretaker assignment deleted successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete assignment",
         variant: "destructive",
       });
     },
@@ -305,11 +383,6 @@ export default function LandlordDashboard() {
     },
     retry: false,
   });
-
-  const caretakerUnits = useMemo(() => {
-    if (!caretakerInviteForm.propertyId) return units;
-    return units.filter((unit: any) => unit.propertyId === caretakerInviteForm.propertyId || unit.property_id === caretakerInviteForm.propertyId);
-  }, [units, caretakerInviteForm.propertyId]);
 
   const filteredCaretakerAssignments = useMemo(() => {
     const searchTerm = caretakerAssignmentSearch.trim().toLowerCase();
@@ -1377,6 +1450,8 @@ export default function LandlordDashboard() {
               payments={payments}
               loading={tenantsLoading}
               onAddTenant={() => setIsTenantFormOpen(true)}
+              canApprove={true}
+              canAssign={true}
             />
           </div>
         );
@@ -1386,7 +1461,11 @@ export default function LandlordDashboard() {
           caretakerInviteForm.firstName.trim() &&
           caretakerInviteForm.lastName.trim() &&
           caretakerInviteForm.email.trim() &&
-          (caretakerInviteForm.propertyId || caretakerInviteForm.unitId);
+          caretakerInviteForm.propertyId;
+
+        const canSubmitAssignment =
+          caretakerAssignmentForm.caretakerId &&
+          caretakerAssignmentForm.propertyId;
 
         const handleInviteSubmit = (event: React.FormEvent) => {
           event.preventDefault();
@@ -1397,7 +1476,16 @@ export default function LandlordDashboard() {
             lastName: caretakerInviteForm.lastName.trim(),
             email: caretakerInviteForm.email.trim(),
             propertyId: caretakerInviteForm.propertyId || undefined,
-            unitId: caretakerInviteForm.unitId || undefined,
+          });
+        };
+
+        const handleAssignmentSubmit = (event: React.FormEvent) => {
+          event.preventDefault();
+          if (!canSubmitAssignment) return;
+
+          assignCaretakerMutation.mutate({
+            caretakerId: caretakerAssignmentForm.caretakerId,
+            propertyId: caretakerAssignmentForm.propertyId || undefined,
           });
         };
 
@@ -1420,7 +1508,7 @@ export default function LandlordDashboard() {
               <Card className="lg:col-span-2">
                 <CardHeader>
                   <CardTitle>Invite Caretaker</CardTitle>
-                  <CardDescription>Invite a caretaker and assign them to a property or unit.</CardDescription>
+                  <CardDescription>Invite a caretaker and assign them to a property.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form className="space-y-4" onSubmit={handleInviteSubmit}>
@@ -1469,7 +1557,6 @@ export default function LandlordDashboard() {
                             setCaretakerInviteForm((prev) => ({
                               ...prev,
                               propertyId: value,
-                              unitId: "",
                             }))
                           }
                         >
@@ -1485,41 +1572,78 @@ export default function LandlordDashboard() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2">
-                        <Label>Assign unit</Label>
-                        <Select
-                          value={caretakerInviteForm.unitId}
-                          onValueChange={(value) =>
-                            setCaretakerInviteForm((prev) => ({
-                              ...prev,
-                              unitId: value,
-                            }))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select unit" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {caretakerUnits.map((unit: any) => (
-                              <SelectItem key={unit.id} value={unit.id}>
-                                {unit.unitNumber ? `Unit ${unit.unitNumber}` : unit.id}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
                     </div>
                     <div className="flex flex-col gap-2">
                       <Button type="submit" disabled={!canSubmitInvite || createCaretakerInviteMutation.isPending}>
                         {createCaretakerInviteMutation.isPending ? "Sending invite..." : "Send Invitation"}
                       </Button>
-                      <p className="text-xs text-muted-foreground">Property or unit assignment is required.</p>
+                      <p className="text-xs text-muted-foreground">Property assignment is required.</p>
                     </div>
                   </form>
                 </CardContent>
               </Card>
 
               <Card>
+                <CardHeader>
+                  <CardTitle>Assign Caretaker</CardTitle>
+                  <CardDescription>Assign an existing caretaker to a property.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form className="space-y-4" onSubmit={handleAssignmentSubmit}>
+                    <div className="space-y-2">
+                      <Label>Caretaker</Label>
+                      <Select
+                        value={caretakerAssignmentForm.caretakerId}
+                        onValueChange={(value) =>
+                          setCaretakerAssignmentForm((prev) => ({ ...prev, caretakerId: value }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={caretakersLoading ? "Loading caretakers..." : "Select caretaker"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {caretakers.map((caretaker: any) => (
+                            <SelectItem key={caretaker.id} value={caretaker.id}>
+                              {caretaker.firstName} {caretaker.lastName} {caretaker.email ? `(${caretaker.email})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Property</Label>
+                      <Select
+                        value={caretakerAssignmentForm.propertyId}
+                        onValueChange={(value) =>
+                          setCaretakerAssignmentForm((prev) => ({
+                            ...prev,
+                            propertyId: value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select property" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {properties.map((property: any) => (
+                            <SelectItem key={property.id} value={property.id}>
+                              {property.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Button type="submit" disabled={!canSubmitAssignment || assignCaretakerMutation.isPending}>
+                        {assignCaretakerMutation.isPending ? "Assigning..." : "Assign Caretaker"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">Property assignment is required.</p>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Card className="lg:col-span-3">
                 <CardHeader>
                   <CardTitle>Active Assignments</CardTitle>
                   <CardDescription>Current caretakers assigned to your portfolio.</CardDescription>
@@ -1582,14 +1706,18 @@ export default function LandlordDashboard() {
                             <th className="py-2">Property</th>
                             <th className="py-2">Unit</th>
                             <th className="py-2">Status</th>
+                            <th className="py-2">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {filteredCaretakerAssignments.map((assignment: any) => {
                             const property = properties.find((item: any) => item.id === assignment.propertyId);
                             const unit = units.find((item: any) => item.id === assignment.unitId);
+                            const resolvedProperty = property
+                              || properties.find((item: any) => item.id === unit?.propertyId || item.id === unit?.property_id);
                             const caretakerName = assignment.caretakerName || "Caretaker";
                             const caretakerEmail = assignment.caretakerEmail || "";
+                            const nextStatus = assignment.status === "active" ? "inactive" : "active";
 
                             return (
                               <tr key={assignment.id} className="border-t border-border">
@@ -1601,12 +1729,38 @@ export default function LandlordDashboard() {
                                     ) : null}
                                   </div>
                                 </td>
-                                <td className="py-3">{property?.name || "—"}</td>
+                                <td className="py-3">{resolvedProperty?.name || "—"}</td>
                                 <td className="py-3">{unit?.unitNumber ? `Unit ${unit.unitNumber}` : "—"}</td>
                                 <td className="py-3">
                                   <Badge variant="outline" className="capitalize">
                                     {assignment.status}
                                   </Badge>
+                                </td>
+                                <td className="py-3">
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        updateCaretakerAssignmentMutation.mutate({
+                                          id: assignment.id,
+                                          data: { status: nextStatus },
+                                        })
+                                      }
+                                      disabled={updateCaretakerAssignmentMutation.isPending}
+                                    >
+                                      Set {nextStatus}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="border-red-300 text-red-600 hover:bg-red-50"
+                                      onClick={() => deleteCaretakerAssignmentMutation.mutate(assignment.id)}
+                                      disabled={deleteCaretakerAssignmentMutation.isPending}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             );

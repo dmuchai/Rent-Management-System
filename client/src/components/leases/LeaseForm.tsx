@@ -45,7 +45,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
     endDate: lease?.endDate ? new Date(lease.endDate).toISOString().split('T')[0] : "",
     monthlyRent: lease?.monthlyRent?.toString() || "",
     securityDeposit: lease?.securityDeposit?.toString() || "",
-    isActive: lease?.isActive ?? true,
+    isActive: lease?.isActive ?? false,
   });
 
   // Update form when lease prop changes (for editing)
@@ -58,7 +58,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
         endDate: lease.endDate ? new Date(lease.endDate).toISOString().split('T')[0] : "",
         monthlyRent: lease.monthlyRent?.toString() || "",
         securityDeposit: lease.securityDeposit?.toString() || "",
-        isActive: lease.isActive ?? true,
+        isActive: lease.isActive ?? false,
       });
     } else {
       // Reset form for new lease
@@ -69,7 +69,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
         endDate: "",
         monthlyRent: "",
         securityDeposit: "",
-        isActive: true,
+        isActive: false,
       });
     }
   }, [lease]);
@@ -182,7 +182,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
         endDate: "",
         monthlyRent: "",
         securityDeposit: "",
-        isActive: true,
+        isActive: false,
       });
     },
     onError: (error: Error) => {
@@ -255,7 +255,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
       endDate: new Date(leaseForm.endDate),
       monthlyRent: leaseForm.monthlyRent,
       securityDeposit: leaseForm.securityDeposit || "0",
-      isActive: leaseForm.isActive,
+      isActive: isEdit ? leaseForm.isActive : false,
     };
 
     mutation.mutate(leaseData);
@@ -371,22 +371,23 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
             </div>
           </div>
 
-          {/* Lease Status */}
-          <div>
-            <Label htmlFor="isActive">Lease Status</Label>
-            <Select
-              value={leaseForm.isActive ? "active" : "inactive"}
-              onValueChange={(value) => setLeaseForm(prev => ({ ...prev, isActive: value === "active" }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {isEdit && (
+            <div>
+              <Label htmlFor="isActive">Lease Status</Label>
+              <Select
+                value={leaseForm.isActive ? "active" : "inactive"}
+                onValueChange={(value) => setLeaseForm(prev => ({ ...prev, isActive: value === "active" }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Info Box */}
           <div className="bg-blue-50 p-4 rounded-lg">

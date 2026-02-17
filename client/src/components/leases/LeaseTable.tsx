@@ -99,6 +99,20 @@ export default function LeaseTable({ leases, loading, onEditLease, onViewLease }
   };
 
   const getLeaseStatus = (lease: LeaseWithRelations) => {
+    if (lease.status) {
+      const statusMap: Record<string, { label: string; variant: "secondary" | "outline" | "default" | "destructive" }> = {
+        draft: { label: "Draft", variant: "secondary" },
+        pending_landlord_signature: { label: "Pending Landlord Signature", variant: "outline" },
+        pending_tenant_signature: { label: "Pending Tenant Signature", variant: "outline" },
+        active: { label: "Active", variant: "default" },
+        rejected: { label: "Rejected", variant: "destructive" },
+        cancelled: { label: "Cancelled", variant: "secondary" },
+        expired: { label: "Expired", variant: "destructive" },
+      };
+
+      return statusMap[lease.status] || { label: "Unknown", variant: "secondary" };
+    }
+
     const now = new Date();
     const startDate = new Date(lease.startDate);
     const endDate = new Date(lease.endDate);

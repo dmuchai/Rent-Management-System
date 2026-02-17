@@ -8,8 +8,10 @@ import { z } from 'zod';
 // Matches: /api/leases, /api/leases/123
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
-    const { id } = req.query;
-    const leaseId = id as string || null;
+    const routeParam = (req.query.id ?? req.query.route) as string | string[] | undefined;
+    const routeParts = Array.isArray(routeParam) ? routeParam : (routeParam ? [routeParam] : []);
+    const leaseId = routeParts[0] || null;
+    const action = routeParts[1] || (typeof req.query.action === 'string' ? req.query.action : null);
 
     const sql = createDbConnection();
 
@@ -26,6 +28,15 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         }
 
         // --- GET / UPDATE / DELETE (With ID) ---
+        if (req.method === 'POST' && action) {
+            if (action === 'landlord-sign') {
+                return await handleLandlordSign(req, res, auth, sql, leaseId);
+            }
+            if (action === 'tenant-sign') {
+                return await handleTenantSign(req, res, auth, sql, leaseId);
+            }
+            return res.status(400).json({ message: 'Invalid lease action' });
+        }
         if (req.method === 'DELETE') {
             return await handleDeleteLease(req, res, auth, sql, leaseId);
         }
@@ -55,7 +66,7 @@ async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: a
     // Auto-expire leases
     await sql`
     UPDATE public.leases l
-    SET is_active = false, updated_at = NOW()
+    SET is_active = false, status = 'expired', updated_at = NOW()
     FROM public.units u
     INNER JOIN public.properties p ON u.property_id = p.id
     WHERE l.unit_id = u.id
@@ -66,7 +77,9 @@ async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: a
     AND l.end_date < NOW()
   `;
 
-    const leases = await sql`
+        const isCaretaker = auth.role === 'caretaker';
+
+        const leases = await sql`
     SELECT 
       l.*,
       t.id as tenant_id, t.first_name, t.last_name, t.email as tenant_email, t.phone as tenant_phone,
@@ -76,7 +89,17 @@ async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: a
     INNER JOIN public.tenants t ON l.tenant_id = t.id
     INNER JOIN public.units u ON l.unit_id = u.id
     INNER JOIN public.properties p ON u.property_id = p.id
-    WHERE (p.owner_id = ${auth.userId} OR t.user_id = ${auth.userId})
+        WHERE (
+            p.owner_id = ${auth.userId}
+            OR t.user_id = ${auth.userId}
+            OR (${isCaretaker} AND EXISTS (
+                SELECT 1
+                FROM public.caretaker_assignments ca
+                WHERE ca.property_id = p.id
+                AND ca.caretaker_id = ${auth.userId}
+                AND ca.status = 'active'
+            ))
+        )
     ORDER BY l.created_at DESC
   `;
 
@@ -90,6 +113,12 @@ async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: a
         endDate: lease.end_date,
         monthlyRent: lease.monthly_rent,
         securityDeposit: lease.security_deposit,
+        status: lease.status,
+        landlordSignedAt: lease.landlord_signed_at,
+        tenantSignedAt: lease.tenant_signed_at,
+        landlordSignedBy: lease.landlord_signed_by,
+        tenantSignedBy: lease.tenant_signed_by,
+        createdBy: lease.created_by,
         isActive: lease.is_active,
         createdAt: lease.created_at,
         tenant: {
@@ -133,7 +162,6 @@ async function handleCreateLease(req: VercelRequest, res: VercelResponse, auth: 
         endDate: z.coerce.date(),
         monthlyRent: z.coerce.number().positive('Monthly rent must be positive'),
         securityDeposit: z.coerce.number().positive().optional(),
-        isActive: z.boolean().default(true),
     }).refine((data) => data.startDate < data.endDate, {
         message: 'Start date must be before end date',
         path: ['endDate'],
@@ -141,14 +169,37 @@ async function handleCreateLease(req: VercelRequest, res: VercelResponse, auth: 
 
     const leaseData = leaseCreateSchema.parse(req.body);
 
+    if (auth.role === 'tenant') {
+        return res.status(403).json({ message: 'Tenants cannot create leases' });
+    }
+
     // Verify unit
     const units = await sql`SELECT u.*, p.owner_id FROM public.units u JOIN public.properties p ON u.property_id = p.id WHERE u.id = ${leaseData.unitId}`;
     if (!units.length) return res.status(404).json({ message: 'Unit not found' });
-    if (units[0].owner_id !== auth.userId) return res.status(403).json({ message: 'Access denied' });
+    if (auth.role !== 'caretaker' && units[0].owner_id !== auth.userId) {
+        return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (auth.role === 'caretaker') {
+        const assignment = await sql`
+          SELECT id FROM public.caretaker_assignments
+          WHERE caretaker_id = ${auth.userId}
+          AND property_id = ${units[0].property_id}
+          AND status = 'active'
+          LIMIT 1
+        `;
+
+        if (!assignment.length) {
+            return res.status(403).json({ message: 'Caretaker not assigned to this property' });
+        }
+    }
 
     // Verify tenant
     const tenants = await sql`SELECT * FROM public.tenants WHERE id = ${leaseData.tenantId}`;
     if (!tenants.length) return res.status(404).json({ message: 'Tenant not found' });
+    if (tenants[0].landlord_id && tenants[0].landlord_id !== units[0].owner_id) {
+        return res.status(403).json({ message: 'Tenant does not belong to this landlord' });
+    }
 
     // Check conflicts
     const conflict = await sql`
@@ -158,18 +209,21 @@ async function handleCreateLease(req: VercelRequest, res: VercelResponse, auth: 
     `;
     if (conflict.length > 0) return res.status(409).json({ message: 'Lease dates conflict', error: 'LEASE_DATE_CONFLICT' });
 
+    const isCaretaker = auth.role === 'caretaker';
+    const status = isCaretaker ? 'pending_landlord_signature' : 'pending_tenant_signature';
+    const landlordSignedAt = isCaretaker ? null : new Date();
+    const landlordSignedBy = isCaretaker ? null : auth.userId;
+
     const [lease] = await sql`
         INSERT INTO public.leases (
-            tenant_id, unit_id, start_date, end_date, monthly_rent, security_deposit, is_active
+            tenant_id, unit_id, start_date, end_date, monthly_rent, security_deposit,
+            status, landlord_signed_at, landlord_signed_by, created_by, is_active
         ) VALUES (
             ${leaseData.tenantId}, ${leaseData.unitId}, ${leaseData.startDate}, ${leaseData.endDate},
-            ${leaseData.monthlyRent}, ${leaseData.securityDeposit || null}, ${leaseData.isActive}
+            ${leaseData.monthlyRent}, ${leaseData.securityDeposit || null},
+            ${status}, ${landlordSignedAt}, ${landlordSignedBy}, ${auth.userId}, false
         ) RETURNING *
     `;
-
-    if (leaseData.isActive) {
-        await sql`UPDATE public.units SET is_occupied = true, updated_at = NOW() WHERE id = ${leaseData.unitId}`;
-    }
 
     return res.status(201).json(lease);
 }
@@ -267,4 +321,88 @@ async function handleGetLease(req: VercelRequest, res: VercelResponse, auth: any
     }
 
     return res.json(lease);
+}
+
+async function handleLandlordSign(req: VercelRequest, res: VercelResponse, auth: any, sql: any, leaseId: string) {
+    if (auth.role !== 'landlord') {
+        return res.status(403).json({ message: 'Only landlords can sign leases' });
+    }
+
+    const [lease] = await sql`
+        SELECT l.id, l.status, l.unit_id, p.owner_id
+        FROM public.leases l
+        JOIN public.units u ON l.unit_id = u.id
+        JOIN public.properties p ON u.property_id = p.id
+        WHERE l.id = ${leaseId}
+    `;
+
+    if (!lease) {
+        return res.status(404).json({ message: 'Lease not found' });
+    }
+
+    if (lease.owner_id !== auth.userId) {
+        return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (lease.status !== 'pending_landlord_signature') {
+        return res.status(400).json({ message: 'Lease is not awaiting landlord signature' });
+    }
+
+    const [updated] = await sql`
+        UPDATE public.leases
+        SET status = 'pending_tenant_signature',
+            landlord_signed_at = NOW(),
+            landlord_signed_by = ${auth.userId},
+            updated_at = NOW()
+        WHERE id = ${leaseId}
+        RETURNING *
+    `;
+
+    return res.json(updated);
+}
+
+async function handleTenantSign(req: VercelRequest, res: VercelResponse, auth: any, sql: any, leaseId: string) {
+    if (auth.role !== 'tenant') {
+        return res.status(403).json({ message: 'Only tenants can sign leases' });
+    }
+
+    const [tenant] = await sql`SELECT id FROM public.tenants WHERE user_id = ${auth.userId}`;
+    if (!tenant) {
+        return res.status(404).json({ message: 'Tenant profile not found' });
+    }
+
+    const [lease] = await sql`
+        SELECT id, status, unit_id, tenant_id FROM public.leases WHERE id = ${leaseId}
+    `;
+
+    if (!lease) {
+        return res.status(404).json({ message: 'Lease not found' });
+    }
+
+    if (lease.tenant_id !== tenant.id) {
+        return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (lease.status !== 'pending_tenant_signature') {
+        return res.status(400).json({ message: 'Lease is not awaiting tenant signature' });
+    }
+
+    const [updated] = await sql`
+        UPDATE public.leases
+        SET status = 'active',
+            tenant_signed_at = NOW(),
+            tenant_signed_by = ${auth.userId},
+            is_active = true,
+            updated_at = NOW()
+        WHERE id = ${leaseId}
+        RETURNING *
+    `;
+
+    await sql`
+        UPDATE public.units
+        SET is_occupied = true, updated_at = NOW()
+        WHERE id = ${lease.unit_id}
+    `;
+
+    return res.json(updated);
 }

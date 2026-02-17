@@ -296,7 +296,9 @@ export default function TenantDashboard() {
     retry: false,
   });
 
-  const activeLease = leases.find((lease: any) => lease.isActive === true) || null;
+  const activeLease = leases.find((lease: any) => lease.status === "active" || lease.isActive === true) || null;
+  const pendingLease = leases.find((lease: any) => lease.status === "pending_tenant_signature") || null;
+  const displayLease = activeLease || pendingLease;
 
   const { data: payments = [], isLoading: paymentsLoading } = useQuery({
     queryKey: ["/api/payments"],
@@ -364,6 +366,32 @@ export default function TenantDashboard() {
     : 0;
 
   const ledgerData = calculateLedger(activeLease, payments);
+
+  const tenantSignLeaseMutation = useMutation({
+    mutationFn: async (leaseId: string) => {
+      const response = await apiRequest("POST", `/api/leases/${leaseId}/tenant-sign`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to sign lease");
+      }
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leases"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({
+        title: "Lease signed",
+        description: "Your lease is now active.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to sign lease",
+        variant: "destructive",
+      });
+    },
+  });
 
   const sectionTitles: Record<string, string> = {
     overview: "Overview",
@@ -498,14 +526,14 @@ export default function TenantDashboard() {
                               <Skeleton className="h-4 w-full" />
                             </div>
                           </div>
-                        ) : activeLease ? (
+                        ) : displayLease ? (
                           <div className="space-y-4">
                             <div className="overflow-hidden rounded-lg">
                               <motion.img
                                 whileHover={{ scale: 1.05 }}
                                 transition={{ duration: 0.4 }}
-                                src={activeLease.unit?.property?.imageUrl || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300"}
-                                alt={activeLease.unit?.property?.name || "Property"}
+                                src={displayLease.unit?.property?.imageUrl || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300"}
+                                alt={displayLease.unit?.property?.name || "Property"}
                                 className="w-full h-48 object-cover"
                                 data-testid="img-property"
                                 onError={(e) => {
@@ -514,13 +542,13 @@ export default function TenantDashboard() {
                                 }}
                               />
                             </div>
-                            {activeLease.unit && (
+                            {displayLease.unit && (
                               <div className="space-y-2">
-                                <h4 className="font-semibold text-lg">{activeLease.unit?.property?.name || (activeLease.unit as any)?.propertyName || 'Your Property'}</h4>
-                                <p className="text-sm text-muted-foreground">{activeLease.unit?.property?.address || 'Address not listed'}</p>
+                                <h4 className="font-semibold text-lg">{displayLease.unit?.property?.name || (displayLease.unit as any)?.propertyName || 'Your Property'}</h4>
+                                <p className="text-sm text-muted-foreground">{displayLease.unit?.property?.address || 'Address not listed'}</p>
                                 <div className="flex flex-wrap gap-2">
-                                  <Badge>{activeLease.unit?.property?.propertyType || 'Property'}</Badge>
-                                  <Badge variant="outline">Unit {activeLease.unit?.unitNumber || 'N/A'}</Badge>
+                                  <Badge>{displayLease.unit?.property?.propertyType || 'Property'}</Badge>
+                                  <Badge variant="outline">Unit {displayLease.unit?.unitNumber || 'N/A'}</Badge>
                                 </div>
                               </div>
                             )}
@@ -528,32 +556,50 @@ export default function TenantDashboard() {
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Monthly Rent</span>
                                 <span className="font-semibold" data-testid="text-monthlyrent">
-                                  KES {parseFloat(activeLease.monthlyRent).toLocaleString()}
+                                  KES {parseFloat(displayLease.monthlyRent).toLocaleString()}
                                 </span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Lease Start</span>
                                 <span className="font-medium" data-testid="text-leasestart">
-                                  {new Date(activeLease.startDate).toLocaleDateString()}
+                                  {new Date(displayLease.startDate).toLocaleDateString()}
                                 </span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Lease End</span>
                                 <span className="font-medium" data-testid="text-leaseend">
-                                  {new Date(activeLease.endDate).toLocaleDateString()}
+                                  {new Date(displayLease.endDate).toLocaleDateString()}
                                 </span>
                               </div>
-                              <div className="pt-2">
-                                <div className="flex justify-between text-sm mb-2">
-                                  <span className="text-muted-foreground">Lease Progress</span>
-                                  <span className="font-medium">{Math.round(leaseProgress)}%</span>
+                              {activeLease && (
+                                <div className="pt-2">
+                                  <div className="flex justify-between text-sm mb-2">
+                                    <span className="text-muted-foreground">Lease Progress</span>
+                                    <span className="font-medium">{Math.round(leaseProgress)}%</span>
+                                  </div>
+                                  <Progress value={leaseProgress} className="h-2" />
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {daysRemainingInLease} days remaining
+                                  </p>
                                 </div>
-                                <Progress value={leaseProgress} className="h-2" />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {daysRemainingInLease} days remaining
-                                </p>
-                              </div>
+                              )}
                             </div>
+                            {pendingLease && (
+                              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                  <div>
+                                    <p className="font-medium text-amber-900">Lease awaiting your signature</p>
+                                    <p className="text-sm text-amber-800">Review the terms and sign to activate your lease.</p>
+                                  </div>
+                                  <Button
+                                    onClick={() => tenantSignLeaseMutation.mutate(pendingLease.id)}
+                                    disabled={tenantSignLeaseMutation.isLoading}
+                                  >
+                                    {tenantSignLeaseMutation.isLoading ? "Signing..." : "Sign Lease"}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="text-center py-8">
