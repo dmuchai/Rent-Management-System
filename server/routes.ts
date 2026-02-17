@@ -16,6 +16,7 @@ import { emailService } from "./services/emailService";
 import { pesapalService } from "./services/pesapalService";
 import { mpesaService } from "./services/mpesaService";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 // Security helper functions for environment variable validation and sanitization
 function validateSupabaseUrl(url: string | undefined): string | null {
@@ -82,6 +83,87 @@ function getValidatedSupabaseConfig(): { url: string; key: string } | null {
   return {
     url: validatedUrl, // Don't escape URLs - they need to be valid URLs
     key: htmlEscape(validatedKey) // Only escape the key for HTML safety
+  };
+}
+
+async function getCaretakerUnitIds(caretakerId: string): Promise<string[]> {
+  const { data: assignments, error } = await supabase
+    .from("caretaker_assignments")
+    .select("property_id, unit_id")
+    .eq("caretaker_id", caretakerId)
+    .eq("status", "active");
+
+  if (error) {
+    throw error;
+  }
+
+  const unitIds = new Set<string>();
+  const propertyIds: string[] = [];
+
+  (assignments || []).forEach((assignment: any) => {
+    if (assignment.unit_id) unitIds.add(assignment.unit_id);
+    if (assignment.property_id) propertyIds.push(assignment.property_id);
+  });
+
+  if (propertyIds.length > 0) {
+    const { data: units, error: unitsError } = await supabase
+      .from("units")
+      .select("id")
+      .in("property_id", propertyIds);
+
+    if (unitsError) {
+      throw unitsError;
+    }
+
+    (units || []).forEach((unit: any) => unitIds.add(unit.id));
+  }
+
+  return Array.from(unitIds);
+}
+
+async function caretakerHasLandlordAccess(caretakerId: string, landlordId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("caretaker_assignments")
+    .select("id")
+    .eq("caretaker_id", caretakerId)
+    .eq("landlord_id", landlordId)
+    .eq("status", "active")
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).length > 0;
+}
+
+function mapTenantRow(tenant: any) {
+  return {
+    id: tenant.id,
+    landlordId: tenant.landlord_id,
+    userId: tenant.user_id,
+    firstName: tenant.first_name,
+    lastName: tenant.last_name,
+    email: tenant.email,
+    phone: tenant.phone,
+    emergencyContact: tenant.emergency_contact,
+    createdAt: tenant.created_at,
+    updatedAt: tenant.updated_at,
+  };
+}
+
+function mapCaretakerAssignmentRow(assignment: any, caretaker?: any) {
+  return {
+    id: assignment.id,
+    caretakerId: assignment.caretaker_id,
+    caretakerName: caretaker ? `${caretaker.first_name || ""} ${caretaker.last_name || ""}`.trim() : undefined,
+    caretakerEmail: caretaker?.email,
+    landlordId: assignment.landlord_id,
+    propertyId: assignment.property_id,
+    unitId: assignment.unit_id,
+    status: assignment.status,
+    createdAt: assignment.created_at,
+    updatedAt: assignment.updated_at,
   };
 }
 
@@ -1014,7 +1096,7 @@ export async function registerRoutes(app: Express) {
       }
     } else if (action === "set-role" && req.method === "POST") {
       const { role } = req.body;
-      if (!role || !['landlord', 'property_manager', 'tenant'].includes(role)) {
+      if (!role || !['landlord', 'property_manager', 'tenant', 'caretaker'].includes(role)) {
         return res.status(400).json({ error: "Invalid role" });
       }
 
@@ -1689,6 +1771,72 @@ export async function registerRoutes(app: Express) {
   app.get("/api/tenants", isAuthenticated, async (req: any, res: any) => {
     try {
       const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role === "tenant") {
+        return res.status(403).json({ message: "Tenants cannot list all tenants" });
+      }
+
+      if (role === "caretaker") {
+        const unitIds = await getCaretakerUnitIds(userId);
+
+        if (unitIds.length === 0) {
+          const { data, error } = await supabase
+            .from("tenants")
+            .select("*")
+            .eq("created_by", userId)
+            .order("created_at", { ascending: true });
+
+          if (error) {
+            console.log("Error fetching caretaker tenants:", error);
+            return res.status(500).json({ message: "Failed to fetch tenants" });
+          }
+
+          return res.json((data || []).map(mapTenantRow));
+        }
+
+        const { data: leases, error: leasesError } = await supabase
+          .from("leases")
+          .select("tenant_id")
+          .in("unit_id", unitIds);
+
+        if (leasesError) {
+          console.log("Error fetching caretaker leases:", leasesError);
+          return res.status(500).json({ message: "Failed to fetch tenants" });
+        }
+
+        const tenantIds = Array.from(new Set((leases || []).map((lease: any) => lease.tenant_id)));
+
+        if (tenantIds.length === 0) {
+          const { data, error } = await supabase
+            .from("tenants")
+            .select("*")
+            .eq("created_by", userId)
+            .order("created_at", { ascending: true });
+
+          if (error) {
+            console.log("Error fetching caretaker tenants:", error);
+            return res.status(500).json({ message: "Failed to fetch tenants" });
+          }
+
+          return res.json((data || []).map(mapTenantRow));
+        }
+
+        const tenantFilter = `id.in.(${tenantIds.join(",")}),created_by.eq.${userId}`;
+        const { data, error } = await supabase
+          .from("tenants")
+          .select("*")
+          .or(tenantFilter)
+          .order("created_at", { ascending: true });
+
+        if (error) {
+          console.log("Error fetching caretaker tenants:", error);
+          return res.status(500).json({ message: "Failed to fetch tenants" });
+        }
+
+        return res.json((data || []).map(mapTenantRow));
+      }
+
       const tenants = await supabaseStorage.getTenantsByOwnerId(userId) || [];
       res.json(tenants);
     } catch (error) {
@@ -1714,7 +1862,50 @@ export async function registerRoutes(app: Express) {
   app.post("/api/tenants", isAuthenticated, async (req: any, res: any) => {
     try {
       const landlordId = req.user.sub; // Get the current landlord's ID
+      const role = req.user.appRole;
       const tenantData = insertTenantSchema.parse(req.body);
+
+      if (role === "caretaker") {
+        if (!tenantData.landlordId) {
+          return res.status(400).json({ message: "Landlord ID is required for caretaker onboarding" });
+        }
+
+        const hasAccess = await caretakerHasLandlordAccess(req.user.sub, tenantData.landlordId);
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Caretaker not assigned to this landlord" });
+        }
+
+        const dbTenant = {
+          landlord_id: tenantData.landlordId,
+          user_id: tenantData.userId || null,
+          first_name: tenantData.firstName,
+          last_name: tenantData.lastName,
+          email: tenantData.email,
+          phone: tenantData.phone,
+          emergency_contact: tenantData.emergencyContact || null,
+          created_by: req.user.sub,
+          approval_status: "pending",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data, error } = await supabase
+          .from("tenants")
+          .insert([dbTenant])
+          .select()
+          .single();
+
+        if (error) {
+          return res.status(500).json({ message: "Failed to create tenant" });
+        }
+
+        return res.status(201).json(mapTenantRow(data));
+      }
+
+      if (role === "tenant") {
+        return res.status(403).json({ message: "Tenants cannot create tenants" });
+      }
+
       const tenant = await supabaseStorage.createTenant(tenantData, landlordId);
       res.status(201).json(tenant);
     } catch (error) {
@@ -1729,6 +1920,58 @@ export async function registerRoutes(app: Express) {
 
   app.put("/api/tenants/:id", isAuthenticated, async (req: any, res: any) => {
     try {
+      const role = req.user.appRole;
+
+      if (role === "tenant") {
+        return res.status(403).json({ message: "Tenants cannot update tenant records" });
+      }
+
+      if (role === "caretaker") {
+        const { data: existingTenant, error: existingError } = await supabase
+          .from("tenants")
+          .select("id, created_by")
+          .eq("id", req.params.id)
+          .single();
+
+        if (existingError || !existingTenant) {
+          return res.status(404).json({ message: "Tenant not found" });
+        }
+
+        if (existingTenant.created_by !== req.user.sub) {
+          return res.status(403).json({ message: "Caretaker cannot update this tenant" });
+        }
+
+        const caretakerUpdateSchema = z.object({
+          firstName: z.string().min(1).optional(),
+          lastName: z.string().min(1).optional(),
+          email: z.string().email().optional(),
+          phone: z.string().min(1).optional(),
+          emergencyContact: z.string().optional(),
+        });
+
+        const updateData = caretakerUpdateSchema.parse(req.body);
+        const dbUpdate: any = { updated_at: new Date().toISOString() };
+
+        if (updateData.firstName !== undefined) dbUpdate.first_name = updateData.firstName;
+        if (updateData.lastName !== undefined) dbUpdate.last_name = updateData.lastName;
+        if (updateData.email !== undefined) dbUpdate.email = updateData.email;
+        if (updateData.phone !== undefined) dbUpdate.phone = updateData.phone;
+        if (updateData.emergencyContact !== undefined) dbUpdate.emergency_contact = updateData.emergencyContact;
+
+        const { data, error } = await supabase
+          .from("tenants")
+          .update(dbUpdate)
+          .eq("id", req.params.id)
+          .select()
+          .single();
+
+        if (error) {
+          return res.status(500).json({ message: "Failed to update tenant" });
+        }
+
+        return res.json(mapTenantRow(data));
+      }
+
       const tenantData = insertTenantSchema.partial().parse(req.body);
       const tenant = await supabaseStorage.updateTenant(req.params.id, tenantData);
       res.json(tenant);
@@ -1738,6 +1981,773 @@ export async function registerRoutes(app: Express) {
       } else {
         res.status(500).json({ message: "Failed to update tenant" });
       }
+    }
+  });
+
+  app.put("/api/tenants/:id/approve", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can approve tenants" });
+      }
+
+      const { data: tenant, error: tenantError } = await supabase
+        .from("tenants")
+        .select("id, landlord_id, approval_status")
+        .eq("id", req.params.id)
+        .single();
+
+      if (tenantError || !tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      if (tenant.landlord_id !== userId) {
+        return res.status(403).json({ message: "Unauthorized: Tenant does not belong to you" });
+      }
+
+      const { data, error } = await supabase
+        .from("tenants")
+        .update({
+          approval_status: "approved",
+          approved_by: userId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", req.params.id)
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(500).json({ message: "Failed to approve tenant" });
+      }
+
+      return res.json(mapTenantRow(data));
+    } catch (error) {
+      console.log("Error approving tenant:", error);
+      return res.status(500).json({ message: "Failed to approve tenant" });
+    }
+  });
+
+  app.put("/api/tenants/:id/reject", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can reject tenants" });
+      }
+
+      const { data: tenant, error: tenantError } = await supabase
+        .from("tenants")
+        .select("id, landlord_id, approval_status")
+        .eq("id", req.params.id)
+        .single();
+
+      if (tenantError || !tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      if (tenant.landlord_id !== userId) {
+        return res.status(403).json({ message: "Unauthorized: Tenant does not belong to you" });
+      }
+
+      const { data, error } = await supabase
+        .from("tenants")
+        .update({
+          approval_status: "rejected",
+          approved_by: userId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", req.params.id)
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(500).json({ message: "Failed to reject tenant" });
+      }
+
+      return res.json(mapTenantRow(data));
+    } catch (error) {
+      console.log("Error rejecting tenant:", error);
+      return res.status(500).json({ message: "Failed to reject tenant" });
+    }
+  });
+
+  app.post("/api/caretakers/assign", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can assign caretakers" });
+      }
+
+      const assignmentSchema = z.object({
+        caretakerId: z.string().min(1),
+        propertyId: z.string().optional().nullable(),
+        unitId: z.string().optional().nullable(),
+      }).refine((data) => data.propertyId || data.unitId, {
+        message: "Either propertyId or unitId is required",
+        path: ["propertyId"],
+      });
+
+      const assignmentData = assignmentSchema.parse(req.body);
+
+      const { data: caretaker, error: caretakerError } = await supabase
+        .from("users")
+        .select("id, role")
+        .eq("id", assignmentData.caretakerId)
+        .single();
+
+      if (caretakerError || !caretaker) {
+        return res.status(404).json({ message: "Caretaker not found" });
+      }
+
+      if (caretaker.role !== "caretaker") {
+        return res.status(400).json({ message: "User is not a caretaker" });
+      }
+
+      const { data, error } = await supabase
+        .from("caretaker_assignments")
+        .insert([
+          {
+            caretaker_id: assignmentData.caretakerId,
+            landlord_id: userId,
+            property_id: assignmentData.propertyId || null,
+            unit_id: assignmentData.unitId || null,
+            status: "active",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(500).json({ message: "Failed to assign caretaker" });
+      }
+
+      const { data: caretakerProfile } = await supabase
+        .from("users")
+        .select("id, first_name, last_name, email")
+        .eq("id", assignmentData.caretakerId)
+        .single();
+
+      return res.status(201).json(mapCaretakerAssignmentRow(data, caretakerProfile));
+    } catch (error) {
+      console.log("Error assigning caretaker:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      return res.status(500).json({ message: "Failed to assign caretaker" });
+    }
+  });
+
+  app.get("/api/caretaker-invitations", async (req: any, res: any, next: any) => {
+    const token = req.query.token as string | undefined;
+
+    if (token) {
+      try {
+        const { data: invitation, error } = await supabase
+          .from("caretaker_invitations")
+          .select("id, first_name, last_name, email, invitation_sent_at, status, expires_at")
+          .eq("invitation_token", token)
+          .in("status", ["invited", "pending"])
+          .single();
+
+        if (error || !invitation) {
+          return res.status(404).json({
+            error: "Invalid or expired invitation token",
+            message: "This invitation link is invalid or has already been used.",
+          });
+        }
+
+        if (!invitation.invitation_sent_at) {
+          return res.status(400).json({
+            error: "Invitation not sent",
+            message: "This invitation has not been sent yet.",
+          });
+        }
+
+        const expiresAt = invitation.expires_at
+          ? new Date(invitation.expires_at)
+          : new Date(new Date(invitation.invitation_sent_at).getTime() + 7 * 24 * 60 * 60 * 1000);
+
+        if (new Date() > expiresAt) {
+          return res.status(410).json({
+            error: "Invitation expired",
+            message: "This invitation link has expired. Please request a new invitation from your landlord.",
+            expired: true,
+          });
+        }
+
+        return res.status(200).json({
+          firstName: invitation.first_name,
+          lastName: invitation.last_name,
+          email: invitation.email,
+          valid: true,
+        });
+      } catch (error) {
+        console.error("Error verifying caretaker invitation:", error);
+        return res.status(500).json({
+          error: "Server error",
+          message: "Failed to verify invitation",
+        });
+      }
+    }
+
+    return isAuthenticated(req, res, next);
+  }, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can view caretaker invitations" });
+      }
+
+      const { data, error } = await supabase
+        .from("caretaker_invitations")
+        .select("id, email, first_name, last_name, status, invitation_sent_at, invitation_accepted_at, expires_at, property_id, unit_id, created_at")
+        .eq("landlord_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        return res.status(500).json({ message: "Failed to fetch caretaker invitations" });
+      }
+
+      const mapped = (data || []).map((invitation: any) => ({
+        id: invitation.id,
+        email: invitation.email,
+        firstName: invitation.first_name,
+        lastName: invitation.last_name,
+        status: invitation.status,
+        invitationSentAt: invitation.invitation_sent_at,
+        invitationAcceptedAt: invitation.invitation_accepted_at,
+        expiresAt: invitation.expires_at,
+        propertyId: invitation.property_id,
+        unitId: invitation.unit_id,
+        createdAt: invitation.created_at,
+      }));
+
+      return res.json(mapped);
+    } catch (error) {
+      console.error("Error listing caretaker invitations:", error);
+      return res.status(500).json({ message: "Failed to fetch caretaker invitations" });
+    }
+  });
+
+  app.post("/api/caretaker-invitations", async (req: any, res: any, next: any) => {
+    const action = req.query.action as string | undefined;
+
+    if (action === "accept") {
+      return next();
+    }
+
+    return isAuthenticated(req, res, next);
+  }, async (req: any, res: any) => {
+    const action = req.query.action as string | undefined;
+
+    if (action === "accept") {
+      try {
+        const acceptSchema = z.object({
+          token: z.string().min(1, "Token is required"),
+          password: z.string().min(8, "Password must be at least 8 characters"),
+        });
+
+        const { token, password } = acceptSchema.parse(req.body);
+
+        const { data: invitation, error } = await supabase
+          .from("caretaker_invitations")
+          .select("id, landlord_id, email, first_name, last_name, invitation_sent_at, status, expires_at, property_id, unit_id")
+          .eq("invitation_token", token)
+          .in("status", ["invited", "pending"])
+          .single();
+
+        if (error || !invitation) {
+          return res.status(404).json({
+            error: "Invalid invitation",
+            message: "This invitation link is invalid or has already been used.",
+          });
+        }
+
+        if (!invitation.invitation_sent_at) {
+          return res.status(410).json({
+            error: "Invalid invitation",
+            message: "This invitation is invalid. Please request a new invitation from your landlord.",
+          });
+        }
+
+        const expiresAt = invitation.expires_at
+          ? new Date(invitation.expires_at)
+          : new Date(new Date(invitation.invitation_sent_at).getTime() + 7 * 24 * 60 * 60 * 1000);
+
+        if (new Date() > expiresAt) {
+          return res.status(410).json({
+            error: "Invitation expired",
+            message: "This invitation link has expired. Please request a new invitation from your landlord.",
+          });
+        }
+
+        const { data: existingUserRecord } = await supabase
+          .from("users")
+          .select("id, role")
+          .eq("email", invitation.email)
+          .maybeSingle();
+
+        if (existingUserRecord && existingUserRecord.role && existingUserRecord.role !== "caretaker") {
+          return res.status(400).json({
+            error: "Account already exists",
+            message: `This email is already registered as a ${existingUserRecord.role}.`,
+          });
+        }
+
+        let authUserId = existingUserRecord?.id as string | undefined;
+
+        if (authUserId) {
+          const { error: updateError } = await supabase.auth.admin.updateUserById(authUserId, {
+            password,
+            user_metadata: {
+              role: "caretaker",
+              first_name: invitation.first_name,
+              last_name: invitation.last_name,
+            },
+          });
+
+          if (updateError) {
+            return res.status(500).json({
+              error: "Account update failed",
+              message: "Failed to update account. Please contact support.",
+            });
+          }
+        } else {
+          const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+            email: invitation.email,
+            password,
+            email_confirm: true,
+            user_metadata: {
+              first_name: invitation.first_name,
+              last_name: invitation.last_name,
+              role: "caretaker",
+            },
+          });
+
+          if (authError || !authData.user) {
+            return res.status(500).json({
+              error: "Account creation failed",
+              message: authError?.message || "Failed to create user account",
+            });
+          }
+
+          authUserId = authData.user.id;
+        }
+
+        const { error: upsertError } = await supabase
+          .from("users")
+          .upsert({
+            id: authUserId,
+            email: invitation.email,
+            first_name: invitation.first_name,
+            last_name: invitation.last_name,
+            role: "caretaker",
+            created_by: invitation.landlord_id,
+            status: "active",
+          }, { onConflict: "id" });
+
+        if (upsertError) {
+          return res.status(500).json({ message: "Failed to sync caretaker profile" });
+        }
+
+        if (invitation.property_id || invitation.unit_id) {
+          await supabase
+            .from("caretaker_assignments")
+            .insert([
+              {
+                caretaker_id: authUserId,
+                landlord_id: invitation.landlord_id,
+                property_id: invitation.property_id || null,
+                unit_id: invitation.unit_id || null,
+                status: "active",
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+            ]);
+        }
+
+        await supabase
+          .from("caretaker_invitations")
+          .update({
+            invitation_accepted_at: new Date().toISOString(),
+            status: "accepted",
+            invitation_token: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", invitation.id);
+
+        return res.status(201).json({
+          message: "Account created successfully",
+          requireLogin: true,
+          email: invitation.email,
+        });
+      } catch (error) {
+        console.error("Error accepting caretaker invitation:", error);
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ error: "Invalid input", errors: error.errors });
+        }
+        return res.status(500).json({ error: "Server error", message: "Failed to accept invitation" });
+      }
+    }
+
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can invite caretakers" });
+      }
+
+      const inviteSchema = z.object({
+        email: z.string().email(),
+        firstName: z.string().min(1),
+        lastName: z.string().min(1),
+        propertyId: z.string().optional().nullable(),
+        unitId: z.string().optional().nullable(),
+      }).refine((data) => data.propertyId || data.unitId, {
+        message: "Either propertyId or unitId is required",
+        path: ["propertyId"],
+      });
+
+      const inviteData = inviteSchema.parse(req.body);
+
+      if (inviteData.propertyId) {
+        const { data: property } = await supabase
+          .from("properties")
+          .select("id")
+          .eq("id", inviteData.propertyId)
+          .eq("owner_id", userId)
+          .single();
+
+        if (!property) {
+          return res.status(403).json({ message: "Property not found for this landlord" });
+        }
+      }
+
+      if (inviteData.unitId) {
+        const { data: unit } = await supabase
+          .from("units")
+          .select("id, property_id")
+          .eq("id", inviteData.unitId)
+          .single();
+
+        if (!unit) {
+          return res.status(403).json({ message: "Unit not found for this landlord" });
+        }
+
+        const { data: property } = await supabase
+          .from("properties")
+          .select("id")
+          .eq("id", unit.property_id)
+          .eq("owner_id", userId)
+          .single();
+
+        if (!property) {
+          return res.status(403).json({ message: "Unit not found for this landlord" });
+        }
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: invitation, error } = await supabase
+        .from("caretaker_invitations")
+        .insert([
+          {
+            landlord_id: userId,
+            invited_by: userId,
+            email: inviteData.email,
+            first_name: inviteData.firstName,
+            last_name: inviteData.lastName,
+            invitation_token: token,
+            status: "pending",
+            expires_at: expiresAt,
+            property_id: inviteData.propertyId || null,
+            unit_id: inviteData.unitId || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ])
+        .select()
+        .single();
+
+      if (error || !invitation) {
+        return res.status(500).json({ message: "Failed to create caretaker invitation" });
+      }
+
+      const { data: landlordProfile } = await supabase
+        .from("users")
+        .select("first_name, last_name")
+        .eq("id", userId)
+        .single();
+
+      await emailService.sendCaretakerInvitation(
+        invitation.email,
+        `${invitation.first_name} ${invitation.last_name}`,
+        token,
+        landlordProfile ? `${landlordProfile.first_name} ${landlordProfile.last_name}` : undefined
+      );
+
+      const { data: updatedInvitation } = await supabase
+        .from("caretaker_invitations")
+        .update({
+          invitation_sent_at: new Date().toISOString(),
+          status: "invited",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", invitation.id)
+        .select("id, email, first_name, last_name, status, invitation_sent_at, expires_at, property_id, unit_id")
+        .single();
+
+      return res.status(201).json({
+        id: updatedInvitation?.id,
+        email: updatedInvitation?.email,
+        firstName: updatedInvitation?.first_name,
+        lastName: updatedInvitation?.last_name,
+        status: updatedInvitation?.status,
+        invitationSentAt: updatedInvitation?.invitation_sent_at,
+        expiresAt: updatedInvitation?.expires_at,
+        propertyId: updatedInvitation?.property_id,
+        unitId: updatedInvitation?.unit_id,
+      });
+    } catch (error) {
+      console.error("Error creating caretaker invitation:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      return res.status(500).json({ message: "Failed to create caretaker invitation" });
+    }
+  });
+
+  app.post("/api/caretaker-invitations/resend", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can resend caretaker invitations" });
+      }
+
+      const resendSchema = z.object({
+        invitationId: z.string().min(1),
+      });
+
+      const { invitationId } = resendSchema.parse(req.body);
+
+      const { data: invitation } = await supabase
+        .from("caretaker_invitations")
+        .select("*")
+        .eq("id", invitationId)
+        .eq("landlord_id", userId)
+        .single();
+
+      if (!invitation) {
+        return res.status(404).json({ message: "Invitation not found" });
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      await supabase
+        .from("caretaker_invitations")
+        .update({
+          invitation_token: token,
+          invitation_sent_at: new Date().toISOString(),
+          status: "invited",
+          expires_at: expiresAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", invitationId);
+
+      const { data: landlordProfile } = await supabase
+        .from("users")
+        .select("first_name, last_name")
+        .eq("id", userId)
+        .single();
+
+      await emailService.sendCaretakerInvitation(
+        invitation.email,
+        `${invitation.first_name} ${invitation.last_name}`,
+        token,
+        landlordProfile ? `${landlordProfile.first_name} ${landlordProfile.last_name}` : undefined
+      );
+
+      return res.status(200).json({
+        message: "Invitation resent successfully",
+        email: invitation.email,
+      });
+    } catch (error) {
+      console.error("Error resending caretaker invitation:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      return res.status(500).json({ message: "Failed to resend caretaker invitation" });
+    }
+  });
+
+  app.get("/api/caretakers/assignments", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager" && role !== "caretaker") {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
+      const query = supabase
+        .from("caretaker_assignments")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (role === "caretaker") {
+        query.eq("caretaker_id", userId);
+      } else {
+        query.eq("landlord_id", userId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        return res.status(500).json({ message: "Failed to fetch caretaker assignments" });
+      }
+
+      const assignments = data || [];
+      const caretakerIds = Array.from(new Set(assignments.map((assignment: any) => assignment.caretaker_id)));
+      let caretakersById = new Map<string, any>();
+
+      if (caretakerIds.length > 0) {
+        const { data: caretakers, error: caretakersError } = await supabase
+          .from("users")
+          .select("id, first_name, last_name, email")
+          .in("id", caretakerIds);
+
+        if (caretakersError) {
+          return res.status(500).json({ message: "Failed to fetch caretaker profiles" });
+        }
+
+        (caretakers || []).forEach((caretaker: any) => {
+          caretakersById.set(caretaker.id, caretaker);
+        });
+      }
+
+      return res.json(assignments.map((assignment: any) => mapCaretakerAssignmentRow(assignment, caretakersById.get(assignment.caretaker_id))));
+    } catch (error) {
+      console.log("Error fetching caretaker assignments:", error);
+      return res.status(500).json({ message: "Failed to fetch caretaker assignments" });
+    }
+  });
+
+  app.put("/api/caretakers/assignments/:id", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can update caretaker assignments" });
+      }
+
+      const updateSchema = z.object({
+        status: z.enum(["active", "inactive"]).optional(),
+        propertyId: z.string().optional().nullable(),
+        unitId: z.string().optional().nullable(),
+      }).refine((data) => data.propertyId || data.unitId || data.status, {
+        message: "At least one field must be provided",
+        path: ["status"],
+      });
+
+      const updateData = updateSchema.parse(req.body);
+
+      const { data: assignment, error: assignmentError } = await supabase
+        .from("caretaker_assignments")
+        .select("id, landlord_id")
+        .eq("id", req.params.id)
+        .single();
+
+      if (assignmentError || !assignment) {
+        return res.status(404).json({ message: "Assignment not found" });
+      }
+
+      if (assignment.landlord_id !== userId) {
+        return res.status(403).json({ message: "Unauthorized: Assignment does not belong to you" });
+      }
+
+      const updates: any = { updated_at: new Date().toISOString() };
+      if (updateData.status !== undefined) updates.status = updateData.status;
+      if (updateData.propertyId !== undefined) updates.property_id = updateData.propertyId;
+      if (updateData.unitId !== undefined) updates.unit_id = updateData.unitId;
+
+      const { data, error } = await supabase
+        .from("caretaker_assignments")
+        .update(updates)
+        .eq("id", req.params.id)
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(500).json({ message: "Failed to update caretaker assignment" });
+      }
+
+      const { data: caretakerProfile } = await supabase
+        .from("users")
+        .select("id, first_name, last_name, email")
+        .eq("id", data.caretaker_id)
+        .single();
+
+      return res.json(mapCaretakerAssignmentRow(data, caretakerProfile));
+    } catch (error) {
+      console.log("Error updating caretaker assignment:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      return res.status(500).json({ message: "Failed to update caretaker assignment" });
+    }
+  });
+
+  app.delete("/api/caretakers/assignments/:id", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role !== "landlord" && role !== "property_manager") {
+        return res.status(403).json({ message: "Only landlords can delete caretaker assignments" });
+      }
+
+      const { data: assignment, error: assignmentError } = await supabase
+        .from("caretaker_assignments")
+        .select("id, landlord_id")
+        .eq("id", req.params.id)
+        .single();
+
+      if (assignmentError || !assignment) {
+        return res.status(404).json({ message: "Assignment not found" });
+      }
+
+      if (assignment.landlord_id !== userId) {
+        return res.status(403).json({ message: "Unauthorized: Assignment does not belong to you" });
+      }
+
+      const { error } = await supabase
+        .from("caretaker_assignments")
+        .delete()
+        .eq("id", req.params.id);
+
+      if (error) {
+        return res.status(500).json({ message: "Failed to delete caretaker assignment" });
+      }
+
+      return res.json({ message: "Caretaker assignment deleted", id: req.params.id });
+    } catch (error) {
+      console.log("Error deleting caretaker assignment:", error);
+      return res.status(500).json({ message: "Failed to delete caretaker assignment" });
     }
   });
 
@@ -1870,6 +2880,8 @@ export async function registerRoutes(app: Express) {
             }));
           }
         }
+      } else if (role === 'caretaker') {
+        return res.status(403).json({ message: "Caretaker access to payments is restricted" });
       } else {
         payments = await supabaseStorage.getPaymentsByOwnerId(userId) || [];
       }
@@ -1884,6 +2896,11 @@ export async function registerRoutes(app: Express) {
   app.post("/api/payments", isAuthenticated, async (req: any, res: any) => {
     try {
       const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role === 'tenant' || role === 'caretaker') {
+        return res.status(403).json({ message: "Only landlords can record payments" });
+      }
 
       // Define payment creation schema
       const paymentCreateSchema = z.object({
@@ -1987,6 +3004,10 @@ export async function registerRoutes(app: Express) {
         });
       }
 
+      if (role === 'caretaker') {
+        return res.status(403).json({ message: "Caretaker access to dashboard stats is restricted" });
+      }
+
       // Landlord stats (existing logic)
       const [properties, landlordTenants, allPayments] = await Promise.all([
         supabaseStorage.getPropertiesByOwnerId(userId),
@@ -2059,6 +3080,8 @@ export async function registerRoutes(app: Express) {
         } else {
           console.log('[API] No tenant record found for user:', userId);
         }
+      } else if (role === 'caretaker') {
+        return res.status(403).json({ message: "Caretaker access to leases is restricted" });
       } else {
         leases = await supabaseStorage.getLeasesByOwnerId(userId);
       }
@@ -2073,6 +3096,11 @@ export async function registerRoutes(app: Express) {
   app.post("/api/leases", isAuthenticated, async (req: any, res: any) => {
     try {
       const userId = req.user.sub;
+      const role = req.user.appRole;
+
+      if (role === 'tenant' || role === 'caretaker') {
+        return res.status(403).json({ message: "Only landlords can create leases" });
+      }
 
       // Define lease creation schema
       const leaseCreateSchema = z.object({
@@ -2167,6 +3195,36 @@ export async function registerRoutes(app: Express) {
         if (tenant) {
           requests = await supabaseStorage.getMaintenanceRequestsByTenantId(tenant.id);
         }
+      } else if (role === 'caretaker') {
+        const unitIds = await getCaretakerUnitIds(userId);
+
+        if (unitIds.length === 0) {
+          return res.json([]);
+        }
+
+        const { data, error } = await supabase
+          .from("maintenance_requests")
+          .select("*")
+          .in("unit_id", unitIds)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          return res.status(500).json({ message: "Failed to fetch maintenance requests" });
+        }
+
+        requests = (data || []).map((row: any) => ({
+          id: row.id,
+          unitId: row.unit_id,
+          tenantId: row.tenant_id,
+          title: row.title,
+          description: row.description,
+          priority: row.priority,
+          status: row.status,
+          assignedTo: row.assigned_to,
+          completedDate: row.completed_date,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }));
       } else {
         requests = await supabaseStorage.getMaintenanceRequestsByOwnerId(userId);
       }
@@ -2185,7 +3243,7 @@ export async function registerRoutes(app: Express) {
       const requestId = req.params.id;
 
       if (role === "tenant") {
-        return res.status(403).json({ message: "Only landlords can update maintenance requests" });
+        return res.status(403).json({ message: "Only landlords or property managers can update maintenance requests" });
       }
 
       const updateSchema = z.object({
@@ -2196,11 +3254,33 @@ export async function registerRoutes(app: Express) {
 
       const updateData = updateSchema.parse(req.body);
 
-      const ownerRequests = await supabaseStorage.getMaintenanceRequestsByOwnerId(userId);
-      const ownsRequest = ownerRequests.some((request) => request.id === requestId);
+      if (role === "caretaker") {
+        const unitIds = await getCaretakerUnitIds(userId);
 
-      if (!ownsRequest) {
-        return res.status(404).json({ message: "Maintenance request not found" });
+        if (unitIds.length === 0) {
+          return res.status(403).json({ message: "Caretaker not assigned to this request" });
+        }
+
+        const { data: existingRequest, error: requestError } = await supabase
+          .from("maintenance_requests")
+          .select("unit_id")
+          .eq("id", requestId)
+          .single();
+
+        if (requestError || !existingRequest) {
+          return res.status(404).json({ message: "Maintenance request not found" });
+        }
+
+        if (!unitIds.includes(existingRequest.unit_id)) {
+          return res.status(403).json({ message: "Caretaker not assigned to this request" });
+        }
+      } else {
+        const ownerRequests = await supabaseStorage.getMaintenanceRequestsByOwnerId(userId);
+        const ownsRequest = ownerRequests.some((request) => request.id === requestId);
+
+        if (!ownsRequest) {
+          return res.status(404).json({ message: "Maintenance request not found" });
+        }
       }
 
       const updatePayload: any = {};

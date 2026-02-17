@@ -13,6 +13,7 @@ import Register from "@/pages/register";
 import VerifyEmail from "@/pages/verify-email";
 import LandlordDashboard from "@/pages/dashboard/landlord";
 import TenantDashboard from "@/pages/dashboard/tenant";
+import CaretakerDashboard from "@/pages/dashboard/caretaker";
 import AuthCallback from "@/pages/auth-callback";
 import AcceptInvitation from "@/pages/accept-invitation";
 import ForgotPassword from "@/pages/forgot-password";
@@ -86,6 +87,9 @@ function Router() {
         // Route to appropriate dashboard based on user role
         if (user?.role === 'tenant') {
           return <TenantDashboard />;
+        }
+        if (user?.role === 'caretaker') {
+          return <CaretakerDashboard />;
         }
         return <LandlordDashboard />;
       }} />

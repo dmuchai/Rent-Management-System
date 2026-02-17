@@ -42,8 +42,27 @@ export default function DocumentManager() {
     .slice(0, 5);
 
   const formatFileSize = (fileSize?: number | null) => {
-    if (!fileSize) return "Unknown size";
+    if (fileSize == null) return "Unknown size";
+    if (fileSize < 1024) return `${fileSize} B`;
+    if (fileSize < 1024 * 1024) return `${(fileSize / 1024).toFixed(1)} KB`;
     return `${(fileSize / 1024 / 1024).toFixed(1)} MB`;
+  };
+
+  const getFileIcon = (fileType?: string | null) => {
+    const normalizedType = (fileType || "").toLowerCase();
+    if (normalizedType.includes("pdf")) return "fa-file-pdf";
+    if (normalizedType.includes("image") || normalizedType.includes("png") || normalizedType.includes("jpg") || normalizedType.includes("jpeg") || normalizedType.includes("gif")) {
+      return "fa-file-image";
+    }
+    if (normalizedType.includes("word") || normalizedType.includes("doc")) return "fa-file-word";
+    if (normalizedType.includes("excel") || normalizedType.includes("sheet") || normalizedType.includes("csv") || normalizedType.includes("xls")) {
+      return "fa-file-excel";
+    }
+    if (normalizedType.includes("powerpoint") || normalizedType.includes("presentation") || normalizedType.includes("ppt")) {
+      return "fa-file-powerpoint";
+    }
+    if (normalizedType.includes("text") || normalizedType.includes("txt")) return "fa-file-lines";
+    return "fa-file";
   };
 
   const uploadMutation = useMutation({
@@ -260,7 +279,7 @@ export default function DocumentManager() {
                       >
                         <div className="flex items-center space-x-4">
                           <div className="w-10 h-10 bg-destructive/10 rounded-lg flex items-center justify-center">
-                            <i className="fas fa-file-pdf text-destructive"></i>
+                            <i className={`fas ${getFileIcon(document.fileType)} text-destructive`}></i>
                           </div>
                           <div>
                             <p className="font-medium" data-testid={`document-name-${document.id}`}>
@@ -276,6 +295,7 @@ export default function DocumentManager() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label={`Download ${document.name || document.id}`}
                             onClick={(event) => {
                               event.stopPropagation();
                               handleDownload(document);
@@ -287,6 +307,7 @@ export default function DocumentManager() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label={`View ${document.name || document.id}`}
                             onClick={(event) => {
                               event.stopPropagation();
                               setSelectedDocument(document);

@@ -387,7 +387,7 @@ export default function TenantDashboard() {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         isCollapsed={isSidebarCollapsed}
-        role="tenant"
+        role={user?.role || "tenant"}
       />
 
       <div className="flex-1 min-w-0">

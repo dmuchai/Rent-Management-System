@@ -321,6 +321,103 @@ Need help? Contact us at support@landeeandmoony.com
     });
   }
 
+  async sendCaretakerInvitation(
+    caretakerEmail: string,
+    caretakerName: string,
+    invitationToken: string,
+    landlordName?: string
+  ): Promise<void> {
+    const invitationLink = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/accept-invitation?token=${encodeURIComponent(invitationToken)}&type=caretaker`;
+
+    const escapedCaretakerName = this.escapeHtml(caretakerName);
+    const escapedLandlordName = landlordName ? this.escapeHtml(landlordName) : null;
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
+          <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); padding: 30px; border-radius: 12px; color: white; text-align: center; margin-bottom: 30px;">
+          <h2 style="margin: 0 0 10px 0; font-size: 28px;">Caretaker Invitation 🧰</h2>
+          <p style="margin: 0; font-size: 16px; opacity: 0.9;">You've been invited to assist on Landee</p>
+        </div>
+
+        <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
+          <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedCaretakerName},</h3>
+          <p style="color: #4B5563; line-height: 1.6;">
+            ${escapedLandlordName || 'A landlord'} has invited you to join Landee as a caretaker.
+            You will be able to help with tenant onboarding, maintenance coordination, and updates for assigned properties.
+          </p>
+        </div>
+
+        <div style="background-color: #EFF6FF; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+          <h4 style="color: #1F2937; margin-top: 0;">With your caretaker account, you can:</h4>
+          <ul style="color: #4B5563; line-height: 1.8; padding-left: 20px;">
+            <li>🧾 Onboard tenants and capture details</li>
+            <li>🔧 Track and update maintenance requests</li>
+            <li>📣 Communicate updates with assigned tenants</li>
+            <li>📄 Access relevant documents for your assigned units</li>
+          </ul>
+        </div>
+
+        <div style="text-align: center; margin: 35px 0;">
+          <a href="${invitationLink}"
+             style="background-color: #0ea5e9; color: white; padding: 16px 40px;
+                    text-decoration: none; border-radius: 8px; display: inline-block;
+                    font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(14, 165, 233, 0.3);">
+            Accept Invitation
+          </a>
+          <p style="color: #6B7280; font-size: 14px; margin-top: 15px;">
+            This invitation link expires in 7 days
+          </p>
+        </div>
+
+        <div style="border-top: 2px solid #E5E7EB; padding-top: 20px; margin-top: 30px;">
+          <p style="color: #6B7280; font-size: 14px; line-height: 1.6;">
+            <strong>Need help?</strong><br>
+            If you didn't expect this invitation, please contact the landlord
+            or reach our support team at <a href="mailto:support@landeeandmoony.com" style="color: #3B82F6;">support@landeeandmoony.com</a>
+          </p>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+          <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
+            © 2026 Landee. All rights reserved.<br>
+            The #1 Property Management System in Kenya
+          </p>
+        </div>
+      </div>
+    `;
+
+    const text = [
+      `Hello ${caretakerName},`,
+      '',
+      `${landlordName || 'A landlord'} has invited you to join Landee as a caretaker.`,
+      '',
+      'With your caretaker account, you can:',
+      '- Onboard tenants and capture details',
+      '- Track and update maintenance requests',
+      '- Communicate updates with assigned tenants',
+      '- Access relevant documents for your assigned units',
+      '',
+      'Accept your invitation here:',
+      invitationLink,
+      '',
+      'This invitation link expires in 7 days.',
+      '',
+      'Need help? Contact support@landeeandmoony.com',
+    ].join('\n');
+
+    await this.sendEmail({
+      to: caretakerEmail,
+      subject: this.sanitizeSubject('Caretaker Invitation - Landee'),
+      html,
+      text,
+    });
+  }
+
   async sendRentReminder(
     tenantEmail: string,
     tenantName: string,

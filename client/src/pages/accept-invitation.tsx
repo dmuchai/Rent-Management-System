@@ -11,7 +11,7 @@ import { Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { supabase } from "@/lib/supabase";
 
-interface TenantInfo {
+interface InvitationInfo {
   firstName: string;
   lastName: string;
   email: string;
@@ -30,13 +30,17 @@ export default function AcceptInvitation() {
   // Get token from URL
   const searchParams = new URLSearchParams(window.location.search);
   const token = searchParams.get('token');
+  const invitationType = searchParams.get('type') === 'caretaker' ? 'caretaker' : 'tenant';
 
   // Verify token and get tenant info
-  const { data: tenantInfo, isLoading: isVerifying, error: verifyError } = useQuery<TenantInfo>({
-    queryKey: ['verify-invitation', token],
+  const { data: invitationInfo, isLoading: isVerifying, error: verifyError } = useQuery<InvitationInfo>({
+    queryKey: ['verify-invitation', token, invitationType],
     queryFn: async () => {
       if (!token) throw new Error('No token provided');
-      const response = await apiRequest("GET", `/api/invitations?token=${token}`);
+      const endpoint = invitationType === 'caretaker'
+        ? `/api/caretaker-invitations?token=${token}`
+        : `/api/invitations?token=${token}`;
+      const response = await apiRequest("GET", endpoint);
       return await response.json();
     },
     enabled: !!token,
@@ -46,14 +50,19 @@ export default function AcceptInvitation() {
   // Accept invitation mutation
   const acceptMutation = useMutation({
     mutationFn: async (data: { token: string; password: string }) => {
-      const response = await apiRequest("POST", "/api/invitations?action=accept", data);
+      const endpoint = invitationType === 'caretaker'
+        ? "/api/caretaker-invitations?action=accept"
+        : "/api/invitations?action=accept";
+      const response = await apiRequest("POST", endpoint, data);
       const result = await response.json();
       return result;
     },
     onSuccess: async (data: any) => {
       toast({
         title: "Account Created! 🎉",
-        description: "Welcome to Landee! Please login with your new password...",
+        description: invitationType === 'caretaker'
+          ? "Welcome to Landee! Please login to access your caretaker dashboard..."
+          : "Welcome to Landee! Please login with your new password...",
         duration: 4000,
       });
 
@@ -154,14 +163,18 @@ export default function AcceptInvitation() {
             <img src="/favicon.png" alt="Landee" className="h-12 w-12 mr-3" />
             <h1 className="text-3xl font-bold">Landee</h1>
           </div>
-          <p className="text-muted-foreground">Welcome to your new home! 🏠</p>
+          <p className="text-muted-foreground">
+            {invitationType === 'caretaker' ? "Welcome to your caretaker workspace" : "Welcome to your new home! 🏠"}
+          </p>
         </div>
 
         <Card className="shadow-xl">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-2xl text-center">Create Your Account</CardTitle>
             <CardDescription className="text-center">
-              You've been invited to join Landee
+              {invitationType === 'caretaker'
+                ? "You've been invited to join Landee as a caretaker"
+                : "You've been invited to join Landee"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -171,9 +184,9 @@ export default function AcceptInvitation() {
                 <CheckCircle2 className="h-5 w-5 text-blue-600 mt-0.5" />
                 <div>
                   <p className="font-medium text-blue-900">
-                    {tenantInfo?.firstName} {tenantInfo?.lastName}
+                    {invitationInfo?.firstName} {invitationInfo?.lastName}
                   </p>
-                  <p className="text-sm text-blue-700">{tenantInfo?.email}</p>
+                  <p className="text-sm text-blue-700">{invitationInfo?.email}</p>
                 </div>
               </div>
             </div>

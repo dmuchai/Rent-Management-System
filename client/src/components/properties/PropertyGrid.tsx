@@ -412,7 +412,7 @@ export default function PropertyGrid({ properties, units, loading, onAddProperty
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => window.open(doc.fileUrl, "_blank")}
+                              onClick={() => window.open(doc.fileUrl, "_blank", "noopener,noreferrer")}
                             >
                               Open
                             </Button>

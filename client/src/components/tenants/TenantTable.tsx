@@ -36,9 +36,10 @@ interface TenantTableProps {
   payments?: Payment[];
   loading?: boolean;
   onAddTenant?: () => void;
+  readOnly?: boolean;
 }
 
-export default function TenantTable({ tenants, leases = [], payments = [], loading, onAddTenant }: TenantTableProps) {
+export default function TenantTable({ tenants, leases = [], payments = [], loading, onAddTenant, readOnly = false }: TenantTableProps) {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -200,12 +201,16 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
         <div className="p-12 text-center">
           <i className="fas fa-users text-4xl text-muted-foreground mb-4"></i>
           <p className="text-muted-foreground text-lg" data-testid="text-notenants">
-            No tenants added yet
+            {readOnly ? "No tenants assigned yet" : "No tenants added yet"}
           </p>
-          <p className="text-muted-foreground mb-4">Add your first tenant to get started</p>
-          <Button onClick={handleAdd} data-testid="button-add-first-tenant">
-            <i className="fas fa-plus mr-2"></i>Add Tenant
-          </Button>
+          {!readOnly && (
+            <>
+              <p className="text-muted-foreground mb-4">Add your first tenant to get started</p>
+              <Button onClick={handleAdd} data-testid="button-add-first-tenant">
+                <i className="fas fa-plus mr-2"></i>Add Tenant
+              </Button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -341,7 +346,7 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
                     </td>
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2">
-                        {(tenant.accountStatus === 'invited' || tenant.accountStatus === 'pending_invitation') && (
+                        {!readOnly && (tenant.accountStatus === 'invited' || tenant.accountStatus === 'pending_invitation') && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -358,16 +363,18 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
                             )}
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(tenant)}
-                          data-testid={`button-edit-tenant-${tenant.id}`}
-                          className="hover:bg-yellow-100 hover:text-yellow-700"
-                          title="Edit tenant"
-                        >
-                          <i className="fas fa-edit"></i>
-                        </Button>
+                        {!readOnly && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(tenant)}
+                            data-testid={`button-edit-tenant-${tenant.id}`}
+                            className="hover:bg-yellow-100 hover:text-yellow-700"
+                            title="Edit tenant"
+                          >
+                            <i className="fas fa-edit"></i>
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -378,16 +385,18 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setTenantToDelete(tenant)}
-                          data-testid={`button-delete-tenant-${tenant.id}`}
-                          className="hover:bg-red-100 hover:text-red-700"
-                          title="Delete tenant"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {!readOnly && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setTenantToDelete(tenant)}
+                            data-testid={`button-delete-tenant-${tenant.id}`}
+                            className="hover:bg-red-100 hover:text-red-700"
+                            title="Delete tenant"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -397,12 +406,14 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
         </div>
       </div>
 
-      <TenantForm
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        tenant={selectedTenant}
-        mode={formMode}
-      />
+      {!readOnly && (
+        <TenantForm
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          tenant={selectedTenant}
+          mode={formMode}
+        />
+      )}
 
       <TenantDetailsModal
         open={detailsOpen}
@@ -410,26 +421,28 @@ export default function TenantTable({ tenants, leases = [], payments = [], loadi
         tenant={selectedTenant}
       />
 
-      <AlertDialog open={!!tenantToDelete} onOpenChange={() => setTenantToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Tenant</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete {tenantToDelete?.firstName} {tenantToDelete?.lastName}?
-              This action cannot be undone and will remove all associated data.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => tenantToDelete && deleteTenantMutation.mutate(tenantToDelete.id)}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {!readOnly && (
+        <AlertDialog open={!!tenantToDelete} onOpenChange={() => setTenantToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Tenant</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete {tenantToDelete?.firstName} {tenantToDelete?.lastName}?
+                This action cannot be undone and will remove all associated data.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => tenantToDelete && deleteTenantMutation.mutate(tenantToDelete.id)}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 }

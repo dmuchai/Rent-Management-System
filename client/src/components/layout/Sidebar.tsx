@@ -17,12 +17,13 @@ const navSections = [
     id: "main",
     label: "Main",
     items: [
-      { id: "overview", label: "Overview", icon: "fas fa-chart-pie", roles: ["landlord", "property_manager", "tenant"] },
+      { id: "overview", label: "Overview", icon: "fas fa-chart-pie", roles: ["landlord", "property_manager", "tenant", "caretaker"] },
       { id: "properties", label: "Properties", icon: "fas fa-building", roles: ["landlord", "property_manager"] },
-      { id: "tenants", label: "Tenants", icon: "fas fa-users", roles: ["landlord", "property_manager"] },
+      { id: "tenants", label: "Tenants", icon: "fas fa-users", roles: ["landlord", "property_manager", "caretaker"] },
+      { id: "caretakers", label: "Caretakers", icon: "fas fa-user-shield", roles: ["landlord", "property_manager"] },
       { id: "leases", label: "Leases", icon: "fas fa-file-contract", roles: ["landlord", "property_manager"] },
       { id: "payments", label: "Payments", icon: "fas fa-credit-card", roles: ["landlord", "property_manager", "tenant"] },
-      { id: "maintenance", label: "Maintenance", icon: "fas fa-tools", roles: ["landlord", "property_manager", "tenant"] },
+      { id: "maintenance", label: "Maintenance", icon: "fas fa-tools", roles: ["landlord", "property_manager", "tenant", "caretaker"] },
     ],
   },
   {
@@ -38,7 +39,7 @@ const navSections = [
     id: "account",
     label: "Account",
     items: [
-      { id: "profile", label: "Profile", icon: "fas fa-user-circle", roles: ["landlord", "property_manager", "tenant"] },
+      { id: "profile", label: "Profile", icon: "fas fa-user-circle", roles: ["landlord", "property_manager", "tenant", "caretaker"] },
     ],
   },
 ];

@@ -46,7 +46,7 @@ export async function verifyAuth(req: VercelRequest): Promise<{ userId: string; 
     }
 
     // Securely sync user data to public.users table using UPSERT to avoid race conditions
-    const ALLOWED_ROLES = ['landlord', 'tenant', 'property_manager'] as const;
+    const ALLOWED_ROLES = ['landlord', 'tenant', 'property_manager', 'caretaker'] as const;
     type AllowedRole = typeof ALLOWED_ROLES[number];
 
     // Determine the role: metadata > default

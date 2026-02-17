@@ -18,19 +18,19 @@ const config: CapacitorConfig = {
   },
 };
 
-if (isDev) {
+const serverUrl = process.env.CAPACITOR_SERVER_URL;
+const prodUrl = process.env.PROD_URL;
+
+if (serverUrl) {
   config.server = {
-    url: process.env.CAPACITOR_SERVER_URL || 'http://10.0.2.2:5000',
-    cleartext: true,
+    url: serverUrl,
+    cleartext: serverUrl.startsWith('http://'),
   };
-} else {
-  const prodUrl = process.env.PROD_URL || process.env.CAPACITOR_SERVER_URL;
-  if (prodUrl && !prodUrl.includes('example.com')) {
-    config.server = {
-      url: prodUrl,
-      cleartext: false,
-    };
-  }
+} else if (!isDev && prodUrl && !prodUrl.includes('example.com')) {
+  config.server = {
+    url: prodUrl,
+    cleartext: prodUrl.startsWith('http://'),
+  };
 }
 
 export default config;

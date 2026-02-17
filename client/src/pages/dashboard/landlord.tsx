@@ -39,7 +39,7 @@ import { AUTH_QUERY_KEYS, clearAuthQueries } from "@/lib/auth-keys";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Lease } from "@/../../shared/schema";
 
-type DashboardSection = "overview" | "properties" | "tenants" | "leases" | "maintenance" | "payments" | "payment-settings" | "documents" | "reports" | "profile";
+type DashboardSection = "overview" | "properties" | "tenants" | "caretakers" | "leases" | "maintenance" | "payments" | "payment-settings" | "documents" | "reports" | "profile";
 
 // Password validation helper function
 function validatePassword(password: string): { isValid: boolean; failedRequirements: string[] } {
@@ -72,6 +72,7 @@ export default function LandlordDashboard() {
     overview: 'Dashboard',
     properties: 'Properties',
     tenants: 'Tenants',
+    caretakers: 'Caretakers',
     leases: 'Leases',
     maintenance: 'Maintenance',
     payments: 'Payments',
@@ -126,6 +127,18 @@ export default function LandlordDashboard() {
     notes: "",
   });
 
+  const [caretakerInviteForm, setCaretakerInviteForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    propertyId: "",
+    unitId: "",
+  });
+
+  const [caretakerAssignmentSearch, setCaretakerAssignmentSearch] = useState("");
+  const [caretakerAssignmentStatus, setCaretakerAssignmentStatus] = useState("all");
+  const [caretakerAssignmentProperty, setCaretakerAssignmentProperty] = useState("all");
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       toast({
@@ -169,6 +182,26 @@ export default function LandlordDashboard() {
     retry: false,
   });
 
+  const { data: caretakerInvitations = [], isLoading: invitationsLoading } = useQuery({
+    queryKey: ["/api/caretaker-invitations"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/caretaker-invitations");
+      const result = await response.json();
+      return Array.isArray(result) ? result : [];
+    },
+    retry: false,
+  });
+
+  const { data: caretakerAssignments = [], isLoading: assignmentsLoading } = useQuery({
+    queryKey: ["/api/caretakers/assignments"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/caretakers/assignments");
+      const result = await response.json();
+      return Array.isArray(result) ? result : [];
+    },
+    retry: false,
+  });
+
   const { data: leases = [], isLoading: leasesLoading } = useQuery({
     queryKey: ["/api/leases"],
     queryFn: async () => {
@@ -197,6 +230,49 @@ export default function LandlordDashboard() {
       return result.data || result || [];
     },
     retry: false,
+  });
+
+  const createCaretakerInviteMutation = useMutation({
+    mutationFn: async (data: { firstName: string; lastName: string; email: string; propertyId?: string; unitId?: string }) => {
+      const response = await apiRequest("POST", "/api/caretaker-invitations?action=create", data);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/caretaker-invitations"] });
+      toast({
+        title: "Caretaker invited",
+        description: "Invitation email sent successfully.",
+      });
+      setCaretakerInviteForm({ firstName: "", lastName: "", email: "", propertyId: "", unitId: "" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to invite caretaker",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resendCaretakerInviteMutation = useMutation({
+    mutationFn: async (invitationId: string) => {
+      const response = await apiRequest("POST", "/api/caretaker-invitations?action=resend", { invitationId });
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/caretaker-invitations"] });
+      toast({
+        title: "Invitation resent",
+        description: "Caretaker invitation email sent.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to resend invitation",
+        variant: "destructive",
+      });
+    },
   });
 
   const updateMaintenanceMutation = useMutation({
@@ -229,6 +305,31 @@ export default function LandlordDashboard() {
     },
     retry: false,
   });
+
+  const caretakerUnits = useMemo(() => {
+    if (!caretakerInviteForm.propertyId) return units;
+    return units.filter((unit: any) => unit.propertyId === caretakerInviteForm.propertyId || unit.property_id === caretakerInviteForm.propertyId);
+  }, [units, caretakerInviteForm.propertyId]);
+
+  const filteredCaretakerAssignments = useMemo(() => {
+    const searchTerm = caretakerAssignmentSearch.trim().toLowerCase();
+
+    return caretakerAssignments.filter((assignment: any) => {
+      if (caretakerAssignmentStatus !== "all" && assignment.status !== caretakerAssignmentStatus) {
+        return false;
+      }
+
+      if (caretakerAssignmentProperty !== "all" && assignment.propertyId !== caretakerAssignmentProperty) {
+        return false;
+      }
+
+      if (!searchTerm) return true;
+
+      const name = String(assignment.caretakerName || "").toLowerCase();
+      const email = String(assignment.caretakerEmail || "").toLowerCase();
+      return name.includes(searchTerm) || email.includes(searchTerm);
+    });
+  }, [caretakerAssignments, caretakerAssignmentSearch, caretakerAssignmentStatus, caretakerAssignmentProperty]);
 
   useRealtimeSubscription("properties", ["/api/properties", "/api/dashboard/stats"]);
   useRealtimeSubscription("tenants", ["/api/tenants", "/api/dashboard/stats"]);
@@ -401,6 +502,7 @@ export default function LandlordDashboard() {
     overview: "Dashboard Overview",
     properties: "Properties",
     tenants: "Tenants",
+    caretakers: "Caretakers",
     leases: "Lease Management",
     maintenance: "Maintenance",
     payments: "Payment Management",
@@ -1279,6 +1381,291 @@ export default function LandlordDashboard() {
           </div>
         );
 
+      case "caretakers": {
+        const canSubmitInvite =
+          caretakerInviteForm.firstName.trim() &&
+          caretakerInviteForm.lastName.trim() &&
+          caretakerInviteForm.email.trim() &&
+          (caretakerInviteForm.propertyId || caretakerInviteForm.unitId);
+
+        const handleInviteSubmit = (event: React.FormEvent) => {
+          event.preventDefault();
+          if (!canSubmitInvite) return;
+
+          createCaretakerInviteMutation.mutate({
+            firstName: caretakerInviteForm.firstName.trim(),
+            lastName: caretakerInviteForm.lastName.trim(),
+            email: caretakerInviteForm.email.trim(),
+            propertyId: caretakerInviteForm.propertyId || undefined,
+            unitId: caretakerInviteForm.unitId || undefined,
+          });
+        };
+
+        const renderStatusBadge = (status: string) => {
+          switch (status) {
+            case "accepted":
+              return <Badge className="bg-green-100 text-green-700">Accepted</Badge>;
+            case "invited":
+              return <Badge className="bg-blue-100 text-blue-700">Invited</Badge>;
+            case "pending":
+              return <Badge className="bg-yellow-100 text-yellow-700">Pending</Badge>;
+            default:
+              return <Badge variant="outline">{status}</Badge>;
+          }
+        };
+
+        return (
+          <div className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-3">
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle>Invite Caretaker</CardTitle>
+                  <CardDescription>Invite a caretaker and assign them to a property or unit.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form className="space-y-4" onSubmit={handleInviteSubmit}>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="caretakerFirstName">First name</Label>
+                        <Input
+                          id="caretakerFirstName"
+                          value={caretakerInviteForm.firstName}
+                          onChange={(event) =>
+                            setCaretakerInviteForm((prev) => ({ ...prev, firstName: event.target.value }))
+                          }
+                          placeholder="Jane"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="caretakerLastName">Last name</Label>
+                        <Input
+                          id="caretakerLastName"
+                          value={caretakerInviteForm.lastName}
+                          onChange={(event) =>
+                            setCaretakerInviteForm((prev) => ({ ...prev, lastName: event.target.value }))
+                          }
+                          placeholder="Doe"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="caretakerEmail">Email</Label>
+                      <Input
+                        id="caretakerEmail"
+                        type="email"
+                        value={caretakerInviteForm.email}
+                        onChange={(event) =>
+                          setCaretakerInviteForm((prev) => ({ ...prev, email: event.target.value }))
+                        }
+                        placeholder="caretaker@example.com"
+                      />
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Assign property</Label>
+                        <Select
+                          value={caretakerInviteForm.propertyId}
+                          onValueChange={(value) =>
+                            setCaretakerInviteForm((prev) => ({
+                              ...prev,
+                              propertyId: value,
+                              unitId: "",
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select property" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {properties.map((property: any) => (
+                              <SelectItem key={property.id} value={property.id}>
+                                {property.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Assign unit</Label>
+                        <Select
+                          value={caretakerInviteForm.unitId}
+                          onValueChange={(value) =>
+                            setCaretakerInviteForm((prev) => ({
+                              ...prev,
+                              unitId: value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {caretakerUnits.map((unit: any) => (
+                              <SelectItem key={unit.id} value={unit.id}>
+                                {unit.unitNumber ? `Unit ${unit.unitNumber}` : unit.id}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Button type="submit" disabled={!canSubmitInvite || createCaretakerInviteMutation.isPending}>
+                        {createCaretakerInviteMutation.isPending ? "Sending invite..." : "Send Invitation"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">Property or unit assignment is required.</p>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Active Assignments</CardTitle>
+                  <CardDescription>Current caretakers assigned to your portfolio.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="caretakerSearch">Search caretaker</Label>
+                      <Input
+                        id="caretakerSearch"
+                        value={caretakerAssignmentSearch}
+                        onChange={(event) => setCaretakerAssignmentSearch(event.target.value)}
+                        placeholder="Name or email"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select value={caretakerAssignmentStatus} onValueChange={setCaretakerAssignmentStatus}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="All statuses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Property</Label>
+                      <Select value={caretakerAssignmentProperty} onValueChange={setCaretakerAssignmentProperty}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="All properties" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All</SelectItem>
+                          {properties.map((property: any) => (
+                            <SelectItem key={property.id} value={property.id}>
+                              {property.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {assignmentsLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((item) => (
+                        <Skeleton key={item} className="h-10 w-full" />
+                      ))}
+                    </div>
+                  ) : filteredCaretakerAssignments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No assignments match the current filters.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-muted-foreground">
+                            <th className="py-2">Caretaker</th>
+                            <th className="py-2">Property</th>
+                            <th className="py-2">Unit</th>
+                            <th className="py-2">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredCaretakerAssignments.map((assignment: any) => {
+                            const property = properties.find((item: any) => item.id === assignment.propertyId);
+                            const unit = units.find((item: any) => item.id === assignment.unitId);
+                            const caretakerName = assignment.caretakerName || "Caretaker";
+                            const caretakerEmail = assignment.caretakerEmail || "";
+
+                            return (
+                              <tr key={assignment.id} className="border-t border-border">
+                                <td className="py-3">
+                                  <div>
+                                    <p className="font-medium">{caretakerName}</p>
+                                    {caretakerEmail ? (
+                                      <p className="text-xs text-muted-foreground">{caretakerEmail}</p>
+                                    ) : null}
+                                  </div>
+                                </td>
+                                <td className="py-3">{property?.name || "—"}</td>
+                                <td className="py-3">{unit?.unitNumber ? `Unit ${unit.unitNumber}` : "—"}</td>
+                                <td className="py-3">
+                                  <Badge variant="outline" className="capitalize">
+                                    {assignment.status}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Invitations</CardTitle>
+                <CardDescription>Track caretaker invitation status.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {invitationsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((item) => (
+                      <Skeleton key={item} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : caretakerInvitations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No invitations sent yet.</p>
+                ) : (
+                  caretakerInvitations.map((invitation: any) => (
+                    <div key={invitation.id} className="flex flex-col gap-2 rounded-lg border border-border p-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="text-sm font-medium">
+                          {invitation.firstName} {invitation.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{invitation.email}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Expires: {invitation.expiresAt ? new Date(invitation.expiresAt).toLocaleDateString() : "—"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {renderStatusBadge(invitation.status)}
+                        {(invitation.status === "pending" || invitation.status === "invited") && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => resendCaretakerInviteMutation.mutate(invitation.id)}
+                          >
+                            Resend
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        );
+      }
+
       case "leases":
         return (
           <div className="space-y-6">
@@ -1318,7 +1705,9 @@ export default function LandlordDashboard() {
         const completedRequests = normalizedRequests.filter((request: any) => ["completed", "resolved"].includes(String(request.status || "").toLowerCase()));
         const urgentRequests = normalizedRequests.filter((request: any) => {
           const priority = String(request.priority || "").toLowerCase();
-          return priority === "urgent" || priority === "high" || request.isUrgent === true;
+          const status = String(request.status || "").toLowerCase();
+          const isResolved = ["completed", "resolved", "cancelled"].includes(status);
+          return !isResolved && (priority === "urgent" || priority === "high" || request.isUrgent === true);
         });
 
         const renderRequestItem = (request: any) => {
@@ -1982,6 +2371,7 @@ export default function LandlordDashboard() {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         isCollapsed={isSidebarCollapsed}
+        role={user?.role || "landlord"}
       />
 
       <div className="flex-1 min-w-0">
