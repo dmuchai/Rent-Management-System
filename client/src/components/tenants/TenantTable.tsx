@@ -451,7 +451,7 @@ export default function TenantTable({
         {/* Header with Search and Filters */}
         <div className="p-6 border-b border-border">
           {/* Search and Filter Controls */}
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -476,6 +476,13 @@ export default function TenantTable({
                 </SelectContent>
               </Select>
             </div>
+            {allowCreate && (
+              <div className="w-full sm:w-auto">
+                <Button onClick={handleAdd} className="w-full sm:w-auto" data-testid="button-add-tenant">
+                  <i className="fas fa-plus mr-2"></i>Add Tenant
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Results count */}
