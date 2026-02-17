@@ -1652,8 +1652,9 @@ export default function LandlordDashboard() {
                             variant="outline"
                             size="sm"
                             onClick={() => resendCaretakerInviteMutation.mutate(invitation.id)}
+                            disabled={resendCaretakerInviteMutation.isPending}
                           >
-                            Resend
+                            {resendCaretakerInviteMutation.isPending ? "Sending..." : "Resend"}
                           </Button>
                         )}
                       </div>

@@ -26,7 +26,7 @@ if (serverUrl) {
     url: serverUrl,
     cleartext: serverUrl.startsWith('http://'),
   };
-} else if (!isDev && prodUrl && !prodUrl.includes('example.com')) {
+} else if (!isDev && prodUrl && !prodUrl.toLowerCase().includes('example.com')) {
   config.server = {
     url: prodUrl,
     cleartext: prodUrl.startsWith('http://'),
