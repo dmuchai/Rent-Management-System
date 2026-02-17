@@ -72,40 +72,57 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 // --- Implementation Functions ---
 
 async function handleListTenants(req: VercelRequest, res: VercelResponse, auth: any, sql: any) {
-    // Get all tenants owned by this landlord
-    const tenants = await sql`
-    SELECT DISTINCT
-      t.id,
-      t.landlord_id as "landlordId",
-      t.user_id as "userId",
-      t.first_name as "firstName",
-      t.last_name as "lastName",
-      t.email,
-      t.phone,
-      t.emergency_contact as "emergencyContact",
-      t.invitation_sent_at as "invitationSentAt",
-      t.invitation_accepted_at as "invitationAcceptedAt",
-      t.account_status as "accountStatus",
-    t.approval_status as "approvalStatus",
-    t.approved_by as "approvedBy",
-    t.approved_at as "approvedAt",
-    t.assigned_unit_id as "assignedUnitId",
-    t.assigned_start_date as "assignedStartDate",
-    t.assigned_end_date as "assignedEndDate",
-    t.assigned_monthly_rent as "assignedMonthlyRent",
-    t.assigned_security_deposit as "assignedSecurityDeposit",
-    t.assigned_at as "assignedAt",
-    t.assigned_by as "assignedBy",
-      t.created_at as "createdAt",
-      t.updated_at as "updatedAt"
-    FROM public.tenants t
-    LEFT JOIN public.leases l ON t.id = l.tenant_id
-    LEFT JOIN public.units u ON l.unit_id = u.id
-    LEFT JOIN public.properties p ON u.property_id = p.id
-    WHERE t.landlord_id = ${auth.userId} 
-       OR p.owner_id = ${auth.userId}
-    ORDER BY t.created_at DESC
-  `;
+        const isCaretaker = auth.role === 'caretaker';
+
+        const tenants = await sql`
+        SELECT DISTINCT
+            t.id,
+            t.landlord_id as "landlordId",
+            t.user_id as "userId",
+            t.first_name as "firstName",
+            t.last_name as "lastName",
+            t.email,
+            t.phone,
+            t.emergency_contact as "emergencyContact",
+            t.invitation_sent_at as "invitationSentAt",
+            t.invitation_accepted_at as "invitationAcceptedAt",
+            t.account_status as "accountStatus",
+            t.approval_status as "approvalStatus",
+            t.approved_by as "approvedBy",
+            t.approved_at as "approvedAt",
+            t.assigned_unit_id as "assignedUnitId",
+            t.assigned_start_date as "assignedStartDate",
+            t.assigned_end_date as "assignedEndDate",
+            t.assigned_monthly_rent as "assignedMonthlyRent",
+            t.assigned_security_deposit as "assignedSecurityDeposit",
+            t.assigned_at as "assignedAt",
+            t.assigned_by as "assignedBy",
+            t.created_at as "createdAt",
+            t.updated_at as "updatedAt"
+        FROM public.tenants t
+        LEFT JOIN public.leases l ON t.id = l.tenant_id
+        LEFT JOIN public.units u ON l.unit_id = u.id
+        LEFT JOIN public.properties p ON u.property_id = p.id
+        LEFT JOIN public.units u_assigned ON t.assigned_unit_id = u_assigned.id
+        LEFT JOIN public.properties p_assigned ON u_assigned.property_id = p_assigned.id
+        WHERE (
+            t.landlord_id = ${auth.userId}
+            OR p.owner_id = ${auth.userId}
+            OR (
+                ${isCaretaker} AND EXISTS (
+                    SELECT 1
+                    FROM public.caretaker_assignments ca
+                    WHERE ca.caretaker_id = ${auth.userId}
+                        AND ca.status = 'active'
+                        AND (
+                            (ca.property_id IS NOT NULL AND (ca.property_id = p.id OR ca.property_id = p_assigned.id))
+                            OR (ca.unit_id IS NOT NULL AND (ca.unit_id = u.id OR ca.unit_id = t.assigned_unit_id))
+                        )
+                )
+            )
+        )
+        ORDER BY t.created_at DESC
+    `;
 
     return res.status(200).json(tenants);
 }
