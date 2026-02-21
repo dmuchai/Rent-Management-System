@@ -32,3 +32,4 @@ ios/
 
 # Supabase local files
 supabase/
+.vscode/
