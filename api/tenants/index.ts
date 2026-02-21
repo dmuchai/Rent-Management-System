@@ -134,9 +134,14 @@ async function handleCreateTenant(req: VercelRequest, res: VercelResponse, auth:
             propertyId: z.string().min(1, 'Property is required'),
         });
 
-        const tenantData = isCaretaker
-            ? caretakerTenantSchema.parse(req.body)
-            : insertTenantSchema.parse(req.body);
+        let tenantData = insertTenantSchema.parse(req.body);
+        let caretakerPropertyId: string | undefined;
+
+        if (isCaretaker) {
+                const caretakerTenantData = caretakerTenantSchema.parse(req.body);
+                tenantData = caretakerTenantData;
+                caretakerPropertyId = caretakerTenantData.propertyId;
+        }
 
     // Check if a user with this email already exists with a different role
     // We handle this via raw SQL since we already have the connection
@@ -156,10 +161,13 @@ async function handleCreateTenant(req: VercelRequest, res: VercelResponse, auth:
         let propertyName: string | undefined;
 
         if (isCaretaker) {
+            if (!caretakerPropertyId) {
+                return res.status(400).json({ message: 'Property is required' });
+            }
                 const [property] = await sql`
                     SELECT id, owner_id, name
                     FROM public.properties
-                    WHERE id = ${tenantData.propertyId}
+                    WHERE id = ${caretakerPropertyId}
                 `;
 
                 if (!property) {

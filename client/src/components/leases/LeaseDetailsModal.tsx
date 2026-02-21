@@ -177,9 +177,9 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
                   <Button
                     size="sm"
                     onClick={() => landlordSignMutation.mutate()}
-                    disabled={landlordSignMutation.isLoading}
+                    disabled={landlordSignMutation.isPending}
                   >
-                    {landlordSignMutation.isLoading ? "Signing..." : "Sign as Landlord"}
+                    {landlordSignMutation.isPending ? "Signing..." : "Sign as Landlord"}
                   </Button>
                 )}
                 <Badge variant={status.variant} className="text-lg px-4 py-2">
