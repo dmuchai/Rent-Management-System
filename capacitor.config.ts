@@ -19,17 +19,11 @@ const config: CapacitorConfig = {
 };
 
 const serverUrl = process.env.CAPACITOR_SERVER_URL;
-const prodUrl = process.env.PROD_URL;
 
-if (serverUrl) {
+if (isDev && serverUrl) {
   config.server = {
     url: serverUrl,
     cleartext: serverUrl.startsWith('http://'),
-  };
-} else if (!isDev && prodUrl && !prodUrl.toLowerCase().includes('example.com')) {
-  config.server = {
-    url: prodUrl,
-    cleartext: prodUrl.startsWith('http://'),
   };
 }
 

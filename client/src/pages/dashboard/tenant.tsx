@@ -330,6 +330,32 @@ export default function TenantDashboard() {
     retry: false,
   });
 
+  const tenantSignLeaseMutation = useMutation({
+    mutationFn: async (leaseId: string) => {
+      const response = await apiRequest("POST", `/api/leases/${leaseId}/tenant-sign`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to sign lease");
+      }
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leases"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({
+        title: "Lease signed",
+        description: "Your lease is now active.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to sign lease",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -366,32 +392,6 @@ export default function TenantDashboard() {
     : 0;
 
   const ledgerData = calculateLedger(activeLease, payments);
-
-  const tenantSignLeaseMutation = useMutation({
-    mutationFn: async (leaseId: string) => {
-      const response = await apiRequest("POST", `/api/leases/${leaseId}/tenant-sign`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to sign lease");
-      }
-      return await response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/leases"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      toast({
-        title: "Lease signed",
-        description: "Your lease is now active.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to sign lease",
-        variant: "destructive",
-      });
-    },
-  });
 
   const sectionTitles: Record<string, string> = {
     overview: "Overview",
@@ -593,9 +593,9 @@ export default function TenantDashboard() {
                                   </div>
                                   <Button
                                     onClick={() => tenantSignLeaseMutation.mutate(pendingLease.id)}
-                                    disabled={tenantSignLeaseMutation.isLoading}
+                                    disabled={tenantSignLeaseMutation.isPending}
                                   >
-                                    {tenantSignLeaseMutation.isLoading ? "Signing..." : "Sign Lease"}
+                                    {tenantSignLeaseMutation.isPending ? "Signing..." : "Sign Lease"}
                                   </Button>
                                 </div>
                               </div>
