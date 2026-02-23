@@ -77,6 +77,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
           channel_type,
           paybill_number,
           till_number,
+          bank_paybill_number,
+          bank_account_number,
           bank_name,
           account_number,
           account_name,

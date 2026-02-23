@@ -11,7 +11,18 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         const sql = createDbConnection();
         try {
             const [tenant] = await sql`
-        SELECT * FROM public.tenants 
+        SELECT 
+          id,
+          user_id,
+          first_name,
+          last_name,
+          email,
+          phone,
+          emergency_contact,
+          landlord_id,
+          created_at,
+          updated_at
+        FROM public.tenants 
         WHERE user_id = ${auth.userId}
       `;
 
@@ -28,6 +39,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
                 email: tenant.email,
                 phone: tenant.phone,
                 emergencyContact: tenant.emergency_contact,
+                landlordId: tenant.landlord_id,
                 createdAt: tenant.created_at,
                 updatedAt: tenant.updated_at
             });
