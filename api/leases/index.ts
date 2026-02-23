@@ -64,7 +64,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
 async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: any, sql: any) {
     // Auto-expire leases
-    await sql`
+    const expiredLeases = await sql`
     UPDATE public.leases l
     SET is_active = false, status = 'expired', updated_at = NOW()
     FROM public.units u
@@ -75,7 +75,20 @@ async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: a
     ))
     AND l.is_active = true
     AND l.end_date < NOW()
+    RETURNING l.unit_id
   `;
+  
+  // Sync occupancy for all units that had leases expire
+  if (expiredLeases.length > 0) {
+    const unitIds = expiredLeases.map((l: any) => l.unit_id);
+    for (const unitId of unitIds) {
+      await sql`
+        UPDATE public.units u SET is_occupied = EXISTS(
+            SELECT 1 FROM public.leases l WHERE l.unit_id = u.id AND l.is_active = true
+        ) WHERE u.id = ${unitId}
+      `;
+    }
+  }
 
         const isCaretaker = auth.role === 'caretaker';
 
@@ -229,22 +242,31 @@ async function handleCreateLease(req: VercelRequest, res: VercelResponse, auth: 
 }
 
 async function handleDeleteLease(req: VercelRequest, res: VercelResponse, auth: any, sql: any, leaseId: string) {
+    let unitId: string = '';
     // Transaction for delete safely
     await sql.begin(async (tx: any) => {
         const [lease] = await tx`
-            SELECT l.id FROM public.leases l
+            SELECT l.id, l.unit_id FROM public.leases l
             JOIN public.units u ON l.unit_id = u.id
             JOIN public.properties p ON u.property_id = p.id
             WHERE l.id = ${leaseId} AND p.owner_id = ${auth.userId}
             FOR UPDATE
         `;
         if (!lease) throw new Error('LEASE_NOT_FOUND');
+        unitId = lease.unit_id;
 
         const [payment] = await tx`SELECT id FROM public.payments WHERE lease_id = ${leaseId} LIMIT 1`;
         if (payment) throw new Error('LEASE_HAS_PAYMENTS');
 
         await tx`DELETE FROM public.leases WHERE id = ${leaseId}`;
     });
+
+    // Sync occupancy for the deleted lease's unit
+    await sql`
+        UPDATE public.units u SET is_occupied = EXISTS(
+            SELECT 1 FROM public.leases l WHERE l.unit_id = u.id AND l.is_active = true
+        ) WHERE u.id = ${unitId}
+    `;
 
     return res.status(200).json({ message: 'Lease deleted successfully', id: leaseId });
 }
