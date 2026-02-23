@@ -39,6 +39,33 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
     enabled: !!lease?.id && open,
   });
 
+  // Move mutation hook to top level before conditional returns (Rules of Hooks)
+  const landlordSignMutation = useMutation({
+    mutationFn: async () => {
+      if (!lease?.id) throw new Error('Lease ID is required');
+      const response = await apiRequest("POST", `/api/leases/${lease.id}/landlord-sign`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to sign lease");
+      }
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leases"] });
+      toast({
+        title: "Lease signed",
+        description: "Waiting on tenant signature.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to sign lease",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!lease) return null;
 
   const formatDate = (date: Date | string | null) => {
@@ -89,32 +116,7 @@ export default function LeaseDetailsModal({ open, onOpenChange, lease }: LeaseDe
   const status = getLeaseStatus();
   const leaseDuration = Math.ceil((new Date(lease.endDate).getTime() - new Date(lease.startDate).getTime()) / (1000 * 60 * 60 * 24));
   const daysRemaining = Math.ceil((new Date(lease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-    const landlordSignMutation = useMutation({
-      mutationFn: async () => {
-        const response = await apiRequest("POST", `/api/leases/${lease.id}/landlord-sign`);
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || "Failed to sign lease");
-        }
-        return await response.json();
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["/api/leases"] });
-        toast({
-          title: "Lease signed",
-          description: "Waiting on tenant signature.",
-        });
-      },
-      onError: (error: any) => {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to sign lease",
-          variant: "destructive",
-        });
-      },
-    });
 
-  
   const totalPaid = payments
     .filter((p: any) => p.status === 'completed')
     .reduce((sum: number, p: any) => sum + parseFloat(p.amount || '0'), 0);

@@ -41,8 +41,16 @@
       "destination": "/api/tenants/me"
     },
     {
+      "source": "/api/tenants/:id/:action",
+      "destination": "/api/tenants"
+    },
+    {
       "source": "/api/tenants/:id",
       "destination": "/api/tenants"
+    },
+    {
+      "source": "/api/leases/:id/:action",
+      "destination": "/api/leases"
     },
     {
       "source": "/api/leases/:id",
