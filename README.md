@@ -33,10 +33,8 @@ A comprehensive Rent Management System that streamlines interactions between lan
 
 Install these if you don't already have them:
 
-```bash
-Node.js (v20+)
-npm
-```
+- Node.js v20+
+- npm
 
 You'll also need a Supabase project (for the database and Auth) and optional credentials for payment providers (M-Pesa, Pesapal) and Upstash if you plan to enable distributed rate limiting.
 
@@ -121,7 +119,7 @@ See `.env.example` for the full set of environment variables. Key ones include:
 - `npm run db:generate` — Generate DB migrations with Drizzle Kit
 - `npm run db:push` — Push schema/migrations to the DB
 - `npm run check` — TypeScript type check
-- `npm test:api` — Run API tests
+- `npm run test:api` — Run API tests
 
 ## Docs & Guides
 
