@@ -28,11 +28,11 @@ echo "Project Root: $PROJECT_ROOT"
 echo "Dist Directory: $DIST_DIR"
 echo ""
 
-# Step 1: Clean and build frontend
+# Step 1: Clean and build frontend with Vite
 echo -e "${YELLOW}Step 1: Building frontend...${NC}"
 cd "$PROJECT_ROOT"
 rm -rf dist/
-npm run build
+npm run build:frontend
 echo -e "${GREEN}✓ Frontend built successfully${NC}"
 echo ""
 
