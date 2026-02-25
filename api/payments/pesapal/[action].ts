@@ -337,12 +337,14 @@ async function handleRegister(req: VercelRequest, res: VercelResponse, auth: any
             return res.status(503).json({ message: "Pesapal credentials not configured" });
         }
 
-        // Consistent baseUrl logic
+        // Consistent baseUrl logic - Priority: APP_URL > VERCEL_URL > FRONTEND_URL > hardcoded fallback
         let baseUrl = 'https://landee.kejalink.co.ke';
         if (process.env.APP_URL) {
             baseUrl = process.env.APP_URL;
         } else if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
             baseUrl = `https://${process.env.VERCEL_URL}`;
+        } else if (process.env.FRONTEND_URL) {
+            baseUrl = process.env.FRONTEND_URL;
         }
 
         const ipnUrl = `${baseUrl}/api/payments/pesapal/ipn`;
