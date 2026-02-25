@@ -12,28 +12,42 @@ import { z } from 'zod';
 /**
  * Resolves the base URL for callbacks and IPN registration
  * Priority: APP_URL > VERCEL_URL > FRONTEND_URL > hardcoded fallback
- * Validates protocol (http:// or https://) and strips trailing slashes
+ * Validates using URL constructor and ensures absolute URLs
  */
 function resolveBaseUrl(): string {
     const fallback = 'https://landee.kejalink.co.ke';
     
     /**
-     * Normalizes a URL by ensuring it has a protocol and no trailing slash
+     * Normalizes and validates a URL to ensure it's absolute and has a scheme
+     * Throws if URL is invalid
      */
-    function normalizeUrl(url: string): string {
+    function normalizeAndValidateUrl(url: string, source: string): string {
         let normalized = url.trim().replace(/\/$/, '');
         
-        // Validate and add protocol if missing
+        // Add https:// if no scheme present
         if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-            console.warn(`[Pesapal] URL missing protocol, prepending https://: ${url}`);
             normalized = `https://${normalized}`;
         }
         
-        return normalized;
+        // Validate using URL constructor - throws if invalid
+        try {
+            const urlObj = new URL(normalized);
+            // Ensure it's not just a bare hostname (must have a path resolution that creates a proper absolute URL)
+            if (!urlObj.href.startsWith('http://') && !urlObj.href.startsWith('https://')) {
+                throw new Error(`Invalid URL from ${source}: ${url} (resolved to ${normalized})`);
+            }
+            return normalized;
+        } catch (error) {
+            throw new Error(
+                `Invalid base URL from ${source}: "${url}". ` +
+                `After normalization: "${normalized}". ` +
+                `Error: ${error instanceof Error ? error.message : String(error)}`
+            );
+        }
     }
     
     if (process.env.APP_URL) {
-        return normalizeUrl(process.env.APP_URL);
+        return normalizeAndValidateUrl(process.env.APP_URL, 'APP_URL');
     }
     
     if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
@@ -41,7 +55,7 @@ function resolveBaseUrl(): string {
     }
     
     if (process.env.FRONTEND_URL) {
-        return normalizeUrl(process.env.FRONTEND_URL);
+        return normalizeAndValidateUrl(process.env.FRONTEND_URL, 'FRONTEND_URL');
     }
     
     return fallback;
