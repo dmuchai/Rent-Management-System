@@ -9,6 +9,29 @@ import { z } from 'zod';
 // Route pattern: /api/payments/pesapal/[action]
 // action: initiate | ipn | register
 
+/**
+ * Resolves the base URL for callbacks and IPN registration
+ * Priority: APP_URL > VERCEL_URL > FRONTEND_URL > hardcoded fallback
+ * Strips trailing slashes to prevent double-slash URLs
+ */
+function resolveBaseUrl(): string {
+    const fallback = 'https://landee.kejalink.co.ke';
+    
+    if (process.env.APP_URL) {
+        return process.env.APP_URL.replace(/\/$/, '');
+    }
+    
+    if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
+        return `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
+    }
+    
+    if (process.env.FRONTEND_URL) {
+        return process.env.FRONTEND_URL.replace(/\/$/, '');
+    }
+    
+    return fallback;
+}
+
 export default async (req: VercelRequest, res: VercelResponse) => {
     const { action } = req.query;
     const method = req.method;
@@ -91,17 +114,8 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
       RETURNING id
     `;
 
-        // Construct callback URL using environment-configured base URL
-        // Priority: APP_URL > VERCEL_URL > FRONTEND_URL > hardcoded fallback
-        let baseUrl = 'https://landee.kejalink.co.ke';
-        if (process.env.APP_URL) {
-            baseUrl = process.env.APP_URL.replace(/\/$/, '');
-        } else if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
-            baseUrl = `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
-        } else if (process.env.FRONTEND_URL) {
-            baseUrl = process.env.FRONTEND_URL.replace(/\/$/, '');
-        }
-
+        // Construct callback URL using resolved base URL
+        const baseUrl = resolveBaseUrl();
         const callbackUrl = `${baseUrl}/dashboard?payment=success`;
         console.log(`[Pesapal] Generated callbackUrl: ${callbackUrl}`);
 
@@ -337,16 +351,8 @@ async function handleRegister(req: VercelRequest, res: VercelResponse, auth: any
             return res.status(503).json({ message: "Pesapal credentials not configured" });
         }
 
-        // Consistent baseUrl logic - Priority: APP_URL > VERCEL_URL > FRONTEND_URL > hardcoded fallback
-        let baseUrl = 'https://landee.kejalink.co.ke';
-        if (process.env.APP_URL) {
-            baseUrl = process.env.APP_URL.replace(/\/$/, '');
-        } else if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
-            baseUrl = `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
-        } else if (process.env.FRONTEND_URL) {
-            baseUrl = process.env.FRONTEND_URL.replace(/\/$/, '');
-        }
-
+        // Register IPN using resolved base URL
+        const baseUrl = resolveBaseUrl();
         const ipnUrl = `${baseUrl}/api/payments/pesapal/ipn`;
 
         const response = await pesapalService.registerIPN(ipnUrl);
