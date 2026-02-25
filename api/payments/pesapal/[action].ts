@@ -12,13 +12,28 @@ import { z } from 'zod';
 /**
  * Resolves the base URL for callbacks and IPN registration
  * Priority: APP_URL > VERCEL_URL > FRONTEND_URL > hardcoded fallback
- * Strips trailing slashes to prevent double-slash URLs
+ * Validates protocol (http:// or https://) and strips trailing slashes
  */
 function resolveBaseUrl(): string {
     const fallback = 'https://landee.kejalink.co.ke';
     
+    /**
+     * Normalizes a URL by ensuring it has a protocol and no trailing slash
+     */
+    function normalizeUrl(url: string): string {
+        let normalized = url.trim().replace(/\/$/, '');
+        
+        // Validate and add protocol if missing
+        if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+            console.warn(`[Pesapal] URL missing protocol, prepending https://: ${url}`);
+            normalized = `https://${normalized}`;
+        }
+        
+        return normalized;
+    }
+    
     if (process.env.APP_URL) {
-        return process.env.APP_URL.replace(/\/$/, '');
+        return normalizeUrl(process.env.APP_URL);
     }
     
     if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
@@ -26,7 +41,7 @@ function resolveBaseUrl(): string {
     }
     
     if (process.env.FRONTEND_URL) {
-        return process.env.FRONTEND_URL.replace(/\/$/, '');
+        return normalizeUrl(process.env.FRONTEND_URL);
     }
     
     return fallback;
