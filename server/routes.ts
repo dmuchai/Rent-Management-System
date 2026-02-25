@@ -253,7 +253,8 @@ export async function registerRoutes(app: Express) {
     const allowedOrigins = [
       'http://localhost:3000',
       'http://localhost:5173',
-      'https://property-manager-ke.vercel.app', // CORRECT Vercel frontend URL
+      'https://landee.kejalink.co.ke', // CORRECT production domain
+      'https://property-manager-ke.vercel.app', // Previous Vercel URL
       'https://rent-management-system-chi.vercel.app', // Backup URL
       'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app', // Previous deployment
       'capacitor://localhost', // Android Native App

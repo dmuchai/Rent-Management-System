@@ -88,6 +88,7 @@ export default async function handler(
 ) {
   // --- CORS Handling ---
   const allowedOrigins = [
+    'https://landee.kejalink.co.ke',
     'https://property-manager-ke.vercel.app',
     'https://rent-management-system-chi.vercel.app',
     'https://rent-management-system-bblda265x-dmmuchai-1174s-projects.vercel.app',
@@ -742,7 +743,7 @@ export default async function handler(
       const redirectTo =
         process.env.SUPABASE_RESET_PASSWORD_REDIRECT ||
         (process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL.replace(/\/$/, "")}/reset-password` :
-          "https://property-manager-ke.vercel.app/reset-password");
+          "https://landee.kejalink.co.ke/reset-password");
 
       const { data, error } = await supabase.auth.resetPasswordForEmail(
         email,

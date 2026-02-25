@@ -93,7 +93,7 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
 
         // Construct callback URL
         // Dynamically detect host to stay on the same domain (maintains session)
-        const host = req.headers.host || 'property-manager-ke.vercel.app';
+        const host = req.headers.host || 'landee.kejalink.co.ke';
         const protocol = (req.headers['x-forwarded-proto'] as string) || (host.includes('localhost') ? 'http' : 'https');
         const baseUrl = `${protocol}://${host}`;
 
@@ -333,7 +333,7 @@ async function handleRegister(req: VercelRequest, res: VercelResponse, auth: any
         }
 
         // Consistent baseUrl logic
-        let baseUrl = 'https://property-manager-ke.vercel.app';
+        let baseUrl = 'https://landee.kejalink.co.ke';
         if (process.env.APP_URL) {
             baseUrl = process.env.APP_URL;
         } else if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
