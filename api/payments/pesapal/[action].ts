@@ -95,11 +95,11 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
         // Priority: APP_URL > VERCEL_URL > FRONTEND_URL > hardcoded fallback
         let baseUrl = 'https://landee.kejalink.co.ke';
         if (process.env.APP_URL) {
-            baseUrl = process.env.APP_URL;
+            baseUrl = process.env.APP_URL.replace(/\/$/, '');
         } else if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
-            baseUrl = `https://${process.env.VERCEL_URL}`;
+            baseUrl = `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
         } else if (process.env.FRONTEND_URL) {
-            baseUrl = process.env.FRONTEND_URL;
+            baseUrl = process.env.FRONTEND_URL.replace(/\/$/, '');
         }
 
         const callbackUrl = `${baseUrl}/dashboard?payment=success`;
@@ -340,11 +340,11 @@ async function handleRegister(req: VercelRequest, res: VercelResponse, auth: any
         // Consistent baseUrl logic - Priority: APP_URL > VERCEL_URL > FRONTEND_URL > hardcoded fallback
         let baseUrl = 'https://landee.kejalink.co.ke';
         if (process.env.APP_URL) {
-            baseUrl = process.env.APP_URL;
+            baseUrl = process.env.APP_URL.replace(/\/$/, '');
         } else if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
-            baseUrl = `https://${process.env.VERCEL_URL}`;
+            baseUrl = `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
         } else if (process.env.FRONTEND_URL) {
-            baseUrl = process.env.FRONTEND_URL;
+            baseUrl = process.env.FRONTEND_URL.replace(/\/$/, '');
         }
 
         const ipnUrl = `${baseUrl}/api/payments/pesapal/ipn`;
