@@ -91,11 +91,16 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
       RETURNING id
     `;
 
-        // Construct callback URL
-        // Dynamically detect host to stay on the same domain (maintains session)
-        const host = req.headers.host || 'landee.kejalink.co.ke';
-        const protocol = (req.headers['x-forwarded-proto'] as string) || (host.includes('localhost') ? 'http' : 'https');
-        const baseUrl = `${protocol}://${host}`;
+        // Construct callback URL using environment-configured base URL
+        // Priority: APP_URL > VERCEL_URL > FRONTEND_URL > hardcoded fallback
+        let baseUrl = 'https://landee.kejalink.co.ke';
+        if (process.env.APP_URL) {
+            baseUrl = process.env.APP_URL;
+        } else if (process.env.VERCEL_URL && !process.env.VERCEL_URL.includes('projects.vercel.app')) {
+            baseUrl = `https://${process.env.VERCEL_URL}`;
+        } else if (process.env.FRONTEND_URL) {
+            baseUrl = process.env.FRONTEND_URL;
+        }
 
         const callbackUrl = `${baseUrl}/dashboard?payment=success`;
         console.log(`[Pesapal] Generated callbackUrl: ${callbackUrl}`);
