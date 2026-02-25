@@ -16,10 +16,12 @@
     "db:pull": "dotenv drizzle-kit introspect",
     "test:supabase": "node test-supabase.js",
     "test:api": "node test-api.js",
-    "mobile:sync": "npm run build:frontend && npx cap sync",
+    "mobile:sync": "VITE_API_URL=https://landee.kejalink.co.ke npm run build:frontend && npx cap sync",
     "mobile:android": "npm run mobile:sync && npx cap open android",
     "mobile:ios": "npm run mobile:sync && npx cap open ios",
-    "mobile:build": "NODE_ENV=production VITE_API_URL=https://property-manager-ke.vercel.app npm run build:frontend && NODE_ENV=production npx cap sync"
+    "mobile:build": "NODE_ENV=production VITE_API_URL=https://landee.kejalink.co.ke npm run build:frontend && NODE_ENV=production npx cap sync",
+    "apk:build": "bash build-apk.sh",
+    "apk:install": "adb install -r android/app/build/outputs/apk/release/app-release.apk"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.1",

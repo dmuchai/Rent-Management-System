@@ -1,15 +1,16 @@
-// API Configuration for Production Deployment - Updated Dec 5, 2025
-// NOW USING VERCEL SERVERLESS FUNCTIONS - Same origin, no CORS needed!
+// API Configuration for Production Deployment - Updated Feb 25, 2026
+// Web: Uses same-origin (empty string) for Vercel serverless functions
+// Mobile (APK): Requires VITE_API_URL pointing to backend domain
 
 const isDevelopment = import.meta.env.MODE === 'development';
 const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
 
 // Backend API Base URLs
 const API_ENDPOINTS = {
-  // Use VITE_API_URL if defined (for mobile apps connecting to cloud backend)
-  // Otherwise default to empty string for same-origin web requests
+  // For mobile/APK: Use VITE_API_URL (must be set to backend domain)
+  // For web: Use empty string for same-origin requests
   development: import.meta.env.VITE_API_URL || '',
-  production: import.meta.env.VITE_API_URL || ''
+  production: import.meta.env.VITE_API_URL || ''  // Should be set for APK builds
 };
 
 export const API_BASE_URL = isDevelopment ? API_ENDPOINTS.development : API_ENDPOINTS.production;
@@ -43,6 +44,7 @@ console.log('=== API Configuration (Vercel Serverless) ===');
 console.log('Mode:', import.meta.env.MODE);
 console.log('isDevelopment:', isDevelopment);
 console.log('isLocal:', isLocal);
+console.log('VITE_API_URL env:', import.meta.env.VITE_API_URL || '(not set)');
 console.log('Current API URL:', API_BASE_URL || '(same-origin - using Vercel serverless functions)');
 console.log('Base Path:', BASE_PATH || '(root)');
 console.log('Architecture: Vercel Frontend + Serverless Functions + Supabase Database');
