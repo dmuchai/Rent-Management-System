@@ -38,20 +38,12 @@ echo ""
 
 # Step 2: Copy files to Android
 echo -e "${YELLOW}Step 2: Syncing to Android...${NC}"
-cd "$ANDROID_DIR"
+cd "$PROJECT_ROOT"
 
-# Option A: Using ./gradlew sync (if available)
-if command -v ./gradlew &> /dev/null; then
-    echo "Using gradlew sync..."
-    ./gradlew sync
-    echo -e "${GREEN}✓ Synced via gradlew${NC}"
-else
-    # Option B: Manual copy as fallback
-    echo "Using manual copy to Android assets..."
-    mkdir -p app/src/main/assets
-    cp -r "$DIST_DIR" app/src/main/assets/public
-    echo -e "${GREEN}✓ Frontend copied to Android assets${NC}"
-fi
+# Use Capacitor's sync command (more reliable than gradle)
+echo "Using npx cap sync..."
+npx cap sync
+echo -e "${GREEN}✓ Frontend synced to Android${NC}"
 echo ""
 
 # Step 3: Build APK
