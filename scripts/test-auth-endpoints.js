@@ -1,8 +1,6 @@
 
-const fetch = require('node-fetch'); // Fallback if not native, but we'll try native first if possible or assume environment has it. 
-// actually let's use standard http if we want to be safe, but typically in these envs fetch is available or node-fetch is understandable.
-// Let's rely on the user environment likely having node 18+ or I'll check package.json.
-// Safest is to just use what's likely there. I'll assume `node` can run this.
+// This script relies on the global `fetch` available in Node 18+.
+// If your Node is older or doesn't provide global fetch, install `node-fetch` and run this as CommonJS (.cjs).
 
 // Wait, looking at `package.json` from earlier `list_dir`, I didn't verify dependencies.
 // Let's try to simple `fetch` if node version >= 18.
