@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { isAuthenticated, supabase } from "../supabaseAuth";
+import { isAuthenticated } from "../supabaseAuth";
 import { supabaseStorage } from "../storageInstance";
-import { insertPropertySchema, insertUnitSchema } from "../../shared/schema";
+import { insertPropertySchema } from "../../shared/schema";
+import { requirePropertyOwnership } from "../middleware/ownership";
 import { z } from "zod";
 
 const router = Router();
@@ -50,7 +51,7 @@ router.post("/", isAuthenticated, async (req: any, res: any) => {
   }
 });
 
-router.put("/:id", isAuthenticated, async (req: any, res: any) => {
+router.put("/:id", isAuthenticated, requirePropertyOwnership, async (req: any, res: any) => {
   try {
     const propertyData = insertPropertySchema.partial().parse(req.body);
     const property = await supabaseStorage.updateProperty(req.params.id, propertyData);
@@ -63,7 +64,7 @@ router.put("/:id", isAuthenticated, async (req: any, res: any) => {
   }
 });
 
-router.delete("/:id", isAuthenticated, async (req: any, res: any) => {
+router.delete("/:id", isAuthenticated, requirePropertyOwnership, async (req: any, res: any) => {
   try {
     await supabaseStorage.deleteProperty(req.params.id);
     res.status(204).send();
@@ -74,7 +75,7 @@ router.delete("/:id", isAuthenticated, async (req: any, res: any) => {
 
 // ─── Units (nested under /properties/:propertyId/units) ───────────────────────
 
-router.get("/:propertyId/units", isAuthenticated, async (req: any, res: any) => {
+router.get("/:propertyId/units", isAuthenticated, requirePropertyOwnership, async (req: any, res: any) => {
   try {
     const units = await supabaseStorage.getUnitsByPropertyId(req.params.propertyId) || [];
     res.json(units);

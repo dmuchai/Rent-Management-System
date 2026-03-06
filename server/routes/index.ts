@@ -1,7 +1,6 @@
 import type { Express } from "express";
 import { setupAuth } from "../supabaseAuth";
 import { corsMiddleware } from "../middleware/cors";
-import { SupabaseStorage } from "../storage";
 
 import authRouter from "./auth";
 import landlordRouter from "./landlord";
@@ -17,9 +16,6 @@ import cronRouter from "./cron";
 import adminRouter from "./admin";
 
 export async function registerRoutes(app: Express): Promise<void> {
-  // Initialize storage (passed to sub-modules via storageInstance.ts singleton)
-  new SupabaseStorage();
-
   // Setup Supabase auth middleware
   setupAuth(app);
 

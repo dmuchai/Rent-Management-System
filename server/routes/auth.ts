@@ -9,6 +9,7 @@ const router = Router();
 // GET /api/login  — serves the HTML login form
 router.get("/login", (req: any, res: any) => {
   const supabaseConfig = getValidatedSupabaseConfig();
+  const frontendUrl = process.env.FRONTEND_URL || "https://property-manager-ke.vercel.app";
 
   if (!supabaseConfig) {
     return res.status(500).send(`
@@ -62,6 +63,7 @@ router.get("/login", (req: any, res: any) => {
           </div>
       </div>
       <script>
+          const frontendUrl = ${JSON.stringify(frontendUrl)};
           function showMessage(text, type = 'error') {
               const messageDiv = document.getElementById('message');
               messageDiv.className = type;
@@ -89,7 +91,7 @@ router.get("/login", (req: any, res: any) => {
                           const token = encodeURIComponent(data.session.access_token);
                           const refreshToken = encodeURIComponent(data.session.refresh_token);
                           setTimeout(() => {
-                              window.location.href = (process.env.FRONTEND_URL || 'https://property-manager-ke.vercel.app') + '/auth-callback?token=' + token + '&refresh=' + refreshToken;
+                              window.location.href = frontendUrl + '/auth-callback?token=' + token + '&refresh=' + refreshToken;
                           }, 1000);
                       }
                   } catch (e) { showMessage('Sign in failed. Please try again.'); }
@@ -106,6 +108,7 @@ router.get("/login", (req: any, res: any) => {
 // GET /api/register  — serves the HTML registration form
 router.get("/register", (req: any, res: any) => {
   const supabaseConfig = getValidatedSupabaseConfig();
+  const frontendUrl = process.env.FRONTEND_URL || "https://property-manager-ke.vercel.app";
 
   if (!supabaseConfig) {
     return res.status(500).send(`
@@ -172,6 +175,7 @@ router.get("/register", (req: any, res: any) => {
           <div style="margin-top: 20px;"><span>Already have an account? </span><a href="/api/login" class="link">Sign in here</a></div>
       </div>
       <script>
+          const frontendUrl = ${JSON.stringify(frontendUrl)};
           function showMessage(text, type = 'error') {
               const d = document.getElementById('message'); d.className = type; d.textContent = text; d.style.display = 'block';
           }
@@ -202,7 +206,7 @@ router.get("/register", (req: any, res: any) => {
                               if (response.ok) {
                                   await fetch('/api/auth/sync-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ firstName, lastName, role }) });
                                   showMessage('Account setup complete! Redirecting...', 'success');
-                                  setTimeout(() => { window.location.href = (process.env.FRONTEND_URL || 'https://property-manager-ke.vercel.app') + '/dashboard'; }, 2000);
+                                  setTimeout(() => { window.location.href = frontendUrl + '/dashboard'; }, 2000);
                               } else { showMessage('Account created but session setup failed. Please sign in.'); }
                           } else { showMessage('Account created! Please check your email for a verification link before signing in.', 'success'); setTimeout(() => { window.location.href = '/api/login'; }, 3000); }
                       }

@@ -10,6 +10,7 @@
     "build:vercel": "vite build",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
+    "check:route-entrypoints": "bash scripts/check-route-entrypoints.sh",
     "db:generate": "dotenv drizzle-kit generate",
     "db:migrate": "dotenv drizzle-kit migrate",
     "db:push": "dotenv drizzle-kit push",

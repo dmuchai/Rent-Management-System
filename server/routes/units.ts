@@ -2,6 +2,7 @@ import { Router } from "express";
 import { isAuthenticated, supabase } from "../supabaseAuth";
 import { supabaseStorage } from "../storageInstance";
 import { insertUnitSchema } from "../../shared/schema";
+import { ensurePropertyOwnership, requireUnitOwnership } from "../middleware/ownership";
 import { z } from "zod";
 
 const router = Router();
@@ -13,6 +14,9 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
     let units: any[];
 
     if (propertyId) {
+      if (!(await ensurePropertyOwnership(req, res, propertyId))) {
+        return;
+      }
       units = await supabaseStorage.getUnitsByPropertyId(propertyId);
     } else {
       const ownerId = req.user.sub;
@@ -58,6 +62,9 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
 router.post("/", isAuthenticated, async (req: any, res: any) => {
   try {
     const unitData = insertUnitSchema.parse(req.body);
+    if (!(await ensurePropertyOwnership(req, res, unitData.propertyId))) {
+      return;
+    }
     const unit = await supabaseStorage.createUnit(unitData);
     res.status(201).json(unit);
   } catch (error) {
@@ -72,9 +79,12 @@ router.post("/", isAuthenticated, async (req: any, res: any) => {
 });
 
 // PUT /api/units/:id
-router.put("/:id", isAuthenticated, async (req: any, res: any) => {
+router.put("/:id", isAuthenticated, requireUnitOwnership, async (req: any, res: any) => {
   try {
     const unitData = insertUnitSchema.partial().parse(req.body);
+    if (unitData.propertyId && !(await ensurePropertyOwnership(req, res, unitData.propertyId))) {
+      return;
+    }
     const unit = await supabaseStorage.updateUnit(req.params.id, unitData);
     res.json(unit);
   } catch (error) {
@@ -86,7 +96,7 @@ router.put("/:id", isAuthenticated, async (req: any, res: any) => {
 });
 
 // DELETE /api/units/:id
-router.delete("/:id", isAuthenticated, async (req: any, res: any) => {
+router.delete("/:id", isAuthenticated, requireUnitOwnership, async (req: any, res: any) => {
   try {
     await supabaseStorage.deleteUnit(req.params.id);
     res.json({ message: "Unit deleted successfully" });

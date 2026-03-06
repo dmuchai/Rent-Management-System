@@ -1,10 +1,26 @@
 import { Router } from "express";
-import { supabase } from "../supabaseAuth";
+import { isAuthenticated } from "../supabaseAuth";
 import { pesapalService } from "../services/pesapalService";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 
 const router = Router();
+const ALLOWED_SETUP_ROLES = new Set(["admin", "landlord", "property_manager"]);
+const SETUP_ROUTES_ENABLED =
+  process.env.ENABLE_SETUP_ROUTES === "true" || process.env.NODE_ENV !== "production";
+
+router.use(isAuthenticated);
+router.use((req: any, res: any, next: any) => {
+  if (!SETUP_ROUTES_ENABLED) {
+    return res.status(404).json({ message: "Setup routes are disabled" });
+  }
+
+  if (!ALLOWED_SETUP_ROLES.has(req.user?.appRole)) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  next();
+});
 
 // POST /api/create-tables
 router.post("/create-tables", async (_req: any, res: any) => {
