@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { smsService } from "./_lib/smsService.js";
+import { emailService } from "./_lib/emailService.js";
 import { createDbConnection } from "./_lib/db.js";
 
 /**
@@ -296,6 +297,75 @@ export default async function handler(
         // We don't fail registration if SMS fails, but user will need to request a new one
       } finally {
         await sql.end();
+      }
+
+      // Send confirmation email ourselves via Brevo instead of relying on Supabase's internal SMTP.
+      // We generate the official Supabase confirmation link via admin, then dispatch via emailService.
+      try {
+        const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+          type: 'signup',
+          email,
+          password,
+          options: { redirectTo: `${frontendUrl}/auth-callback` },
+        });
+
+        if (linkError || !linkData?.properties?.action_link) {
+          console.error('[Auth] Failed to generate confirmation link:', linkError?.message);
+        } else {
+          const confirmationLink = linkData.properties.action_link;
+          const escapedFirstName = firstName.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]!));
+
+          await emailService.sendEmail({
+            to: email,
+            subject: '🔐 Verify Your Email - Landee',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="text-align: center; margin-bottom: 30px;">
+                  <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
+                  <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
+                </div>
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; color: white; text-align: center; margin-bottom: 30px;">
+                  <h2 style="margin: 0 0 10px 0; font-size: 28px;">Verify Your Email 📧</h2>
+                  <p style="margin: 0; font-size: 16px; opacity: 0.9;">One more step to get started</p>
+                </div>
+                <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
+                  <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedFirstName},</h3>
+                  <p style="color: #4B5563; line-height: 1.6;">
+                    Thank you for registering with Landee! To complete your account setup and start managing your properties,
+                    please verify your email address by clicking the button below.
+                  </p>
+                </div>
+                <div style="text-align: center; margin: 35px 0;">
+                  <a href="${confirmationLink}"
+                     style="background-color: #3B82F6; color: white; padding: 16px 40px;
+                            text-decoration: none; border-radius: 8px; display: inline-block;
+                            font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
+                    Verify My Email
+                  </a>
+                  <p style="color: #6B7280; font-size: 14px; margin-top: 15px;">This link expires in 24 hours</p>
+                </div>
+                <div style="border-top: 2px solid #E5E7EB; padding-top: 20px; margin-top: 30px;">
+                  <p style="color: #6B7280; font-size: 14px; line-height: 1.6;">
+                    <strong>Need help?</strong><br/>
+                    If you're having trouble clicking the button, copy and paste this link into your browser:<br/>
+                    <a href="${confirmationLink}" style="color: #3B82F6; word-break: break-all;">${confirmationLink}</a>
+                  </p>
+                </div>
+                <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+                  <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
+                    © 2026 Landee. All rights reserved.<br/>The #1 Property Management System in Kenya
+                  </p>
+                </div>
+              </div>
+            `,
+            text: `Hello ${firstName},\n\nThank you for registering with Landee! Verify your email by clicking:\n${confirmationLink}\n\nThis link expires in 24 hours.\n\n© 2026 Landee`,
+          });
+
+          console.log(`[Auth] Verification email sent to ${email} via Brevo`);
+        }
+      } catch (emailErr) {
+        console.error('[Auth] Failed to send verification email:', emailErr);
+        // Registration still succeeds even if email dispatch fails
       }
 
       return res.status(200).json({
