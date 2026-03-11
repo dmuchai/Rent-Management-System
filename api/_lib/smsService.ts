@@ -36,15 +36,49 @@ export class SmsService {
         }
     }
 
+    /**
+     * Normalizes a phone number to E.164 format (no leading +).
+     * Handles Kenya numbers (country code 254) by default.
+     * Examples:
+     *   0707213241   → 254707213241
+     *   +254707213241 → 254707213241
+     *   254707213241  → 254707213241  (unchanged)
+     */
+    normalizePhoneNumber(phone: string, defaultCountryCode: string = '254'): string {
+        // Strip all spaces and dashes
+        let normalized = phone.replace(/[\s\-]/g, '');
+
+        if (normalized.startsWith('+')) {
+            // Remove leading + (Infobip expects digits only, no +)
+            normalized = normalized.slice(1);
+        } else if (normalized.startsWith('0')) {
+            // Local format: replace leading 0 with country code
+            normalized = defaultCountryCode + normalized.slice(1);
+        } else if (!normalized.startsWith(defaultCountryCode)) {
+            // No prefix at all — prepend country code
+            normalized = defaultCountryCode + normalized;
+        }
+
+        return normalized;
+    }
+
     async sendSms(options: SmsOptions): Promise<any> {
         const provider = process.env.SMS_PROVIDER || (this.infobipApiKey ? 'infobip' : 'africastalking');
 
-        console.log(`[SMS] Sending via ${provider} to ${options.to}`);
+        // Normalize phone number to international format before sending
+        const normalizedTo = this.normalizePhoneNumber(options.to);
+        const normalizedOptions = { ...options, to: normalizedTo };
+
+        if (normalizedTo !== options.to) {
+            console.log(`[SMS] Normalized phone: ${options.to} → ${normalizedTo}`);
+        }
+
+        console.log(`[SMS] Sending via ${provider} to ${normalizedTo}`);
 
         if (provider === 'infobip') {
-            return this.sendViaInfobip(options);
+            return this.sendViaInfobip(normalizedOptions);
         } else {
-            return this.sendViaAt(options);
+            return this.sendViaAt(normalizedOptions);
         }
     }
 
