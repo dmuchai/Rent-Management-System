@@ -277,6 +277,12 @@ export default async function handler(
         return res.status(400).json({ error: error.message });
       }
 
+      // Supabase silently returns the existing user when the email is already registered
+      // (instead of throwing an error) — detect this via empty identities array.
+      if (!data.user?.identities || data.user.identities.length === 0) {
+        return res.status(400).json({ error: "An account with this email address already exists. Please sign in instead." });
+      }
+
       // Generate and send OTP
       const sql = createDbConnection();
       const code = smsService.generateOtp();
