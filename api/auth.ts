@@ -253,10 +253,13 @@ export default async function handler(
       }
 
       // Sign up the user with metadata so email templates can be personalized
+      // emailRedirectTo ensures the confirmation link points to the live app, not localhost.
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo: `${frontendUrl}/auth-callback`,
           data: {
             first_name: firstName,
             last_name: lastName,
