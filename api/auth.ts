@@ -235,11 +235,10 @@ export default async function handler(
       });
 
       const { email, password, firstName, lastName, phoneNumber, role: requestedRole } = registerSchema.parse(req.body);
-      const supabase = getSupabaseClient();
       const admin = getAdminClient();
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
 
       // Check if this email is already a tenant (invited or active)
-      // This prevents a tenant from accidentally registering as a landlord
       const { data: existingTenant } = await admin
         .from("tenants")
         .select("id")
@@ -253,122 +252,115 @@ export default async function handler(
         console.log(`[Auth] Forcing tenant role for email ${email} due to existing tenant record`);
       }
 
-      // Sign up the user with metadata so email templates can be personalized
-      // emailRedirectTo ensures the confirmation link points to the live app, not localhost.
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
-      const { data, error } = await supabase.auth.signUp({
+      // Use admin.generateLink({ type: 'signup' }) as the SINGLE call that both creates the
+      // auth user and returns the confirmation link. This avoids the conflict that occurs when
+      // calling supabase.auth.signUp() first and then generateLink() separately (generateLink
+      // also tries to create the user, resulting in "already registered" errors).
+      const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+        type: 'signup',
         email,
         password,
         options: {
-          emailRedirectTo: `${frontendUrl}/auth-callback`,
+          redirectTo: `${frontendUrl}/auth-callback`,
           data: {
             first_name: firstName,
             last_name: lastName,
-            firstName: firstName, // Set both for compatibility across components
-            lastName: lastName,
+            firstName,
+            lastName,
             phone_number: phoneNumber,
-            role: role || "landlord",
+            role,
           },
         },
       });
 
-      if (error) {
-        console.error("[Auth] Registration failed:", error);
-        return res.status(400).json({ error: error.message });
+      if (linkError) {
+        console.error('[Auth] Registration failed:', linkError.message);
+        if (linkError.message?.toLowerCase().includes('already been registered') ||
+            linkError.message?.toLowerCase().includes('already registered')) {
+          return res.status(400).json({ error: "An account with this email address already exists. Please sign in instead." });
+        }
+        return res.status(400).json({ error: linkError.message });
       }
 
-      // Supabase silently returns the existing user when the email is already registered
-      // (instead of throwing an error) — detect this via empty identities array.
-      if (!data.user?.identities || data.user.identities.length === 0) {
-        return res.status(400).json({ error: "An account with this email address already exists. Please sign in instead." });
+      const confirmationLink = linkData?.properties?.action_link;
+      const newUser = linkData?.user;
+
+      if (!confirmationLink || !newUser) {
+        console.error('[Auth] generateLink succeeded but returned no link or user');
+        return res.status(500).json({ error: "Registration failed. Please try again." });
       }
 
-      // Generate and send OTP
+      console.log(`[Auth] User created via generateLink: ${newUser.id}`);
+
+      // Send SMS OTP
       const sql = createDbConnection();
       const code = smsService.generateOtp();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
       try {
         await sql`
           INSERT INTO public.otp_codes (phone_number, code, expires_at)
           VALUES (${phoneNumber}, ${code}, ${expiresAt})
         `;
-
         await smsService.sendSms({
           to: phoneNumber,
           message: `Your Landee verification code is: ${code}. Valid for 10 minutes.`
         });
       } catch (smsErr) {
         console.error("[Auth] Failed to send OTP:", smsErr);
-        // We don't fail registration if SMS fails, but user will need to request a new one
       } finally {
         await sql.end();
       }
 
-      // Send confirmation email ourselves via Brevo instead of relying on Supabase's internal SMTP.
-      // We generate the official Supabase confirmation link via admin, then dispatch via emailService.
+      // Send confirmation email via Brevo
       try {
-        const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-          type: 'signup',
-          email,
-          password,
-          options: { redirectTo: `${frontendUrl}/auth-callback` },
-        });
-
-        if (linkError || !linkData?.properties?.action_link) {
-          console.error('[Auth] Failed to generate confirmation link:', linkError?.message);
-        } else {
-          const confirmationLink = linkData.properties.action_link;
-          const escapedFirstName = firstName.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]!));
-
-          await emailService.sendEmail({
-            to: email,
-            subject: '🔐 Verify Your Email - Landee',
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="text-align: center; margin-bottom: 30px;">
-                  <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
-                  <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
-                </div>
-                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; color: white; text-align: center; margin-bottom: 30px;">
-                  <h2 style="margin: 0 0 10px 0; font-size: 28px;">Verify Your Email 📧</h2>
-                  <p style="margin: 0; font-size: 16px; opacity: 0.9;">One more step to get started</p>
-                </div>
-                <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
-                  <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedFirstName},</h3>
-                  <p style="color: #4B5563; line-height: 1.6;">
-                    Thank you for registering with Landee! To complete your account setup and start managing your properties,
-                    please verify your email address by clicking the button below.
-                  </p>
-                </div>
-                <div style="text-align: center; margin: 35px 0;">
-                  <a href="${confirmationLink}"
-                     style="background-color: #3B82F6; color: white; padding: 16px 40px;
-                            text-decoration: none; border-radius: 8px; display: inline-block;
-                            font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
-                    Verify My Email
-                  </a>
-                  <p style="color: #6B7280; font-size: 14px; margin-top: 15px;">This link expires in 24 hours</p>
-                </div>
-                <div style="border-top: 2px solid #E5E7EB; padding-top: 20px; margin-top: 30px;">
-                  <p style="color: #6B7280; font-size: 14px; line-height: 1.6;">
-                    <strong>Need help?</strong><br/>
-                    If you're having trouble clicking the button, copy and paste this link into your browser:<br/>
-                    <a href="${confirmationLink}" style="color: #3B82F6; word-break: break-all;">${confirmationLink}</a>
-                  </p>
-                </div>
-                <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
-                  <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
-                    © 2026 Landee. All rights reserved.<br/>The #1 Property Management System in Kenya
-                  </p>
-                </div>
+        const escapedFirstName = firstName.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]!));
+        await emailService.sendEmail({
+          to: email,
+          subject: '🔐 Verify Your Email - Landee',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="text-align: center; margin-bottom: 30px;">
+                <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
+                <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
               </div>
-            `,
-            text: `Hello ${firstName},\n\nThank you for registering with Landee! Verify your email by clicking:\n${confirmationLink}\n\nThis link expires in 24 hours.\n\n© 2026 Landee`,
-          });
-
-          console.log(`[Auth] Verification email sent to ${email} via Brevo`);
-        }
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; color: white; text-align: center; margin-bottom: 30px;">
+                <h2 style="margin: 0 0 10px 0; font-size: 28px;">Verify Your Email 📧</h2>
+                <p style="margin: 0; font-size: 16px; opacity: 0.9;">One more step to get started</p>
+              </div>
+              <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
+                <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedFirstName},</h3>
+                <p style="color: #4B5563; line-height: 1.6;">
+                  Thank you for registering with Landee! To complete your account setup and start managing your properties,
+                  please verify your email address by clicking the button below.
+                </p>
+              </div>
+              <div style="text-align: center; margin: 35px 0;">
+                <a href="${confirmationLink}"
+                   style="background-color: #3B82F6; color: white; padding: 16px 40px;
+                          text-decoration: none; border-radius: 8px; display: inline-block;
+                          font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);">
+                  Verify My Email
+                </a>
+                <p style="color: #6B7280; font-size: 14px; margin-top: 15px;">This link expires in 24 hours</p>
+              </div>
+              <div style="border-top: 2px solid #E5E7EB; padding-top: 20px; margin-top: 30px;">
+                <p style="color: #6B7280; font-size: 14px; line-height: 1.6;">
+                  <strong>Need help?</strong><br/>
+                  If you're having trouble clicking the button, copy and paste this link into your browser:<br/>
+                  <a href="${confirmationLink}" style="color: #3B82F6; word-break: break-all;">${confirmationLink}</a>
+                </p>
+              </div>
+              <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
+                <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
+                  © 2026 Landee. All rights reserved.<br/>The #1 Property Management System in Kenya
+                </p>
+              </div>
+            </div>
+          `,
+          text: `Hello ${firstName},\n\nThank you for registering with Landee! Verify your email by clicking:\n${confirmationLink}\n\nThis link expires in 24 hours.\n\n© 2026 Landee`,
+        });
+        console.log(`[Auth] Verification email sent to ${email} via Brevo`);
       } catch (emailErr) {
         console.error('[Auth] Failed to send verification email:', emailErr);
         // Registration still succeeds even if email dispatch fails
@@ -376,7 +368,7 @@ export default async function handler(
 
       return res.status(200).json({
         message: "Registration successful! An OTP has been sent to your phone and a verification link to your email.",
-        user: data.user,
+        user: newUser,
         otpRequired: true
       });
     }
