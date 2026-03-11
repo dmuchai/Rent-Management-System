@@ -469,6 +469,100 @@ export default async function handler(
     }
 
     /* ---------------------------------------------------------------------- */
+    /* Resend confirmation email                                               */
+    /* POST /api/auth?action=resend-confirmation                               */
+    /* ---------------------------------------------------------------------- */
+    if (action === "resend-confirmation" && req.method === "POST") {
+      const schema = z.object({
+        email: z.string().email(),
+        phone: z.string().optional(),
+      });
+
+      const { email, phone } = schema.parse(req.body);
+      const admin = getAdminClient();
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
+
+      // Look up the user to ensure they exist and are not yet confirmed
+      const { data: { users }, error: lookupError } = await admin.auth.admin.listUsers();
+      if (lookupError) {
+        return res.status(500).json({ error: "Failed to look up user" });
+      }
+
+      const existingUser = users.find((u: any) => u.email === email);
+      if (!existingUser) {
+        // Don't reveal whether the email exists — return success silently
+        return res.status(200).json({ message: "If your account exists, a new verification email has been sent." });
+      }
+
+      if (existingUser.email_confirmed_at) {
+        return res.status(400).json({ error: "This email is already verified. Please sign in." });
+      }
+
+      try {
+        const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+          type: 'signup',
+          email,
+          password: Math.random().toString(36), // dummy — only the link token matters
+          options: { redirectTo: `${frontendUrl}/auth-callback` },
+        });
+
+        if (linkError || !linkData?.properties?.action_link) {
+          console.error('[Auth] resend-confirmation generateLink failed:', linkError?.message);
+          return res.status(500).json({ error: "Failed to generate verification link" });
+        }
+
+        const confirmationLink = linkData.properties.action_link;
+        const firstName = (existingUser.user_metadata?.first_name || existingUser.user_metadata?.firstName || email.split('@')[0]) as string;
+        const escapedFirstName = firstName.replace(/[&<>"']/g, (c: string) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]!));
+
+        await emailService.sendEmail({
+          to: email,
+          subject: '🔐 Verify Your Email - Landee',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="text-align: center; margin-bottom: 30px;">
+                <h1 style="color: #3B82F6; margin: 0;">Landee</h1>
+                <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
+              </div>
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; color: white; text-align: center; margin-bottom: 30px;">
+                <h2 style="margin: 0 0 10px 0; font-size: 28px;">Verify Your Email 📧</h2>
+                <p style="margin: 0; font-size: 16px; opacity: 0.9;">You requested a new verification link</p>
+              </div>
+              <div style="background-color: #F9FAFB; padding: 25px; border-radius: 8px; margin-bottom: 25px;">
+                <h3 style="color: #1F2937; margin-top: 0;">Hello ${escapedFirstName},</h3>
+                <p style="color: #4B5563; line-height: 1.6;">
+                  Here is your new verification link. Click the button below to verify your email and activate your Landee account.
+                </p>
+              </div>
+              <div style="text-align: center; margin: 35px 0;">
+                <a href="${confirmationLink}"
+                   style="background-color: #3B82F6; color: white; padding: 16px 40px;
+                          text-decoration: none; border-radius: 8px; display: inline-block;
+                          font-weight: 600; font-size: 16px;">
+                  Verify My Email
+                </a>
+                <p style="color: #6B7280; font-size: 14px; margin-top: 15px;">This link expires in 24 hours</p>
+              </div>
+              <div style="border-top: 2px solid #E5E7EB; padding-top: 20px; margin-top: 30px;">
+                <p style="color: #6B7280; font-size: 14px; line-height: 1.6;">
+                  Can't click the button? Copy and paste this link:<br/>
+                  <a href="${confirmationLink}" style="color: #3B82F6; word-break: break-all;">${confirmationLink}</a>
+                </p>
+              </div>
+            </div>
+          `,
+          text: `Hello ${firstName},\n\nHere is your new Landee verification link:\n${confirmationLink}\n\nThis link expires in 24 hours.\n\n© 2026 Landee`,
+        });
+
+        console.log(`[Auth] Resent confirmation email to ${email} via Brevo`);
+        return res.status(200).json({ message: "Verification email resent successfully" });
+      } catch (err) {
+        console.error('[Auth] Failed to resend confirmation email:', err);
+        return res.status(500).json({ error: "Failed to send verification email" });
+      }
+    }
+
+    /* ---------------------------------------------------------------------- */
     /* Get current user                                                        */
     /* GET /api/auth?action=user                                               */
     /* ---------------------------------------------------------------------- */

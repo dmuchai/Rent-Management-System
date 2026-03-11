@@ -101,14 +101,13 @@ export default function Register() {
         throw new Error(error.message || "OTP verification failed");
       }
 
-      toast({
-        title: "Verified",
-        description: "Phone number verified successfully! Please check your email to complete registration.",
+      // Redirect to the check-email holding page so the user knows exactly what to do next.
+      // Pass the email and phone as query params for display and resend purposes.
+      const params = new URLSearchParams({
+        email: formData.email,
+        phone: formData.phoneNumber,
       });
-
-      // After both phone and email are verified, user can login.
-      // For now, redirect to login page with a success message.
-      setTimeout(() => setLocation("/login"), 2000);
+      setLocation(`/check-email?${params.toString()}`);
     } catch (error) {
       toast({
         title: "Verification Failed",

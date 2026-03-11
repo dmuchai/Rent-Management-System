@@ -86,6 +86,17 @@ export default function Login() {
 
       if (error) {
         console.error('[Login] Sign-in failed:', error.message);
+        // Supabase returns this exact string when email is unconfirmed
+        if (error.message?.toLowerCase().includes('email not confirmed')) {
+          toast({
+            title: "Email not verified",
+            description: "Please click the verification link in your email before signing in. Check your spam folder if you can't find it.",
+            variant: "destructive",
+            duration: 8000,
+          });
+          setIsLoading(false);
+          return;
+        }
         throw new Error(error.message || "Login failed");
       }
 
