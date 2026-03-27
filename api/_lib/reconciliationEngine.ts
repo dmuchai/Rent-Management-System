@@ -44,13 +44,71 @@ export interface ReconciliationConfig {
   dateWindowHours: number;
   amountTolerancePercent: number;
   autoMatchThreshold: number;
+  autoApproveThreshold: number;
+  maxAutoApproveAmount: number;
+  candidateGapThreshold: number;
   requirePhoneMatch: boolean;
 }
 
-const DEFAULT_CONFIG: ReconciliationConfig = {
+function getEnvNumber(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function buildDefaultConfig(): ReconciliationConfig {
+  return {
+    dateWindowHours: getEnvNumber('RECONCILIATION_DATE_WINDOW_HOURS', 72),
+    amountTolerancePercent: getEnvNumber('RECONCILIATION_AMOUNT_TOLERANCE_PERCENT', 0),
+    autoMatchThreshold: getEnvNumber('RECONCILIATION_AUTO_MATCH_THRESHOLD', 85),
+    autoApproveThreshold: getEnvNumber('RECONCILIATION_AUTO_APPROVE_THRESHOLD', 95),
+    maxAutoApproveAmount: getEnvNumber('RECONCILIATION_MAX_AUTO_APPROVE_AMOUNT', 500000),
+    candidateGapThreshold: getEnvNumber('RECONCILIATION_CANDIDATE_GAP_THRESHOLD', 20),
+    requirePhoneMatch: process.env.RECONCILIATION_REQUIRE_PHONE_MATCH === 'true',
+  };
+}
+
+const DEFAULT_CONFIG: ReconciliationConfig = buildDefaultConfig();
+
+function shouldAutoApprove(
+  payment: ExternalPaymentEvent,
+  result: ReconciliationResult,
+  config: ReconciliationConfig
+): { allow: boolean; reasons: string[] } {
+  if (!result.matched) {
+    return { allow: false, reasons: ['Payment did not meet matching criteria'] };
+  }
+
+  const reasons: string[] = [];
+  const score = result.score ?? (result.confidence === 'exact' ? 100 : 0);
+
+  if (score < config.autoApproveThreshold) {
+    reasons.push(
+      `Match score ${score} below auto-approval threshold ${config.autoApproveThreshold}`
+    );
+  }
+
+  if (payment.amount > config.maxAutoApproveAmount) {
+    reasons.push(
+      `Payment amount ${payment.amount} exceeds auto-approval cap ${config.maxAutoApproveAmount}`
+    );
+  }
+
+  return {
+    allow: reasons.length === 0,
+    reasons,
+  };
+}
+
+const LEGACY_DEFAULT_CONFIG: ReconciliationConfig = {
   dateWindowHours: 72, // 3 days
   amountTolerancePercent: 0, // Exact match required
   autoMatchThreshold: 85, // 85% confidence for auto-match
+  autoApproveThreshold: 95, // Hybrid mode: only high-confidence matches auto-approve
+  maxAutoApproveAmount: 500000, // KES amount cap for automatic approval
+  candidateGapThreshold: 20, // Avoid auto-matching when candidates are too close
   requirePhoneMatch: false, // Optional phone matching
 };
 
@@ -282,7 +340,7 @@ async function matchByPhoneNumber(
 
   // Check if top match is significantly better than second
   const isUnambiguous =
-    scoredCandidates.length === 1 || topMatch.score - scoredCandidates[1].score >= 20;
+    scoredCandidates.length === 1 || topMatch.score - scoredCandidates[1].score >= config.candidateGapThreshold;
 
   if (topMatch.score >= config.autoMatchThreshold && isUnambiguous) {
     return {
@@ -320,17 +378,49 @@ export async function reconcilePayment(
   payment: ExternalPaymentEvent,
   config: ReconciliationConfig = DEFAULT_CONFIG
 ): Promise<ReconciliationResult> {
+  const effectiveConfig = {
+    ...LEGACY_DEFAULT_CONFIG,
+    ...config,
+  };
+
   // Level 1: Try deterministic matching first (if reference code exists)
   if (payment.referenceCode) {
     const result = await matchByReferenceCode(sql, payment);
     if (result.matched) {
-      return result;
+      const approval = shouldAutoApprove(payment, result, effectiveConfig);
+      if (approval.allow) {
+        return result;
+      }
+
+      return {
+        matched: false,
+        confidence: 'low',
+        method: 'manual_review',
+        score: result.score,
+        reasons: [...result.reasons, ...approval.reasons, 'Manual review required'],
+      };
     }
   }
 
   // Level 2/3: Try heuristic matching for bank paybill payments
   if (payment.bankAccountNumber && payment.bankPaybillNumber) {
-    return await matchByBankAccount(sql, payment, config);
+    const result = await matchByBankAccount(sql, payment, effectiveConfig);
+    if (!result.matched) {
+      return result;
+    }
+
+    const approval = shouldAutoApprove(payment, result, effectiveConfig);
+    if (approval.allow) {
+      return result;
+    }
+
+    return {
+      matched: false,
+      confidence: 'low',
+      method: 'manual_review',
+      score: result.score,
+      reasons: [...result.reasons, ...approval.reasons, 'Manual review required'],
+    };
   }
 
   // No match possible
@@ -361,7 +451,7 @@ export async function recordReconciliation(
         UPDATE public.external_payment_events
         SET 
           matched_invoice_id = ${result.invoiceId},
-          reconciliation_status = 'matched',
+          reconciliation_status = 'auto_matched',
           reconciliation_method = ${result.method},
           confidence_score = ${result.score || 100},
           reconciled_at = NOW(),

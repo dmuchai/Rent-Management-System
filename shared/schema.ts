@@ -357,7 +357,12 @@ export const externalPaymentEvents = pgTable("external_payment_events", {
   rawPayload: jsonb("raw_payload").notNull(),
   
   // Reconciliation status
-  reconciliationStatus: varchar("reconciliation_status").default("unmatched"), // 'unmatched', 'auto_matched', 'manually_matched', 'ignored', 'duplicate'
+  reconciliationStatus: varchar("reconciliation_status").default("unmatched"), // 'unmatched', 'pending_review', 'auto_matched', 'manually_matched', 'ignored', 'duplicate'
+  matchedInvoiceId: varchar("matched_invoice_id").references(() => invoices.id),
+  reconciliationMethod: varchar("reconciliation_method"), // deterministic, heuristic_l2, heuristic_l3, manual_review
+  confidenceScore: decimal("confidence_score", { precision: 5, scale: 2 }),
+  reconciledAt: timestamp("reconciled_at"),
+  reconciliationNotes: text("reconciliation_notes"),
   
   // Idempotency
   isVerified: boolean("is_verified").default(false),

@@ -18,6 +18,7 @@ import LeaseTable from "@/components/leases/LeaseTable";
 import LeaseDetailsModal from "@/components/leases/LeaseDetailsModal";
 import PaymentHistory from "@/components/payments/PaymentHistory";
 import PaymentChannelsManager from "@/components/landlord/PaymentChannelsManager";
+import ReconciliationReview from "@/components/landlord/ReconciliationReview";
 import { StatementUpload } from "@/components/reconciliation/StatementUpload";
 import DocumentManager from "@/components/documents/DocumentManager";
 import ReportGenerator from "@/components/reports/ReportGenerator";
@@ -39,7 +40,7 @@ import { AUTH_QUERY_KEYS, clearAuthQueries } from "@/lib/auth-keys";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { Lease } from "@/../../shared/schema";
 
-type DashboardSection = "overview" | "properties" | "tenants" | "caretakers" | "leases" | "maintenance" | "payments" | "payment-settings" | "documents" | "reports" | "profile";
+type DashboardSection = "overview" | "properties" | "tenants" | "caretakers" | "leases" | "maintenance" | "payments" | "payment-settings" | "reconciliation" | "documents" | "reports" | "profile";
 
 // Password validation helper function
 function validatePassword(password: string): { isValid: boolean; failedRequirements: string[] } {
@@ -77,6 +78,7 @@ export default function LandlordDashboard() {
     maintenance: 'Maintenance',
     payments: 'Payments',
     'payment-settings': 'Payment Settings',
+    reconciliation: 'Payment Reconciliation',
     documents: 'Documents',
     reports: 'Reports',
     profile: 'Profile'
@@ -580,6 +582,7 @@ export default function LandlordDashboard() {
     maintenance: "Maintenance",
     payments: "Payment Management",
     "payment-settings": "Payment Settings",
+    reconciliation: "Payment Reconciliation",
     documents: "Document Management",
     reports: "Financial Reports",
     profile: "Profile Management",
@@ -2362,6 +2365,9 @@ export default function LandlordDashboard() {
             }} />
           </div>
         );
+
+      case "reconciliation":
+        return <ReconciliationReview />;
 
       case "documents":
         return <DocumentManager />;

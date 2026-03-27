@@ -31,6 +31,7 @@ const navSections = [
     label: "Tools",
     items: [
       { id: "payment-settings", label: "Payment Settings", icon: "fas fa-cog", roles: ["landlord", "property_manager"] },
+      { id: "reconciliation", label: "Payment Review", icon: "fas fa-check-circle", roles: ["landlord", "property_manager"] },
       { id: "documents", label: "Documents", icon: "fas fa-file-alt", roles: ["landlord", "property_manager", "tenant"] },
       { id: "reports", label: "Reports", icon: "fas fa-chart-line", roles: ["landlord", "property_manager"] },
     ],
