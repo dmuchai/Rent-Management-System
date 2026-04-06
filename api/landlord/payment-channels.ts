@@ -183,7 +183,19 @@ export default async (req: VercelRequest, res: VercelResponse) => {
               path: ['bankAccountNumber']
             }]);
           }
-          if (data.bankAccountNumber.length < 8 || data.bankAccountNumber.length > 16) {
+
+          const accountRef = data.bankAccountNumber.trim();
+
+          // KCB Lipa na KCB / Vooma Till (522533) may use shorter references.
+          if (data.bankPaybillNumber === '522533') {
+            if (!/^[A-Za-z0-9]{6,13}$/.test(accountRef)) {
+              throw new z.ZodError([{
+                code: 'custom',
+                message: 'For paybill 522533, account/reference must be 6-13 alphanumeric characters',
+                path: ['bankAccountNumber']
+              }]);
+            }
+          } else if (accountRef.length < 8 || accountRef.length > 16) {
             throw new z.ZodError([{
               code: 'custom',
               message: 'Bank account number must be 8-16 characters',
