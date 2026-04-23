@@ -235,11 +235,11 @@ async function matchByBankAccount(
       i.status,
       i.created_at,
       t.phone_number,
-      p.landlord_id
+      p.owner_id AS landlord_id
     FROM public.invoices i
     JOIN public.tenants t ON i.tenant_id = t.id
     JOIN public.properties p ON t.property_id = p.id
-    WHERE p.landlord_id = ${channel.landlord_id}
+    WHERE p.owner_id = ${channel.landlord_id}
       AND i.status IN ('pending', 'partially_paid')
       AND i.amount >= ${minAmount}
       AND i.amount <= ${maxAmount}
