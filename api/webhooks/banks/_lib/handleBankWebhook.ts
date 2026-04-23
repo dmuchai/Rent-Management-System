@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createVerify } from 'crypto';
 import { createDbConnection } from '../../../_lib/db';
 import { reconcilePayment, recordReconciliation } from '../../../_lib/reconciliationEngine';
-import { bankWebhookAdapters, type BankProvider } from './bankAdapter';
+import { bankWebhookAdapters, type BankProvider } from './bankAdapter.js';
 
 const PROVIDER_SECRET_ENV: Record<BankProvider, string> = {
   kcb: 'KCB_WEBHOOK_SECRET',

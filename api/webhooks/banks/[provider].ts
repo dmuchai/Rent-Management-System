@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleBankWebhook } from './_lib/handleBankWebhook';
-import type { BankProvider } from './_lib/bankAdapter';
+import { handleBankWebhook } from './_lib/handleBankWebhook.js';
+import type { BankProvider } from './_lib/bankAdapter.js';
 
 function toProvider(value: string | string[] | undefined): BankProvider | null {
   const raw = Array.isArray(value) ? value[0] : value;
