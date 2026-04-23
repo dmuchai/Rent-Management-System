@@ -131,21 +131,37 @@ export async function handleBankWebhook(
   try {
     const normalized = adapter.normalize(req.body);
 
-    const [channel] = await sql`
-      SELECT id, landlord_id, bank_paybill_number, bank_account_number
-      FROM public.landlord_payment_channels
-      WHERE is_active = true
-        AND (
-          (${normalized.destinationAccount || null} IS NOT NULL AND (
-            bank_account_number = ${normalized.destinationAccount || null}
-            OR account_number = ${normalized.destinationAccount || null}
-          ))
-          OR (${normalized.destinationPaybill || null} IS NOT NULL AND bank_paybill_number = ${normalized.destinationPaybill || null})
-        )
-        AND channel_type IN ('mpesa_to_bank', 'bank_account')
-      ORDER BY is_primary DESC, created_at DESC
-      LIMIT 1
-    `;
+    // Build the WHERE clause to avoid NULL parameter type inference issues
+    let channel: any = undefined;
+
+    if (normalized.destinationAccount) {
+      const result = await sql`
+        SELECT id, landlord_id, bank_paybill_number, bank_account_number
+        FROM public.landlord_payment_channels
+        WHERE is_active = true
+          AND (
+            bank_account_number = ${normalized.destinationAccount}
+            OR account_number = ${normalized.destinationAccount}
+          )
+          AND channel_type IN ('mpesa_to_bank', 'bank_account')
+        ORDER BY is_primary DESC, created_at DESC
+        LIMIT 1
+      `;
+      channel = result[0];
+    }
+
+    if (!channel && normalized.destinationPaybill) {
+      const result = await sql`
+        SELECT id, landlord_id, bank_paybill_number, bank_account_number
+        FROM public.landlord_payment_channels
+        WHERE is_active = true
+          AND bank_paybill_number = ${normalized.destinationPaybill}
+          AND channel_type IN ('mpesa_to_bank', 'bank_account')
+        ORDER BY is_primary DESC, created_at DESC
+        LIMIT 1
+      `;
+      channel = result[0];
+    }
 
     const inserted = await sql`
       INSERT INTO public.external_payment_events (
