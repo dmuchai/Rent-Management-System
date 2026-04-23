@@ -234,7 +234,7 @@ async function matchByBankAccount(
       i.due_date,
       i.status,
       i.created_at,
-      t.phone_number
+      t.phone
     FROM public.invoices i
     JOIN public.tenants t ON i.tenant_id = t.id
     WHERE i.landlord_id = ${channel.landlord_id}
@@ -305,8 +305,8 @@ async function matchByPhoneNumber(
     const reasons: string[] = [];
 
     // Phone number match (+30 points)
-    if (candidate.phone_number) {
-      const candidatePhone = candidate.phone_number.replace(/^\+?254/, '0').replace(/\s/g, '');
+    if (candidate.phone) {
+      const candidatePhone = candidate.phone.replace(/^\+?254/, '0').replace(/\s/g, '');
       if (normalizedPhone === candidatePhone) {
         score += 30;
         reasons.push('Phone number match');
