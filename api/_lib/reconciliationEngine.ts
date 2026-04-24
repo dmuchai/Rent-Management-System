@@ -461,9 +461,9 @@ export async function recordReconciliation(
       await tx`
         UPDATE public.invoices
         SET 
+          amount_paid = amount,
           status = 'paid',
-          paid_at = NOW(),
-          payment_source = 'mpesa'
+          paid_at = NOW()
         WHERE id = ${result.invoiceId}
       `;
     } else {
