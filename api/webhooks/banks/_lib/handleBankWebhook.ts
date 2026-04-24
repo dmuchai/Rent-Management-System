@@ -225,7 +225,7 @@ export async function handleBankWebhook(
       rawData: normalized.rawPayload,
     });
 
-    await recordReconciliation(sql, paymentEvent.id, reconciliationResult);
+    await recordReconciliation(sql, paymentEvent.id, normalized.amount, reconciliationResult);
 
     return res.status(200).json({
       success: true,

@@ -264,7 +264,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     // Record reconciliation result
-    await recordReconciliation(sql, paymentEvent.id, reconciliationResult);
+    await recordReconciliation(sql, paymentEvent.id, amount, reconciliationResult);
 
     // Log outcome
     if (reconciliationResult.matched) {

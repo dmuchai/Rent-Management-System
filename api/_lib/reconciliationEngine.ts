@@ -434,13 +434,17 @@ export async function reconcilePayment(
  * Record reconciliation attempt in database
  * @param sql - Database connection (caller manages lifecycle)
  * @param paymentEventId - ID of the payment event
+ * @param paymentAmount - Amount received in this payment event
  * @param result - Reconciliation result to record
  */
 export async function recordReconciliation(
   sql: Sql,
   paymentEventId: string,
+  paymentAmount: number,
   result: ReconciliationResult
 ): Promise<void> {
+  const amountTolerancePercent = getEnvNumber('RECONCILIATION_AMOUNT_TOLERANCE_PERCENT', 0);
+
   // Wrap all DB changes in a transaction to ensure atomicity
   await sql.begin(async (tx) => {
     if (result.matched && result.invoiceId) {
@@ -461,9 +465,17 @@ export async function recordReconciliation(
       await tx`
         UPDATE public.invoices
         SET 
-          amount_paid = amount,
-          status = 'paid',
-          paid_at = NOW()
+          amount_paid = COALESCE(amount_paid, 0) + ${paymentAmount},
+          status = CASE
+            WHEN (COALESCE(amount_paid, 0) + ${paymentAmount}) >= (amount - (amount * (${amountTolerancePercent} / 100.0)))
+              THEN 'paid'
+            ELSE 'partially_paid'
+          END,
+          paid_at = CASE
+            WHEN (COALESCE(amount_paid, 0) + ${paymentAmount}) >= (amount - (amount * (${amountTolerancePercent} / 100.0)))
+              THEN NOW()
+            ELSE NULL
+          END
         WHERE id = ${result.invoiceId}
       `;
     } else {

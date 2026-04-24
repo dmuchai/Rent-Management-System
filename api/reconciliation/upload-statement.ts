@@ -156,7 +156,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         });
 
         // Record reconciliation result
-        await recordReconciliation(sql, paymentEvent.id, reconciliationResult);
+        await recordReconciliation(sql, paymentEvent.id, txn.amount, reconciliationResult);
 
         if (reconciliationResult.matched) {
           results.matched++;
