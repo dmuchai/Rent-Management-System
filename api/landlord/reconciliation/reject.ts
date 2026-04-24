@@ -59,7 +59,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           matched_invoice_id = NULL,
           reconciliation_method = 'manual_review',
           reconciled_at = NOW(),
-          reconciliation_notes = TRIM(BOTH '; ' FROM CONCAT(COALESCE(reconciliation_notes, ''), CASE WHEN COALESCE(reconciliation_notes, '') = '' THEN '' ELSE '; ' END, ${reviewNote}))
+          reconciliation_notes = TRIM(BOTH '; ' FROM CONCAT(COALESCE(reconciliation_notes, ''), CASE WHEN COALESCE(reconciliation_notes, '') = '' THEN '' ELSE '; ' END, ${reviewNote}::text))
         WHERE id = ${event.id}
       `;
 
