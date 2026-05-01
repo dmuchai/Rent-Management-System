@@ -159,51 +159,121 @@ export class EmailService {
       throw new Error('Brevo API key not configured. Please set BREVO_API_KEY environment variable.');
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const maxRetries = Number(process.env.EMAIL_SEND_RETRIES || '3');
+    const baseDelay = Number(process.env.EMAIL_RETRY_DELAY_MS || '2000');
+    const alertWebhook = process.env.EMAIL_ALERT_WEBHOOK_URL;
 
-    try {
-      const response = await fetch(this.brevoApiUrl, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'accept': 'application/json',
-          'api-key': this.brevoApiKey,
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          sender: {
-            name: 'Landee',
-            email: process.env.BREVO_SENDER_EMAIL || 'noreply@landeeandmoony.com',
+    const payload = {
+      sender: {
+        name: 'Landee',
+        email: process.env.BREVO_SENDER_EMAIL || 'noreply@landeeandmoony.com',
+      },
+      to: [{ email: options.to }],
+      subject: options.subject,
+      htmlContent: options.html,
+      textContent: options.text,
+    };
+
+    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout per attempt
+
+      try {
+        const response = await fetch(this.brevoApiUrl, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            accept: 'application/json',
+            'api-key': this.brevoApiKey!,
+            'content-type': 'application/json',
           },
-          to: [
-            {
-              email: options.to,
-            },
-          ],
-          subject: options.subject,
-          htmlContent: options.html,
-          textContent: options.text,
-        }),
-      });
+          body: JSON.stringify(payload),
+        });
 
-      if (!response.ok) {
-        let errorData;
+        if (response.ok) {
+          console.log('✅ Email sent successfully to:', options.to);
+          clearTimeout(timeoutId);
+          return;
+        }
+
+        let errorData: any;
         try {
           errorData = await response.json();
         } catch {
           errorData = await response.text();
         }
-        console.error('Brevo API error:', errorData);
-        throw new Error(`Failed to send email via Brevo: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
-      }
 
-      console.log('✅ Email sent successfully to:', options.to);
-    } catch (error) {
-      console.error('Failed to send email:', error);
-      throw new Error(`Failed to send email: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      clearTimeout(timeoutId);
+        console.error('Brevo API error:', errorData);
+
+        // If Brevo reports unauthorized due to unrecognised IP address, send an alert webhook (if configured)
+        const isUnauthorized = response.status === 401 || (errorData && (errorData.code === 'unauthorized' || /unrecognis/i.test(String(errorData.message || ''))));
+
+        if (isUnauthorized && alertWebhook) {
+          try {
+            await fetch(alertWebhook, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                type: 'email-send-unauthorized',
+                timestamp: new Date().toISOString(),
+                to: options.to,
+                attempt,
+                maxRetries,
+                status: response.status,
+                error: errorData,
+              }),
+            });
+          } catch (webErr) {
+            console.error('Failed to POST to EMAIL_ALERT_WEBHOOK_URL:', webErr);
+          }
+        }
+
+        // If this was the last attempt, throw a detailed error
+        if (attempt === maxRetries) {
+          throw new Error(`Failed to send email via Brevo: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+
+        // Otherwise, back off and retry
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        console.warn(`Retrying email send (attempt ${attempt + 1}/${maxRetries}) after ${delay}ms...`);
+        await sleep(delay);
+      } catch (error) {
+        // network/timeout/etc
+        console.error('Failed to send email (attempt', attempt, '):', error);
+
+        if (attempt === maxRetries) {
+          // attempt to notify webhook of persistent failure
+          if (alertWebhook) {
+            try {
+              await fetch(alertWebhook, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                  type: 'email-send-failed',
+                  timestamp: new Date().toISOString(),
+                  to: options.to,
+                  attempt,
+                  maxRetries,
+                  error: String(error),
+                }),
+              });
+            } catch (webErr) {
+              console.error('Failed to POST to EMAIL_ALERT_WEBHOOK_URL:', webErr);
+            }
+          }
+
+          throw new Error(`Failed to send email: ${error instanceof Error ? error.message : String(error)}`);
+        }
+
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        await sleep(delay);
+      } finally {
+        try {
+          clearTimeout(timeoutId);
+        } catch {}
+      }
     }
   }
 
