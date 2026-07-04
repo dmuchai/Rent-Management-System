@@ -33,6 +33,28 @@ function pickString(obj: Record<string, unknown>, keys: string[]): string | unde
   return undefined;
 }
 
+function getByPath(obj: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce<unknown>((acc, segment) => {
+    if (!acc || typeof acc !== 'object') {
+      return undefined;
+    }
+    return (acc as Record<string, unknown>)[segment];
+  }, obj);
+}
+
+function pickStringByPaths(obj: Record<string, unknown>, paths: string[]): string | undefined {
+  for (const path of paths) {
+    const value = getByPath(obj, path);
+    if (typeof value === 'string' && value.trim() !== '') {
+      return value.trim();
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
 function parseAmount(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -108,12 +130,24 @@ export const kcbAdapter: BankWebhookAdapter = {
 
     const body = payload as Record<string, unknown>;
 
-    const transactionId = pickString(body, [
+    const transactionId = pickStringByPaths(body, [
       'transaction_id',
       'transactionId',
       'reference',
       'trans_id',
       'transId',
+      'transactionReference',
+      'transactionID',
+      'requestId',
+      'requestPayload.primaryData.transactionId',
+      'requestPayload.primaryData.transactionID',
+      'requestPayload.primaryData.transactionReference',
+      'requestPayload.primaryData.requestId',
+      'requestPayload.additionalData.transactionId',
+      'requestPayload.additionalData.transactionID',
+      'requestPayload.additionalData.transactionReference',
+      'responsePayload.transactionInfo.transactionId',
+      'responsePayload.transactionInfo.transactionID',
       'id',
     ]);
 
@@ -121,38 +155,131 @@ export const kcbAdapter: BankWebhookAdapter = {
       throw new Error('Missing transaction id');
     }
 
-    const amountValue = body.amount ?? body.transaction_amount ?? body.transAmount ?? body.credit;
+    const amountValue =
+      body.amount ??
+      body.transaction_amount ??
+      body.transAmount ??
+      body.credit ??
+      getByPath(body, 'transactionAmount') ??
+      getByPath(body, 'requestPayload.primaryData.transactionAmount') ??
+      getByPath(body, 'requestPayload.primaryData.amount') ??
+      getByPath(body, 'requestPayload.additionalData.amount') ??
+      getByPath(body, 'requestPayload.additionalData.transactionAmount') ??
+      getByPath(body, 'responsePayload.transactionInfo.amount');
     const amount = parseAmount(amountValue);
 
     const timestampValue =
-      body.transaction_time ?? body.transactionTime ?? body.transTime ?? body.value_date ?? body.created_at;
+      body.transaction_time ??
+      body.transactionTime ??
+      body.transTime ??
+      body.value_date ??
+      body.created_at ??
+      getByPath(body, 'timestamp') ??
+      getByPath(body, 'timeStamp') ??
+      getByPath(body, 'header.timeStamp') ??
+      getByPath(body, 'header.timestamp') ??
+      getByPath(body, 'requestPayload.primaryData.timestamp') ??
+      getByPath(body, 'requestPayload.primaryData.timeStamp') ??
+      getByPath(body, 'requestPayload.additionalData.timestamp') ??
+      getByPath(body, 'requestPayload.additionalData.timeStamp');
     const transactionTime = parseTimestamp(timestampValue);
 
-    const currency = pickString(body, ['currency', 'transaction_currency']) || 'KES';
+    const currency =
+      pickStringByPaths(body, [
+        'currency',
+        'transaction_currency',
+        'requestPayload.primaryData.currency',
+        'requestPayload.additionalData.currency',
+      ]) || 'KES';
 
-    const destinationAccount = pickString(body, [
+    const destinationAccount = pickStringByPaths(body, [
       'destination_account',
       'destinationAccount',
       'account_number',
       'accountNumber',
       'beneficiary_account',
       'bank_account_number',
+      'accountNo',
+      'creditAccountIdentifier',
+      'requestPayload.primaryData.accountNumber',
+      'requestPayload.primaryData.accountNo',
+      'requestPayload.primaryData.destinationAccount',
+      'requestPayload.primaryData.creditAccountIdentifier',
+      'requestPayload.additionalData.accountNumber',
+      'requestPayload.additionalData.accountNo',
+      'requestPayload.additionalData.creditAccountIdentifier',
     ]);
 
-    const destinationPaybill = pickString(body, [
+    const destinationPaybill = pickStringByPaths(body, [
       'paybill_number',
       'paybillNumber',
       'business_short_code',
       'businessShortCode',
+      'businessNo',
+      'organizationShortCode',
+      'requestPayload.primaryData.paybillNumber',
+      'requestPayload.primaryData.businessNo',
+      'requestPayload.primaryData.organizationShortCode',
+      'requestPayload.additionalData.paybillNumber',
+      'requestPayload.additionalData.businessNo',
+      'requestPayload.additionalData.organizationShortCode',
+      'requestPayload.primaryData.tillNumber',
+      'requestPayload.additionalData.tillNumber',
     ]);
 
     const payerPhone = normalizePhone(
-      pickString(body, ['payer_phone', 'payerPhone', 'phone', 'msisdn'])
+      pickStringByPaths(body, [
+        'payer_phone',
+        'payerPhone',
+        'phone',
+        'msisdn',
+        'customerMobileNumber',
+        'requestPayload.primaryData.phoneNumber',
+        'requestPayload.primaryData.msisdn',
+        'requestPayload.primaryData.customerMobileNumber',
+        'requestPayload.additionalData.phoneNumber',
+        'requestPayload.additionalData.msisdn',
+        'requestPayload.additionalData.customerMobileNumber',
+      ])
     );
 
-    const payerName = pickString(body, ['payer_name', 'payerName', 'customer_name', 'customerName']);
-    const payerAccountRef = pickString(body, ['payer_account_ref', 'payerAccountRef', 'account_ref', 'accountRef']);
-    const referenceCode = pickString(body, ['reference_code', 'referenceCode', 'invoice_reference', 'invoiceReference']);
+    const payerName = pickStringByPaths(body, [
+      'payer_name',
+      'payerName',
+      'customer_name',
+      'customerName',
+      'requestPayload.primaryData.customerName',
+      'requestPayload.additionalData.customerName',
+    ]);
+    const payerAccountRef = pickStringByPaths(body, [
+      'payer_account_ref',
+      'payerAccountRef',
+      'account_ref',
+      'accountRef',
+      'customerReference',
+      'narration',
+      'requestPayload.primaryData.accountReference',
+      'requestPayload.primaryData.customerReference',
+      'requestPayload.primaryData.narration',
+      'requestPayload.additionalData.accountReference',
+      'requestPayload.additionalData.customerReference',
+      'requestPayload.additionalData.narration',
+    ]);
+    const referenceCode = pickStringByPaths(body, [
+      'reference_code',
+      'referenceCode',
+      'invoice_reference',
+      'invoiceReference',
+      'transactionReference',
+      'customerReference',
+      'requestPayload.primaryData.referenceCode',
+      'requestPayload.primaryData.invoiceReference',
+      'requestPayload.primaryData.transactionReference',
+      'requestPayload.primaryData.customerReference',
+      'requestPayload.additionalData.referenceCode',
+      'requestPayload.additionalData.transactionReference',
+      'requestPayload.additionalData.customerReference',
+    ]);
 
     return {
       provider: 'kcb',

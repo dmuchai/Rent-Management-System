@@ -74,8 +74,8 @@ function hasValidKcbSignature(req: VercelRequest, provider: BankProvider): boole
 
   const configuredKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
   if (!configuredKey) {
-    // Allows sandbox/dev flow when public key verification is not configured.
-    return true;
+    // Allow non-production sandbox/dev flow without a configured key.
+    return process.env.NODE_ENV !== 'production';
   }
 
   const headerName = (process.env.KCB_WEBHOOK_SIGNATURE_HEADER || 'signature').toLowerCase();
@@ -108,6 +108,54 @@ function hasValidKcbSignature(req: VercelRequest, provider: BankProvider): boole
   );
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+}
+
+function buildKcbAck(
+  req: VercelRequest,
+  options: { statusCode: string; statusMessage: string; transactionId?: string }
+): Record<string, unknown> {
+  const body = asRecord(req.body);
+  const header = asRecord(body?.header);
+
+  const messageID = (header?.messageID as string) || 'N/A';
+  const originatorConversationID = (header?.originatorConversationID as string) || 'N/A';
+
+  const ack: Record<string, unknown> = {
+    header: {
+      messageID,
+      originatorConversationID,
+      statusCode: options.statusCode,
+      statusMessage: options.statusMessage,
+    },
+    responsePayload: {
+      transactionInfo: {
+        transactionId: options.transactionId || 'N/A',
+      },
+    },
+  };
+
+  return ack;
+}
+
+function sendProviderResponse(
+  req: VercelRequest,
+  res: VercelResponse,
+  provider: BankProvider,
+  body: Record<string, unknown>,
+  ack: { statusCode: string; statusMessage: string; transactionId?: string }
+) {
+  if (provider !== 'kcb') {
+    return res.status(200).json(body);
+  }
+
+  return res.status(200).json({
+    ...body,
+    ...buildKcbAck(req, ack),
+  });
+}
+
 export async function handleBankWebhook(
   req: VercelRequest,
   res: VercelResponse,
@@ -118,6 +166,11 @@ export async function handleBankWebhook(
   }
 
   if (!hasValidKcbSignature(req, provider)) {
+    if (provider === 'kcb' && !process.env.KCB_WEBHOOK_PUBLIC_KEY && process.env.NODE_ENV === 'production') {
+      return res.status(500).json({
+        error: 'KCB webhook public key is not configured',
+      });
+    }
     return res.status(403).json({ error: 'Invalid signature' });
   }
 
@@ -198,18 +251,26 @@ export async function handleBankWebhook(
     `;
 
     if (inserted.count === 0) {
-      return res.status(200).json({
+      return sendProviderResponse(req, res, provider, {
         success: true,
         message: 'Already processed',
+      }, {
+        statusCode: '0',
+        statusMessage: 'Already processed',
+        transactionId: normalized.transactionId,
       });
     }
 
     const [paymentEvent] = inserted;
 
     if (!channel) {
-      return res.status(200).json({
+      return sendProviderResponse(req, res, provider, {
         success: true,
         message: 'Payment stored (channel not recognized)',
+      }, {
+        statusCode: '0',
+        statusMessage: 'Payment stored',
+        transactionId: normalized.transactionId,
       });
     }
 
@@ -227,21 +288,28 @@ export async function handleBankWebhook(
 
     await recordReconciliation(sql, paymentEvent.id, normalized.amount, reconciliationResult);
 
-    return res.status(200).json({
+    return sendProviderResponse(req, res, provider, {
       success: true,
       message: reconciliationResult.matched ? 'Payment matched' : 'Payment queued for review',
       matched: reconciliationResult.matched,
       method: reconciliationResult.method,
       confidence: reconciliationResult.confidence,
       provider,
+    }, {
+      statusCode: '0',
+      statusMessage: reconciliationResult.matched ? 'Notification received successfully' : 'Notification received',
+      transactionId: normalized.transactionId,
     });
   } catch (error: any) {
     console.error(`[${provider.toUpperCase()} Webhook] Error:`, error);
-    return res.status(200).json({
+    return sendProviderResponse(req, res, provider, {
       success: false,
       message: 'Payment received (processing error)',
       error: process.env.NODE_ENV === 'development' ? error?.message : undefined,
       provider,
+    }, {
+      statusCode: '1',
+      statusMessage: 'Processing error',
     });
   } finally {
     await sql.end();
