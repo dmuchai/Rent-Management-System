@@ -112,7 +112,28 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 }
 
-function buildKcbAck(
+function pickString(obj: Record<string, unknown> | undefined, keys: string[]): string | undefined {
+  if (!obj) return undefined;
+
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === 'string' && value.trim() !== '') {
+      return value.trim();
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return undefined;
+}
+
+function isKcbTillNotification(req: VercelRequest): boolean {
+  const body = asRecord(req.body);
+  return Boolean(asRecord(body?.header) || asRecord(body?.requestPayload));
+}
+
+function buildKcbTillAck(
   req: VercelRequest,
   options: { statusCode: string; statusMessage: string; transactionId?: string }
 ): Record<string, unknown> {
@@ -139,6 +160,32 @@ function buildKcbAck(
   return ack;
 }
 
+function buildKcbAccountAck(
+  req: VercelRequest,
+  options: { statusCode: string; statusMessage: string; transactionId?: string }
+): Record<string, unknown> {
+  const body = asRecord(req.body);
+  const transactionID =
+    pickString(body, ['requestId', 'transactionID', 'transactionId', 'transactionReference']) ||
+    options.transactionId ||
+    'N/A';
+
+  return {
+    transactionID,
+    statusCode: options.statusCode,
+    statusMessage: options.statusMessage,
+  };
+}
+
+function buildKcbAck(
+  req: VercelRequest,
+  options: { statusCode: string; statusMessage: string; transactionId?: string }
+): Record<string, unknown> {
+  return isKcbTillNotification(req)
+    ? buildKcbTillAck(req, options)
+    : buildKcbAccountAck(req, options);
+}
+
 function sendProviderResponse(
   req: VercelRequest,
   res: VercelResponse,
@@ -150,10 +197,7 @@ function sendProviderResponse(
     return res.status(200).json(body);
   }
 
-  return res.status(200).json({
-    ...body,
-    ...buildKcbAck(req, ack),
-  });
+  return res.status(200).json(buildKcbAck(req, ack));
 }
 
 export async function handleBankWebhook(

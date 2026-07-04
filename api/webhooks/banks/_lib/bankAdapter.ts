@@ -155,33 +155,49 @@ export const kcbAdapter: BankWebhookAdapter = {
       throw new Error('Missing transaction id');
     }
 
-    const amountValue =
-      body.amount ??
-      body.transaction_amount ??
-      body.transAmount ??
-      body.credit ??
-      getByPath(body, 'transactionAmount') ??
-      getByPath(body, 'requestPayload.primaryData.transactionAmount') ??
-      getByPath(body, 'requestPayload.primaryData.amount') ??
-      getByPath(body, 'requestPayload.additionalData.amount') ??
-      getByPath(body, 'requestPayload.additionalData.transactionAmount') ??
-      getByPath(body, 'responsePayload.transactionInfo.amount');
+    const amountValue = [
+      body.amount,
+      body.transaction_amount,
+      body.transAmount,
+      body.credit,
+      getByPath(body, 'transactionAmount'),
+      getByPath(body, 'requestPayload.primaryData.transactionAmount'),
+      getByPath(body, 'requestPayload.primaryData.amount'),
+      getByPath(body, 'requestPayload.additionalData.amount'),
+      getByPath(body, 'requestPayload.additionalData.transactionAmount'),
+      getByPath(body, 'responsePayload.transactionInfo.amount'),
+    ].find((value) => {
+      try {
+        parseAmount(value);
+        return true;
+      } catch {
+        return false;
+      }
+    });
     const amount = parseAmount(amountValue);
 
-    const timestampValue =
-      body.transaction_time ??
-      body.transactionTime ??
-      body.transTime ??
-      body.value_date ??
-      body.created_at ??
-      getByPath(body, 'timestamp') ??
-      getByPath(body, 'timeStamp') ??
-      getByPath(body, 'header.timeStamp') ??
-      getByPath(body, 'header.timestamp') ??
-      getByPath(body, 'requestPayload.primaryData.timestamp') ??
-      getByPath(body, 'requestPayload.primaryData.timeStamp') ??
-      getByPath(body, 'requestPayload.additionalData.timestamp') ??
-      getByPath(body, 'requestPayload.additionalData.timeStamp');
+    const timestampValue = [
+      body.transaction_time,
+      body.transactionTime,
+      body.transTime,
+      body.value_date,
+      body.created_at,
+      getByPath(body, 'timestamp'),
+      getByPath(body, 'timeStamp'),
+      getByPath(body, 'header.timeStamp'),
+      getByPath(body, 'header.timestamp'),
+      getByPath(body, 'requestPayload.primaryData.timestamp'),
+      getByPath(body, 'requestPayload.primaryData.timeStamp'),
+      getByPath(body, 'requestPayload.additionalData.timestamp'),
+      getByPath(body, 'requestPayload.additionalData.timeStamp'),
+    ].find((value) => {
+      try {
+        parseTimestamp(value);
+        return true;
+      } catch {
+        return false;
+      }
+    });
     const transactionTime = parseTimestamp(timestampValue);
 
     const currency =
