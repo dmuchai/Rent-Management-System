@@ -184,7 +184,7 @@ export default async function handler(
           email: user.email,
           first_name: firstName,
           last_name: lastName,
-          role: metadata.role || "landlord",
+          role: metadata.role || null,
         };
 
         if (phoneNumber) {
@@ -780,9 +780,23 @@ export default async function handler(
 
       const { role } = setRoleSchema.parse(req.body);
 
-      // Authorization: only allow role selection if current role is null (initial selection)
-      // or if user is admin. Prevent role escalation.
-      const currentRole = user.role || user.user_metadata?.role;
+      const admin = getAdminClient();
+
+      const { data: profile, error: profileLookupError } = await admin
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileLookupError) {
+        console.error("[Auth] Role profile lookup failed:", profileLookupError);
+        return res.status(500).json({ error: "Failed to validate current role", details: profileLookupError.message });
+      }
+
+      // Authorization: only allow role selection if the app profile role is not set.
+      // Supabase Auth's built-in `user.role` is usually "authenticated"; it is not
+      // the Landee app role and must not block initial role selection.
+      const currentRole = profile?.role || null;
       if (currentRole && currentRole !== 'admin') {
         console.log(`[Auth] Role change denied: user ${user.id} attempted to change from ${currentRole} to ${role}`);
         return res.status(403).json({
@@ -791,13 +805,16 @@ export default async function handler(
         });
       }
 
-      const admin = getAdminClient();
-
-      // 1. Update public.users table
+      // 1. Update public.users table, creating the profile row if sync-user has
+      // not completed yet after an OAuth/email-confirmation redirect.
       const { error: dbError } = await admin
         .from("users")
-        .update({ role })
-        .eq("id", user.id);
+        .upsert({
+          id: user.id,
+          email: user.email,
+          role,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "id" });
 
       if (dbError) {
         console.error("[Auth] Role database update failed:", dbError);

@@ -3,7 +3,6 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
 import { Building2, Home, Users } from "lucide-react";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -23,6 +22,22 @@ export default function SelectRole() {
   // Get auth state to check if we can even reach the server
   const { user, isLoading: authLoading } = useAuth();
   const [isRetrying, setIsRetrying] = useState(false);
+
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (!(error instanceof Error)) return fallback;
+
+    const jsonStart = error.message.indexOf("{");
+    if (jsonStart >= 0) {
+      try {
+        const parsed = JSON.parse(error.message.slice(jsonStart));
+        return parsed.details || parsed.message || parsed.error || fallback;
+      } catch {
+        // Fall back to the original Error message below.
+      }
+    }
+
+    return error.message || fallback;
+  };
 
   const handleRetryConnection = async () => {
     setIsRetrying(true);
@@ -90,7 +105,7 @@ export default function SelectRole() {
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to set role",
+        description: getErrorMessage(error, "Failed to set role"),
         variant: "destructive",
       });
     } finally {
@@ -113,7 +128,7 @@ export default function SelectRole() {
         <Card>
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">How will you use Landee?</CardTitle>
-            <CardDescription>Choose the role that best describes you. You can change this later in settings.</CardDescription>
+            <CardDescription>Choose the role that best describes how you will use your account.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 mb-6">
