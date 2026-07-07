@@ -28,6 +28,19 @@ These should also be updated if they contain domain references:
 - `PESAPAL_CALLBACK_URL` → Should be `https://landee.kejalink.co.ke/api/payments/pesapal/ipn`
 - `PAYMENT_SUCCESS_URL` → Should be `https://landee.kejalink.co.ke/dashboard?payment=success`
 
+### 📲 SMS VARIABLES (Africa's Talking Live Testing)
+
+Set these before testing phone verification from user profiles:
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `SMS_PROVIDER` | `africastalking` | Routes SMS through Africa's Talking |
+| `AT_USERNAME` | Your live Africa's Talking username | Africa's Talking account/project username |
+| `AT_API_KEY` | Your live Africa's Talking API key | API authentication |
+| `AT_SENDER_ID` | Optional approved sender ID | Branded sender, if approved |
+
+Signup no longer requires SMS OTP. Users verify email first, then verify their phone number later from their profile.
+
 ## How to Update in Vercel
 
 1. Go to: https://vercel.com/your-project/settings/environment-variables

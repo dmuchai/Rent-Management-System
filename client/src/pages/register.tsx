@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
 import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -18,8 +17,6 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [verificationStep, setVerificationStep] = useState<'details' | 'otp'>('details');
-  const [otpCode, setOtpCode] = useState("");
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -62,83 +59,21 @@ export default function Register() {
 
       const data = await response.json();
 
-      if (data.otpRequired) {
-        setVerificationStep('otp');
-        toast({
-          title: "OTP Sent",
-          description: "Please enter the 6-digit code sent to your phone.",
-        });
-      } else {
-        toast({
-          title: "Success",
-          description: data.message || "Please check your email to verify your account.",
-          duration: 5000,
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Registration failed",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      const response = await apiRequest("POST", "/api/auth?action=verify-otp", {
-        phoneNumber: formData.phoneNumber,
-        code: otpCode,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "OTP verification failed");
-      }
-
-      // Redirect to the check-email holding page so the user knows exactly what to do next.
-      // Pass the email and phone as query params for display and resend purposes.
       const params = new URLSearchParams({
         email: formData.email,
         phone: formData.phoneNumber,
       });
+
+      toast({
+        title: "Success",
+        description: data.message || "Please check your email to verify your account.",
+        duration: 5000,
+      });
       setLocation(`/check-email?${params.toString()}`);
     } catch (error) {
       toast({
-        title: "Verification Failed",
-        description: error instanceof Error ? error.message : "Invalid OTP code",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleResendOtp = async () => {
-    setIsLoading(true);
-    try {
-      const response = await apiRequest("POST", "/api/auth?action=send-otp", {
-        phoneNumber: formData.phoneNumber,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to resend OTP");
-      }
-
-      toast({
-        title: "OTP Resent",
-        description: "A new code has been sent to your phone.",
-      });
-    } catch (error) {
-      toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to resend OTP",
+        description: error instanceof Error ? error.message : "Registration failed",
         variant: "destructive",
       });
     } finally {
@@ -201,17 +136,13 @@ export default function Register() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{verificationStep === 'details' ? 'Create Account' : 'Verify Phone'}</CardTitle>
+            <CardTitle>Create Account</CardTitle>
             <CardDescription>
-              {verificationStep === 'details'
-                ? 'Sign up to start managing your properties'
-                : `Enter the code sent to ${formData.phoneNumber}`}
+              Sign up to start managing your properties
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {verificationStep === 'details' ? (
-              /* Registration Form */
-              <form onSubmit={handleRegister} className="space-y-4">
+            <form onSubmit={handleRegister} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">First Name</Label>
@@ -251,7 +182,7 @@ export default function Register() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phoneNumber">Mobile Number (Verified via SMS)</Label>
+                  <Label htmlFor="phoneNumber">Mobile Number</Label>
                   <Input
                     id="phoneNumber"
                     type="tel"
@@ -261,7 +192,7 @@ export default function Register() {
                     required
                     disabled={isLoading}
                   />
-                  <p className="text-[11px] text-muted-foreground">Include country code (e.g., +254 for Kenya)</p>
+                  <p className="text-[11px] text-muted-foreground">Include country code (e.g., +254 for Kenya). You can verify this later from your profile.</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="role">I am a</Label>
@@ -344,68 +275,10 @@ export default function Register() {
                     "Create Account"
                   )}
                 </Button>
-              </form>
-            ) : (
-              /* OTP Verification Form */
-              <form onSubmit={handleVerifyOtp} className="space-y-6">
-                <div className="space-y-2 text-center">
-                  <Label htmlFor="otpCode" className="text-lg font-semibold">Enter 6-digit Code</Label>
-                  <Input
-                    id="otpCode"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    placeholder="123456"
-                    className="text-center text-2xl tracking-[1em] h-14"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ""))}
-                    required
-                    disabled={isLoading}
-                    autoFocus
-                  />
-                </div>
-                <Button type="submit" className="w-full h-12 text-lg" disabled={isLoading || otpCode.length < 6}>
-                  {isLoading ? (
-                    <>
-                      <i className="fas fa-spinner fa-spin mr-2"></i>
-                      Verifying...
-                    </>
-                  ) : (
-                    "Verify Phone"
-                  )}
-                </Button>
-                <div className="text-center space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Didn't receive the code?
-                  </p>
-                  <Button
-                    variant="link"
-                    type="button"
-                    onClick={handleResendOtp}
-                    disabled={isLoading}
-                    className="h-auto p-0"
-                  >
-                    Resend SMS Code
-                  </Button>
-                  <div>
-                    <Button
-                      variant="ghost"
-                      type="button"
-                      onClick={() => setVerificationStep('details')}
-                      disabled={isLoading}
-                      className="text-xs"
-                    >
-                      Change Phone Number
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            )}
+            </form>
 
-            {/* Divider (Only on details step) */}
-            {verificationStep === 'details' && (
-              <>
+            {/* Divider */}
+            <>
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
                     <span className="w-full border-t" />
@@ -435,8 +308,7 @@ export default function Register() {
                     </>
                   )}
                 </Button>
-              </>
-            )}
+            </>
 
             {/* Login Link */}
             <div className="text-center text-sm">

@@ -63,7 +63,7 @@ export class SmsService {
     }
 
     async sendSms(options: SmsOptions): Promise<any> {
-        const provider = process.env.SMS_PROVIDER || (this.infobipApiKey ? 'infobip' : 'africastalking');
+        const provider = process.env.SMS_PROVIDER || 'africastalking';
 
         // Normalize phone number to international format before sending
         const normalizedTo = this.normalizePhoneNumber(options.to);

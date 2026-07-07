@@ -60,6 +60,10 @@ EMAIL_PASS=your_email_app_password
 PESAPAL_CONSUMER_KEY=your_pesapal_consumer_key
 PESAPAL_CONSUMER_SECRET=your_pesapal_consumer_secret
 PESAPAL_BASE_URL=https://cybqa.pesapal.com/pesapalv3
+SMS_PROVIDER=africastalking
+AT_USERNAME=your_africastalking_username
+AT_API_KEY=your_africastalking_api_key
+AT_SENDER_ID=your_approved_sender_id
 ```
 
 ## Step 4: Domain Configuration

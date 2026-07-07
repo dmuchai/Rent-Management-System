@@ -174,17 +174,38 @@ export default async function handler(
         // As a final fallback, ensure non-null strings
         firstName = firstName || "";
         lastName = lastName || "";
+        const phoneNumber =
+          typeof metadata.phone_number === "string" && metadata.phone_number.trim()
+            ? metadata.phone_number.trim()
+            : null;
+
+        const profileInsert: Record<string, any> = {
+          id: user.id,
+          email: user.email,
+          first_name: firstName,
+          last_name: lastName,
+          role: metadata.role || "landlord",
+        };
+
+        if (phoneNumber) {
+          const { data: existingPhoneOwner } = await admin
+            .from("users")
+            .select("id")
+            .eq("phone_number", phoneNumber)
+            .maybeSingle();
+
+          if (!existingPhoneOwner) {
+            profileInsert.phone_number = phoneNumber;
+            profileInsert.phone_verified = false;
+          } else {
+            console.warn(`[Auth] Skipped duplicate phone number during sync for user: ${user.id}`);
+          }
+        }
 
         // Perform insert and handle any error returned by Supabase client
         const { data: inserted, error: insertErr } = await admin
           .from("users")
-          .insert({
-            id: user.id,
-            email: user.email,
-            first_name: firstName,
-            last_name: lastName,
-            role: metadata.role || "landlord",
-          })
+          .insert(profileInsert)
           .select("id")
           .single();
 
@@ -292,26 +313,6 @@ export default async function handler(
 
       console.log(`[Auth] User created via generateLink: ${newUser.id}`);
 
-      // Send SMS OTP
-      const sql = createDbConnection();
-      const code = smsService.generateOtp();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-      try {
-        await sql`
-          INSERT INTO public.otp_codes (phone_number, code, expires_at)
-          VALUES (${phoneNumber}, ${code}, ${expiresAt})
-        `;
-        await smsService.sendSms({
-          to: phoneNumber,
-          message: `Your Landee verification code is: ${code}. Valid for 10 minutes.`
-        });
-      } catch (smsErr) {
-        console.error("[Auth] Failed to send OTP:", smsErr);
-      } finally {
-        await sql.end();
-      }
-
       // Send confirmation email via Brevo
       try {
         const escapedFirstName = firstName.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]!));
@@ -367,9 +368,9 @@ export default async function handler(
       }
 
       return res.status(200).json({
-        message: "Registration successful! An OTP has been sent to your phone and a verification link to your email.",
+        message: "Registration successful! Please check your email to verify your account. You can verify your phone number later from your profile.",
         user: newUser,
-        otpRequired: true
+        otpRequired: false
       });
     }
 
