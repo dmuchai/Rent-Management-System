@@ -188,17 +188,21 @@ export default async function handler(
         };
 
         if (phoneNumber) {
-          const { data: existingPhoneOwner } = await admin
+          const { data: existingPhoneOwner, error: existingPhoneLookupError } = await admin
             .from("users")
             .select("id")
             .eq("phone_number", phoneNumber)
             .maybeSingle();
 
-          if (!existingPhoneOwner) {
+          if (existingPhoneOwner) {
+            console.warn(`[Auth] Skipped duplicate phone number during sync for user: ${user.id}`);
+          } else if (existingPhoneLookupError) {
+            console.warn(
+              `[Auth] Ambiguous phone lookup during sync for user: ${user.id}; skipping phone attachment`
+            );
+          } else {
             profileInsert.phone_number = phoneNumber;
             profileInsert.phone_verified = false;
-          } else {
-            console.warn(`[Auth] Skipped duplicate phone number during sync for user: ${user.id}`);
           }
         }
 
@@ -210,8 +214,26 @@ export default async function handler(
           .single();
 
         if (insertErr) {
-          console.error("[Auth] Failed to insert user into public.users:", insertErr);
-          return res.status(500).json({ error: "Failed to sync user" });
+          if (insertErr.code === "23505" && profileInsert.phone_number) {
+            console.warn(
+              `[Auth] Duplicate phone number detected during sync for user: ${user.id}; retrying without phone`
+            );
+
+            const { phone_number, phone_verified, ...profileInsertWithoutPhone } = profileInsert;
+            const { error: retryErr } = await admin
+              .from("users")
+              .insert(profileInsertWithoutPhone)
+              .select("id")
+              .single();
+
+            if (retryErr) {
+              console.error("[Auth] Failed to insert user into public.users after dropping phone:", retryErr);
+              return res.status(500).json({ error: "Failed to sync user" });
+            }
+          } else {
+            console.error("[Auth] Failed to insert user into public.users:", insertErr);
+            return res.status(500).json({ error: "Failed to sync user" });
+          }
         }
       } else {
         // Back-fill metadata for existing users if missing (enables personalization)
