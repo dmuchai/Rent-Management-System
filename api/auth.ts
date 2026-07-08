@@ -277,7 +277,7 @@ export default async function handler(
         role: z.enum(["landlord", "tenant", "property_manager"]).optional(),
       });
 
-      const { email, password, firstName, lastName, phoneNumber, role: requestedRole } = registerSchema.parse(req.body);
+      const { email, password, firstName, lastName, phoneNumber } = registerSchema.parse(req.body);
       const admin = getAdminClient();
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
 
@@ -289,11 +289,7 @@ export default async function handler(
         .limit(1)
         .maybeSingle();
 
-      const role = existingTenant ? "tenant" : (requestedRole || "landlord");
-
-      if (existingTenant && requestedRole && requestedRole !== "tenant") {
-        console.log(`[Auth] Forcing tenant role for email ${email} due to existing tenant record`);
-      }
+      const role = existingTenant ? "tenant" : null;
 
       // Use admin.generateLink({ type: 'signup' }) as the SINGLE call that both creates the
       // auth user and returns the confirmation link. This avoids the conflict that occurs when
@@ -311,7 +307,7 @@ export default async function handler(
             firstName,
             lastName,
             phone_number: phoneNumber,
-            role,
+            ...(role ? { role } : {}),
           },
         },
       });

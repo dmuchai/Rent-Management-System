@@ -25,7 +25,6 @@ export default function Register() {
     firstName: "",
     lastName: "",
     phoneNumber: "",
-    role: "landlord", // Default role
   });
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -50,7 +49,6 @@ export default function Register() {
         firstName: formData.firstName,
         lastName: formData.lastName,
         phoneNumber: formData.phoneNumber,
-        role: formData.role,
       });
 
       if (!response.ok) {
@@ -197,20 +195,6 @@ export default function Register() {
                     disabled={isLoading}
                   />
                   <p className="text-[11px] text-muted-foreground">Include country code (e.g., +254 for Kenya). You can verify this later from your profile.</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">I am a</Label>
-                  <select
-                    id="role"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    disabled={isLoading}
-                  >
-                    <option value="">Select your role</option>
-                    <option value="landlord">Landlord</option>
-                    <option value="property_manager">Property Manager</option>
-                  </select>
                 </div>
                 <div className="p-3 bg-muted rounded-lg border border-border text-sm">
                   <p className="text-muted-foreground">
