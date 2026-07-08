@@ -18,6 +18,8 @@
 - Non-admin users are blocked from changing roles after their initial role has already been set.
 - Registration errors are handled more clearly when an email is already registered.
 - Android OAuth redirect handling now supports native app callback behavior more reliably.
+- The landlord payment form now opens within the mobile viewport and submits the selected lease using the payment API contract.
+- Tenant maintenance requests now use a database-compatible initial status instead of failing with an HTTP 500 response.
 
 ### Build And Deployment
 

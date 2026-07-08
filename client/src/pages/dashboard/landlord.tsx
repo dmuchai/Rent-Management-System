@@ -503,8 +503,8 @@ export default function LandlordDashboard() {
 
   const recordPaymentMutation = useMutation({
     mutationFn: async (data: {
-      tenantId: string;
-      amount: number;
+      leaseId: string;
+      amount: string;
       dueDate: string;
       paidDate?: string;
       paymentMethod: string;
@@ -545,12 +545,11 @@ export default function LandlordDashboard() {
 
   const handleRecordPayment = () => {
     const selectedLease = leases.find((l: any) => l.id === paymentForm.tenantId);
-    const resolvedTenantId = selectedLease?.tenantId || selectedLease?.tenant?.id;
 
-    if (!resolvedTenantId) {
+    if (!selectedLease) {
       toast({
         title: "Error",
-        description: "Please select a lease with an assigned tenant",
+        description: "Please select a lease",
         variant: "destructive",
       });
       return;
@@ -586,8 +585,8 @@ export default function LandlordDashboard() {
     const description = paymentForm.notes || `${paymentForm.paymentType || 'Payment'} - Reference: ${paymentForm.reference || 'N/A'}`;
 
     recordPaymentMutation.mutate({
-      tenantId: resolvedTenantId,
-      amount: parseFloat(paymentForm.amount),
+      leaseId: selectedLease.id,
+      amount: paymentForm.amount,
       dueDate: paymentForm.paymentDate,
       paidDate: paymentForm.paymentDate,
       paymentMethod: paymentForm.paymentMethod,
@@ -2906,7 +2905,7 @@ export default function LandlordDashboard() {
 
       {/* Record Payment Modal */}
       <Dialog open={isPaymentFormOpen} onOpenChange={setIsPaymentFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[92dvh] overflow-hidden p-0">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl max-h-[92dvh] overflow-hidden p-0">
           <form
             onSubmit={(e) => {
               e.preventDefault();

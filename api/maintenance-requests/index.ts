@@ -221,7 +221,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           ${requestData.title},
           ${requestData.description},
           ${requestData.priority},
-          'open'
+          'pending'
         )
         RETURNING *
       `;
@@ -273,7 +273,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       }
 
       const updateSchema = z.object({
-        status: z.enum(['open', 'in_progress', 'completed', 'cancelled']).optional(),
+        status: z.enum(['pending', 'open', 'in_progress', 'completed', 'cancelled']).optional(),
         assignedTo: z.string().optional(),
         completedDate: z.string().or(z.date()).optional(),
       });
