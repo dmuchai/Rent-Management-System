@@ -503,8 +503,8 @@ export default function LandlordDashboard() {
 
   const recordPaymentMutation = useMutation({
     mutationFn: async (data: {
-      leaseId: string;
-      amount: string;
+      tenantId: string;
+      amount: number;
       dueDate: string;
       paidDate?: string;
       paymentMethod: string;
@@ -542,6 +542,60 @@ export default function LandlordDashboard() {
       });
     },
   });
+
+  const handleRecordPayment = () => {
+    const selectedLease = leases.find((l: any) => l.id === paymentForm.tenantId);
+    const resolvedTenantId = selectedLease?.tenantId || selectedLease?.tenant?.id;
+
+    if (!resolvedTenantId) {
+      toast({
+        title: "Error",
+        description: "Please select a lease with an assigned tenant",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!paymentForm.amount || parseFloat(paymentForm.amount) <= 0) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid payment amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!paymentForm.paymentMethod) {
+      toast({
+        title: "Error",
+        description: "Please select a payment method",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!paymentForm.paymentDate) {
+      toast({
+        title: "Error",
+        description: "Please select a payment date",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const description = paymentForm.notes || `${paymentForm.paymentType || 'Payment'} - Reference: ${paymentForm.reference || 'N/A'}`;
+
+    recordPaymentMutation.mutate({
+      tenantId: resolvedTenantId,
+      amount: parseFloat(paymentForm.amount),
+      dueDate: paymentForm.paymentDate,
+      paidDate: paymentForm.paymentDate,
+      paymentMethod: paymentForm.paymentMethod,
+      paymentType: paymentForm.paymentType || 'rent',
+      status: 'completed',
+      description,
+    });
+  };
 
   useEffect(() => {
     if (isProfileEditOpen && user) {
@@ -2852,14 +2906,24 @@ export default function LandlordDashboard() {
 
       {/* Record Payment Modal */}
       <Dialog open={isPaymentFormOpen} onOpenChange={setIsPaymentFormOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Record Payment (Manual Entry)</DialogTitle>
-            <p className="text-sm text-muted-foreground mt-2">
-              This is for manually recording offline payments. For automated online payments, tenants should use the tenant portal.
-            </p>
-          </DialogHeader>
-          <div className="space-y-4">
+        <DialogContent className="max-w-2xl max-h-[92dvh] overflow-hidden p-0">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleRecordPayment();
+            }}
+            className="flex max-h-[92dvh] flex-col"
+          >
+            <div className="border-b px-6 pt-6 pb-4">
+              <DialogHeader>
+                <DialogTitle>Record Payment (Manual Entry)</DialogTitle>
+                <p className="text-sm text-muted-foreground mt-2">
+                  This is for manually recording offline payments. For automated online payments, tenants should use the tenant portal.
+                </p>
+              </DialogHeader>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
             <div>
               <Label htmlFor="lease">Select Lease (Tenant + Property) *</Label>
               <Select
@@ -2869,7 +2933,7 @@ export default function LandlordDashboard() {
                   if (selectedLease) {
                     setPaymentForm(prev => ({
                       ...prev,
-                      tenantId: value, // Store lease ID here for now
+                      tenantId: value,
                       amount: selectedLease.monthlyRent || prev.amount,
                       propertyId: selectedLease.unitId || prev.propertyId
                     }));
@@ -2995,65 +3059,22 @@ export default function LandlordDashboard() {
               </ul>
             </div>
 
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button variant="outline" onClick={() => setIsPaymentFormOpen(false)}>
+            </div>
+
+            <div className="border-t bg-background px-6 py-4">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => setIsPaymentFormOpen(false)}>
                 Cancel
               </Button>
               <Button
-                onClick={() => {
-                  // Form validation
-                  if (!paymentForm.tenantId) {
-                    toast({
-                      title: "Error",
-                      description: "Please select a tenant",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-                  if (!paymentForm.amount || parseFloat(paymentForm.amount) <= 0) {
-                    toast({
-                      title: "Error",
-                      description: "Please enter a valid payment amount",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-                  if (!paymentForm.paymentMethod) {
-                    toast({
-                      title: "Error",
-                      description: "Please select a payment method",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-                  if (!paymentForm.paymentDate) {
-                    toast({
-                      title: "Error",
-                      description: "Please select a payment date",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-
-                  // Submit payment
-                  const description = paymentForm.notes || `${paymentForm.paymentType || 'Payment'} - Reference: ${paymentForm.reference || 'N/A'}`;
-                  recordPaymentMutation.mutate({
-                    leaseId: paymentForm.tenantId, // This actually stores the lease ID
-                    amount: paymentForm.amount, // Keep as string
-                    dueDate: paymentForm.paymentDate, // Use payment date as due date
-                    paidDate: paymentForm.paymentDate,
-                    paymentMethod: paymentForm.paymentMethod,
-                    paymentType: paymentForm.paymentType || 'rent',
-                    status: 'completed',
-                    description: description
-                  });
-                }}
+                type="submit"
                 disabled={recordPaymentMutation.isPending}
               >
                 {recordPaymentMutation.isPending ? "Recording..." : "Record Payment"}
               </Button>
+              </div>
             </div>
-          </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

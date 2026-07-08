@@ -236,20 +236,22 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
             </div>
           </div>
 
-          <Button
-            type="submit"
-            className="w-full"
-            size="lg"
-            disabled={paymentMutation.isPending}
-            data-testid="button-pay-now"
-          >
-            {paymentMutation.isPending ? "Processing..." :
-              paymentMethod === "mpesa_direct" ? "Send STK Push" : "Pay Now via Pesapal"}
-          </Button>
+          <div className="sticky bottom-0 -mx-0 bg-background/95 pt-4 pb-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              disabled={paymentMutation.isPending}
+              data-testid="button-pay-now"
+            >
+              {paymentMutation.isPending ? "Processing..." :
+                paymentMethod === "mpesa_direct" ? "Send STK Push" : "Pay Now via Pesapal"}
+            </Button>
 
-          <p className="text-xs text-muted-foreground text-center">
-            Secure payment powered by Pesapal. Your payment details are encrypted and secure.
-          </p>
+            <p className="text-xs text-muted-foreground text-center mt-3">
+              Secure payment powered by Pesapal. Your payment details are encrypted and secure.
+            </p>
+          </div>
         </form>
       </div>
     );

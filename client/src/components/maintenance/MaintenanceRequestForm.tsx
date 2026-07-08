@@ -107,111 +107,117 @@ export default function MaintenanceRequestForm({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Submit Maintenance Request</DialogTitle>
-          <DialogDescription>
-            Describe the issue you're experiencing and we'll get it resolved as soon as possible.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="title">Issue Title *</Label>
-            <Input
-              id="title"
-              placeholder="e.g., Leaking faucet in bathroom"
-              {...register("title")}
-              className={errors.title ? "border-red-500" : ""}
-            />
-            {errors.title && (
-              <p className="text-sm text-red-500">{errors.title.message}</p>
-            )}
+      <DialogContent className="sm:max-w-[600px] max-h-[92dvh] overflow-hidden p-0">
+        <form onSubmit={handleSubmit(onSubmit)} className="flex max-h-[92dvh] flex-col">
+          <div className="border-b px-6 pt-6 pb-4">
+            <DialogHeader>
+              <DialogTitle>Submit Maintenance Request</DialogTitle>
+              <DialogDescription>
+                Describe the issue you're experiencing and we'll get it resolved as soon as possible.
+              </DialogDescription>
+            </DialogHeader>
           </div>
 
-          {/* Priority */}
-          <div className="space-y-2">
-            <Label htmlFor="priority">Priority Level *</Label>
-            <Select
-              value={priority}
-              onValueChange={(value) =>
-                setValue("priority", value as "low" | "medium" | "high" | "urgent")
-              }
-            >
-              <SelectTrigger className={priorityColors[priority || "medium"]}>
-                <SelectValue placeholder="Select priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low" className="text-blue-600">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-blue-600"></div>
-                    Low - Can wait
-                  </div>
-                </SelectItem>
-                <SelectItem value="medium" className="text-yellow-600">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-yellow-600"></div>
-                    Medium - Normal priority
-                  </div>
-                </SelectItem>
-                <SelectItem value="high" className="text-orange-600">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-orange-600"></div>
-                    High - Needs attention soon
-                  </div>
-                </SelectItem>
-                <SelectItem value="urgent" className="text-red-600">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-red-600"></div>
-                    Urgent - Immediate attention required
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            {errors.priority && (
-              <p className="text-sm text-red-500">{errors.priority.message}</p>
-            )}
-          </div>
+          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-4">
+            {/* Title */}
+            <div className="space-y-2">
+              <Label htmlFor="title">Issue Title *</Label>
+              <Input
+                id="title"
+                placeholder="e.g., Leaking faucet in bathroom"
+                {...register("title")}
+                className={errors.title ? "border-red-500" : ""}
+              />
+              {errors.title && (
+                <p className="text-sm text-red-500">{errors.title.message}</p>
+              )}
+            </div>
 
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description">Detailed Description *</Label>
-            <Textarea
-              id="description"
-              placeholder="Please describe the issue in detail, including when it started and any relevant information..."
-              rows={5}
-              {...register("description")}
-              className={errors.description ? "border-red-500" : ""}
-            />
-            {errors.description && (
-              <p className="text-sm text-red-500">{errors.description.message}</p>
-            )}
+            {/* Priority */}
+            <div className="space-y-2">
+              <Label htmlFor="priority">Priority Level *</Label>
+              <Select
+                value={priority}
+                onValueChange={(value) =>
+                  setValue("priority", value as "low" | "medium" | "high" | "urgent")
+                }
+              >
+                <SelectTrigger className={priorityColors[priority || "medium"]}>
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low" className="text-blue-600">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                      Low - Can wait
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="medium" className="text-yellow-600">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-yellow-600"></div>
+                      Medium - Normal priority
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="high" className="text-orange-600">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-orange-600"></div>
+                      High - Needs attention soon
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="urgent" className="text-red-600">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-red-600"></div>
+                      Urgent - Immediate attention required
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.priority && (
+                <p className="text-sm text-red-500">{errors.priority.message}</p>
+              )}
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+              <Label htmlFor="description">Detailed Description *</Label>
+              <Textarea
+                id="description"
+                placeholder="Please describe the issue in detail, including when it started and any relevant information..."
+                rows={5}
+                {...register("description")}
+                className={errors.description ? "border-red-500" : ""}
+              />
+              {errors.description && (
+                <p className="text-sm text-red-500">{errors.description.message}</p>
+              )}
+            </div>
           </div>
 
           {/* Submit Buttons */}
-          <div className="flex justify-end gap-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={createRequestMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={createRequestMutation.isPending}>
-              {createRequestMutation.isPending ? (
-                <>
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-paper-plane mr-2"></i>
-                  Submit Request
-                </>
-              )}
-            </Button>
+          <div className="border-t bg-background px-6 py-4">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+                disabled={createRequestMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createRequestMutation.isPending}>
+                {createRequestMutation.isPending ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-paper-plane mr-2"></i>
+                    Submit Request
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </form>
       </DialogContent>
