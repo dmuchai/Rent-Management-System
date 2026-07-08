@@ -36,6 +36,22 @@ export default function AuthCallback() {
           return;
         }
 
+        const code = new URLSearchParams(window.location.search).get("code");
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+          if (error) {
+            throw error;
+          }
+
+          if (data.session) {
+            console.log("[AuthCallback] ✅ Session exchanged from OAuth code");
+            apiRequest("POST", "/api/auth?action=sync-user").catch(() => {});
+            setLocation("/dashboard");
+            return;
+          }
+        }
+
         // No immediate session — wait for onAuthStateChange to fire (handles
         // hash-based email confirmation tokens which are processed async).
         console.log("[AuthCallback] No immediate session, waiting for auth state change...");
@@ -105,4 +121,3 @@ export default function AuthCallback() {
     </div>
   );
 }
-

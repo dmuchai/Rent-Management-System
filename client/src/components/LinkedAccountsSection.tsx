@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIdentities } from "@/hooks/useIdentities";
 import { supabase } from "@/lib/supabase";
 import { Loader2 } from "lucide-react";
+import { getOAuthRedirectUrl, isNativePlatform, openOAuthUrl } from "@/lib/nativeOAuth";
 
 export function LinkedAccountsSection() {
   const { toast } = useToast();
@@ -16,6 +17,10 @@ export function LinkedAccountsSection() {
       // Use Supabase client to initiate linking
       const { data, error } = await supabase.auth.linkIdentity({
         provider: 'google',
+        options: {
+          redirectTo: getOAuthRedirectUrl(),
+          skipBrowserRedirect: isNativePlatform(),
+        },
       });
 
       if (error) {
@@ -27,7 +32,7 @@ export function LinkedAccountsSection() {
         });
       } else if (data?.url) {
         // Redirect to Google OAuth for linking
-        window.location.href = data.url;
+        await openOAuthUrl(data.url);
       }
     } catch (error) {
       console.error('[LinkGoogle] Unexpected error:', error);

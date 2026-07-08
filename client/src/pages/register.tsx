@@ -9,6 +9,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { getOAuthRedirectUrl, isNativePlatform, openOAuthUrl } from "@/lib/nativeOAuth";
 
 export default function Register() {
   usePageTitle('Create Account');
@@ -93,7 +94,8 @@ export default function Register() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth-callback`,
+          redirectTo: getOAuthRedirectUrl(),
+          skipBrowserRedirect: isNativePlatform(),
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -109,6 +111,8 @@ export default function Register() {
           variant: "destructive",
         });
         setIsLoading(false);
+      } else if (isNativePlatform() && data?.url) {
+        await openOAuthUrl(data.url);
       }
       // If successful, user will be redirected to Google (no need to reset loading state)
     } catch (err) {

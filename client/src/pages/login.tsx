@@ -12,6 +12,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { AUTH_QUERY_KEYS } from "@/lib/auth-keys";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { getOAuthRedirectUrl, isNativePlatform, openOAuthUrl } from "@/lib/nativeOAuth";
 
 export default function Login() {
   usePageTitle('Sign In');
@@ -147,7 +148,8 @@ export default function Login() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth-callback`,
+          redirectTo: getOAuthRedirectUrl(),
+          skipBrowserRedirect: isNativePlatform(),
           queryParams: {
             access_type: 'offline',
             prompt: 'select_account',
@@ -163,6 +165,8 @@ export default function Login() {
           variant: "destructive",
         });
         setIsLoading(false);
+      } else if (isNativePlatform() && data?.url) {
+        await openOAuthUrl(data.url);
       }
       // If successful, user will be redirected to Google (no need to reset loading state)
     } catch (err) {

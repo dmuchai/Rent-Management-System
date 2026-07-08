@@ -24,6 +24,11 @@ https://property-manager-ke.vercel.app/reset-password
 https://property-manager-ke.vercel.app/
 ```
 
+**Android APK:**
+```
+com.rentmanagement.app://auth-callback
+```
+
 **Development (optional, for local testing):**
 ```
 http://localhost:5173/auth-callback

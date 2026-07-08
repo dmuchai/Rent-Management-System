@@ -27,6 +27,20 @@ IPN ID.pdf
 android/
 ios/
 
+# Native Android files required by committed Capacitor plugin/deep-link config
+!android/
+android/*
+!android/capacitor.settings.gradle
+!android/app/
+android/app/*
+!android/app/build.gradle
+!android/app/capacitor.build.gradle
+!android/app/src/
+android/app/src/*
+!android/app/src/main/
+android/app/src/main/*
+!android/app/src/main/AndroidManifest.xml
+
 # Ignore IDE cache files
 .idea/caches/
 .idea/*.xml
