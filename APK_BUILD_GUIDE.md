@@ -156,19 +156,32 @@ android {
 
 ### 2. Sign APK
 
-Generate signing key (first time only):
+For release builds, place these local-only files inside `android/`:
+
+`android/upload-keystore.jks` - your keystore file
+
+`android/keystore.properties` - signing values used by Gradle
+
+Example `android/keystore.properties`:
+
+```properties
+storeFile=upload-keystore.jks
+storePassword=your-store-password
+keyAlias=your-key-alias
+keyPassword=your-key-password
+```
+
+Generate a signing key only if you do not already have one:
 ```bash
 keytool -genkey -v -keystore landee-release.jks \
   -keyalg RSA -keysize 2048 -validity 10000 \
   -alias landee-app
 ```
 
-Sign APK:
+Build the release bundle or APK after the local signing files are in place:
 ```bash
-jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 \
-  -keystore landee-release.jks \
-  android/app/build/outputs/apk/release/app-release.apk \
-  landee-app
+cd android
+./gradlew bundleRelease
 ```
 
 ### 3. Optimize APK Size

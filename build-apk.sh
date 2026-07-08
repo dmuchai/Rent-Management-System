@@ -21,12 +21,20 @@ export NODE_ENV=production
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_DIR="$PROJECT_ROOT/dist/public"
 ANDROID_DIR="$PROJECT_ROOT/android"
+KEYSTORE_PROPERTIES="$ANDROID_DIR/keystore.properties"
 
 echo -e "${YELLOW}Configuration:${NC}"
 echo "API URL: $VITE_API_URL"
 echo "Project Root: $PROJECT_ROOT"
 echo "Dist Directory: $DIST_DIR"
 echo ""
+
+if [ ! -f "$KEYSTORE_PROPERTIES" ]; then
+    echo -e "${RED}Missing Android release signing config.${NC}"
+    echo "Create $KEYSTORE_PROPERTIES with storeFile, storePassword, keyAlias, and keyPassword."
+    echo "See android/keystore.properties.example for the expected format."
+    exit 1
+fi
 
 # Step 1: Clean and build frontend with Vite
 echo -e "${YELLOW}Step 1: Building frontend...${NC}"
@@ -48,6 +56,7 @@ echo ""
 
 # Step 3: Build APK
 echo -e "${YELLOW}Step 3: Building Android APK...${NC}"
+cd "$ANDROID_DIR"
 ./gradlew assembleRelease
 echo -e "${GREEN}✓ APK built successfully${NC}"
 echo ""
