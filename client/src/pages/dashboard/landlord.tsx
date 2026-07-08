@@ -2905,7 +2905,7 @@ export default function LandlordDashboard() {
 
       {/* Record Payment Modal */}
       <Dialog open={isPaymentFormOpen} onOpenChange={setIsPaymentFormOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl max-h-[92dvh] overflow-hidden p-0">
+        <DialogContent className="w-[calc(100%_-_2rem)] max-w-2xl max-h-[92dvh] overflow-hidden p-0">
           <form
             onSubmit={(e) => {
               e.preventDefault();
