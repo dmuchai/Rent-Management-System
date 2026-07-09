@@ -96,6 +96,7 @@ export default function LandlordDashboard() {
   const [isProfileEditOpen, setIsProfileEditOpen] = useState(false);
   const [isPasswordChangeOpen, setIsPasswordChangeOpen] = useState(false);
   const [isPaymentFormOpen, setIsPaymentFormOpen] = useState(false);
+  const [viewingPayment, setViewingPayment] = useState<any | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -357,7 +358,7 @@ export default function LandlordDashboard() {
 
   const updateMaintenanceMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: { status?: string; assignedTo?: string | null; completedDate?: string | null } }) => {
-      const response = await apiRequest("PUT", `/api/maintenance-requests/${id}`, data);
+      const response = await apiRequest("PATCH", `/api/maintenance-requests?id=${encodeURIComponent(id)}`, data);
       return await response.json();
     },
     onSuccess: () => {
@@ -2356,7 +2357,7 @@ export default function LandlordDashboard() {
                   payments={payments}
                   loading={paymentsLoading}
                   onViewPayment={(payment) => {
-                    // TODO: Implement payment details modal
+                    setViewingPayment(payment);
                   }}
                   onEditPayment={(payment) => {
                     // TODO: Implement payment edit modal
@@ -3074,6 +3075,57 @@ export default function LandlordDashboard() {
               </div>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(viewingPayment)} onOpenChange={(open) => !open && setViewingPayment(null)}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Payment Details</DialogTitle>
+          </DialogHeader>
+          {viewingPayment && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-sm text-muted-foreground">Tenant</p>
+                <p className="font-medium">
+                  {viewingPayment.tenant
+                    ? `${viewingPayment.tenant.firstName} ${viewingPayment.tenant.lastName}`
+                    : "Unknown tenant"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Property / Unit</p>
+                <p className="font-medium">
+                  {viewingPayment.property?.name || "Unknown property"}
+                  {viewingPayment.unit?.unitNumber ? ` • Unit ${viewingPayment.unit.unitNumber}` : ""}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Amount</p>
+                <p className="font-medium">KES {Number(viewingPayment.amount || 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Status</p>
+                <p className="font-medium capitalize">{viewingPayment.status || "pending"}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Payment method</p>
+                <p className="font-medium capitalize">
+                  {(viewingPayment.paymentMethod || "Not specified").replaceAll("_", " ")}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Payment date</p>
+                <p className="font-medium">
+                  {new Date(viewingPayment.paidDate || viewingPayment.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-sm text-muted-foreground">Description</p>
+                <p className="font-medium">{viewingPayment.description || "No description provided"}</p>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

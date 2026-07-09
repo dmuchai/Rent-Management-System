@@ -20,6 +20,9 @@
 - Android OAuth redirect handling now supports native app callback behavior more reliably.
 - The landlord payment form now opens within the mobile viewport and submits the selected lease using the payment API contract.
 - Tenant maintenance requests now use a database-compatible initial status instead of failing with an HTTP 500 response.
+- Maintenance actions now use the serverless API's supported update method and no longer return HTTP 405.
+- Notification items open their related dashboard section, and the notification list can be expanded.
+- Recent transaction View actions now open payment details.
 
 ### Build And Deployment
 

@@ -25,6 +25,7 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -178,10 +179,24 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
     }
 
     // Sort by timestamp (most recent first)
-    return notifs.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 10);
+    return notifs.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [recentPayments, maintenanceRequests, leases]);
 
   const unreadCount = notifications.filter(n => n.unread).length;
+  const displayedNotifications = showAllNotifications ? notifications : notifications.slice(0, 5);
+
+  const handleNotificationClick = (type: string) => {
+    const section = type === "payment"
+      ? "payments"
+      : type === "maintenance"
+        ? "maintenance"
+        : type === "lease"
+          ? "leases"
+          : "overview";
+
+    onSectionChange?.(section);
+    setNotificationsOpen(false);
+  };
 
   // Helper function to get relative time
   function getTimeAgo(date: Date): string {
@@ -252,8 +267,13 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
                       <p className="text-sm text-gray-500">You're all caught up! 🎉</p>
                     </div>
                   ) : (
-                    notifications.map((notification) => (
-                    <div key={notification.id} className={`p-4 border-b hover:bg-accent cursor-pointer ${notification.unread ? 'bg-accent/50' : ''}`}>
+                    displayedNotifications.map((notification) => (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      onClick={() => handleNotificationClick(notification.type)}
+                      className={`block w-full p-4 border-b text-left hover:bg-accent cursor-pointer ${notification.unread ? 'bg-accent/50' : ''}`}
+                    >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
@@ -269,13 +289,17 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
                           {notification.type === 'lease' && <i className="fas fa-file-contract text-blue-500"></i>}
                         </div>
                       </div>
-                    </div>
+                    </button>
                   ))
                   )}
                 </div>
                 <div className="p-4 border-t">
-                  <button className="w-full text-sm text-primary hover:underline">
-                    View all notifications
+                  <button
+                    type="button"
+                    onClick={() => setShowAllNotifications((current) => !current)}
+                    className="w-full text-sm text-primary hover:underline"
+                  >
+                    {showAllNotifications ? "Show recent notifications" : "View all notifications"}
                   </button>
                 </div>
               </PopoverContent>
