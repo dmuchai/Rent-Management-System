@@ -12,13 +12,22 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { kenyaPhoneSchema } from "@/../../shared/schema";
 
 const paymentFormSchema = z.object({
   leaseId: z.string().min(1, "Please select a lease"),
   amount: z.coerce.number().min(1, "Amount must be greater than 0"),
   description: z.string().min(1, "Description is required"),
   paymentMethod: z.string().optional(),
-  phoneNumber: z.string().optional(),
+  phoneNumber: kenyaPhoneSchema.optional().or(z.literal("")),
+}).superRefine((data, ctx) => {
+  if (data.paymentMethod === "mpesa_direct" && !data.phoneNumber) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["phoneNumber"],
+      message: "M-PESA phone number is required",
+    });
+  }
 });
 
 type PaymentFormData = z.infer<typeof paymentFormSchema>;
@@ -40,6 +49,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
 
   const form = useForm<PaymentFormData>({
     resolver: zodResolver(paymentFormSchema),
+    mode: "onBlur",
     defaultValues: {
       leaseId: activeLease?.id || "",
       amount: activeLease ? parseFloat(activeLease.monthlyRent) : 0,
@@ -131,7 +141,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
   });
 
   const onSubmit = (data: PaymentFormData) => {
-    paymentMutation.mutate(data);
+    paymentMutation.mutate({ ...data, paymentMethod });
   };
 
   if (tenantView) {
@@ -145,17 +155,21 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
               type="number"
               value={form.watch("amount")}
               onChange={(e) => (form.setValue as any)("amount", e.target.value)}
+              className={form.formState.errors.amount ? "border-destructive" : ""}
               data-testid="input-payment-amount"
             />
+            {form.formState.errors.amount && (
+              <p className="mt-1 text-sm text-destructive">{form.formState.errors.amount.message}</p>
+            )}
           </div>
 
           <div>
             <Label htmlFor="description">Payment Type</Label>
             <Select
               value={form.watch("description")}
-              onValueChange={(value) => form.setValue("description", value)}
+              onValueChange={(value) => form.setValue("description", value, { shouldValidate: true })}
             >
-              <SelectTrigger id="description" data-testid="select-payment-description">
+              <SelectTrigger id="description" data-testid="select-payment-description" className={form.formState.errors.description ? "border-destructive" : ""}>
                 <SelectValue placeholder="Select payment type" />
               </SelectTrigger>
               <SelectContent>
@@ -167,6 +181,9 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                 <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>
+            {form.formState.errors.description && (
+              <p className="mt-1 text-sm text-destructive">{form.formState.errors.description.message}</p>
+            )}
           </div>
 
           <div>
@@ -178,7 +195,10 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                   name="payment-method"
                   value="mpesa_direct"
                   checked={paymentMethod === "mpesa_direct"}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  onChange={(e) => {
+                    setPaymentMethod(e.target.value);
+                    form.setValue("paymentMethod", e.target.value, { shouldValidate: true });
+                  }}
                   className="text-chart-2"
                 />
                 <div className="flex-1">
@@ -197,8 +217,11 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                     id="phoneNumber"
                     placeholder="e.g. 0712345678"
                     {...form.register("phoneNumber")}
-                    className="h-8"
+                    className={`h-8 ${form.formState.errors.phoneNumber ? "border-destructive" : ""}`}
                   />
+                  {form.formState.errors.phoneNumber && (
+                    <p className="text-sm text-destructive">{form.formState.errors.phoneNumber.message}</p>
+                  )}
                 </div>
               )}
 
@@ -208,7 +231,10 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                   name="payment-method"
                   value="mpesa"
                   checked={paymentMethod === "mpesa"}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  onChange={(e) => {
+                    setPaymentMethod(e.target.value);
+                    form.setValue("paymentMethod", e.target.value, { shouldValidate: true });
+                  }}
                 />
                 <div className="flex-1">
                   <div className="flex items-center space-x-2">
@@ -224,7 +250,10 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                   name="payment-method"
                   value="card"
                   checked={paymentMethod === "card"}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  onChange={(e) => {
+                    setPaymentMethod(e.target.value);
+                    form.setValue("paymentMethod", e.target.value, { shouldValidate: true });
+                  }}
                 />
                 <div className="flex-1">
                   <div className="flex items-center space-x-2">
@@ -271,9 +300,9 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                 <Label htmlFor="lease">Tenant/Lease</Label>
                 <Select
                   value={form.watch("leaseId")}
-                  onValueChange={(value) => form.setValue("leaseId", value)}
+                  onValueChange={(value) => form.setValue("leaseId", value, { shouldValidate: true })}
                 >
-                  <SelectTrigger data-testid="select-lease">
+                  <SelectTrigger data-testid="select-lease" className={form.formState.errors.leaseId ? "border-destructive" : ""}>
                     <SelectValue placeholder="Select lease" />
                   </SelectTrigger>
                   <SelectContent>
@@ -284,6 +313,9 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                     ))}
                   </SelectContent>
                 </Select>
+                {form.formState.errors.leaseId && (
+                  <p className="mt-1 text-sm text-destructive">{form.formState.errors.leaseId.message}</p>
+                )}
               </div>
 
               <div>
@@ -293,17 +325,21 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                   type="number"
                   value={form.watch("amount")}
                   onChange={(e) => form.setValue("amount", e.target.value as any)}
+                  className={form.formState.errors.amount ? "border-destructive" : ""}
                   data-testid="input-landlord-amount"
                 />
+                {form.formState.errors.amount && (
+                  <p className="mt-1 text-sm text-destructive">{form.formState.errors.amount.message}</p>
+                )}
               </div>
 
               <div>
                 <Label htmlFor="description">Payment Type</Label>
                 <Select
                   value={form.watch("description")}
-                  onValueChange={(value) => form.setValue("description", value)}
+                  onValueChange={(value) => form.setValue("description", value, { shouldValidate: true })}
                 >
-                  <SelectTrigger id="description" data-testid="select-landlord-description">
+                  <SelectTrigger id="description" data-testid="select-landlord-description" className={form.formState.errors.description ? "border-destructive" : ""}>
                     <SelectValue placeholder="Select payment type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -315,6 +351,9 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
                     <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
+                {form.formState.errors.description && (
+                  <p className="mt-1 text-sm text-destructive">{form.formState.errors.description.message}</p>
+                )}
               </div>
 
               <Button

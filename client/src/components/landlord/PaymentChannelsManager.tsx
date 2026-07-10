@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { KENYA_BANK_PAYBILLS, getBankByPaybill, validateBankAccount, getBankOptions } from "@/../../shared/bankPaybills";
@@ -50,6 +51,64 @@ interface PaymentChannel {
   createdAt: string;
 }
 
+const paymentChannelBaseSchema = z.object({
+  channelType: z.enum(["mpesa_paybill", "mpesa_till", "mpesa_to_bank", "bank_account"]),
+  paybillNumber: z.string().trim(),
+  tillNumber: z.string().trim(),
+  bankPaybillNumber: z.string().trim(),
+  bankAccountNumber: z.string().trim(),
+  bankName: z.string().trim(),
+  accountNumber: z.string().trim(),
+  accountName: z.string().trim(),
+  displayName: z.string().trim().min(1, "Display name is required").max(80, "Display name is too long"),
+  isPrimary: z.boolean(),
+  notes: z.string().trim().max(500, "Notes must be 500 characters or less"),
+});
+
+const paymentChannelFormSchema = paymentChannelBaseSchema
+  .superRefine((data, ctx) => {
+    if (data.channelType === "mpesa_paybill" && !/^\d{6,7}$/.test(data.paybillNumber)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["paybillNumber"], message: "Paybill must be 6 to 7 digits" });
+    }
+    if (data.channelType === "mpesa_till" && !/^\d{6,7}$/.test(data.tillNumber)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tillNumber"], message: "Till number must be 6 to 7 digits" });
+    }
+    if (data.channelType === "mpesa_to_bank") {
+      if (!data.bankPaybillNumber) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bankPaybillNumber"], message: "Bank is required" });
+      }
+      if (!data.bankAccountNumber) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bankAccountNumber"], message: "Bank account number is required" });
+      } else {
+        const accountValidation = validateBankAccount(data.bankPaybillNumber, data.bankAccountNumber);
+        if (!accountValidation.valid) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["bankAccountNumber"],
+            message: accountValidation.error || "Enter a valid account number for the selected bank",
+          });
+        }
+      }
+    }
+    if (data.channelType === "bank_account") {
+      if (!data.bankName) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bankName"], message: "Bank name is required" });
+      }
+      if (!/^[A-Za-z0-9-]{4,24}$/.test(data.accountNumber)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["accountNumber"], message: "Account number must be 4 to 24 letters or digits" });
+      }
+      if (!data.accountName) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["accountName"], message: "Account name is required" });
+      }
+    }
+  });
+
+const paymentChannelEditSchema = paymentChannelBaseSchema.pick({
+  displayName: true,
+  notes: true,
+  isPrimary: true,
+});
+
 export default function PaymentChannelsManager() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -57,6 +116,7 @@ export default function PaymentChannelsManager() {
   const [editingChannel, setEditingChannel] = useState<PaymentChannel | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<PaymentChannel | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState<{
     channelType: "mpesa_paybill" | "mpesa_till" | "mpesa_to_bank" | "bank_account";
@@ -183,17 +243,39 @@ export default function PaymentChannelsManager() {
       notes: "",
     });
     setEditingChannel(null);
+    setErrors({});
+  };
+
+  const setField = (field: keyof typeof formData, value: string | boolean) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingChannel) {
+      const validation = paymentChannelEditSchema.safeParse(formData);
+      if (!validation.success) {
+        const fieldErrors: Record<string, string> = {};
+        validation.error.issues.forEach((issue) => {
+          const field = issue.path[0];
+          if (field) fieldErrors[String(field)] = issue.message;
+        });
+        setErrors(fieldErrors);
+        toast({
+          title: "Validation Error",
+          description: "Please correct the highlighted fields.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       updateChannelMutation.mutate({
         id: editingChannel.id,
         data: {
-          displayName: formData.displayName,
-          notes: formData.notes,
-          isPrimary: formData.isPrimary,
+          displayName: validation.data.displayName,
+          notes: validation.data.notes,
+          isPrimary: validation.data.isPrimary,
         },
       }, {
         onSuccess: () => {
@@ -203,7 +285,24 @@ export default function PaymentChannelsManager() {
       });
       return;
     }
-    createChannelMutation.mutate(formData);
+
+    const validation = paymentChannelFormSchema.safeParse(formData);
+    if (!validation.success) {
+      const fieldErrors: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        const field = issue.path[0];
+        if (field) fieldErrors[String(field)] = issue.message;
+      });
+      setErrors(fieldErrors);
+      toast({
+        title: "Validation Error",
+        description: "Please correct the highlighted fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createChannelMutation.mutate(validation.data);
   };
 
   const handleViewDetails = (channel: PaymentChannel) => {
@@ -561,9 +660,10 @@ export default function PaymentChannelsManager() {
                 <Label htmlFor="channelType">Channel Type</Label>
                 <Select
                   value={formData.channelType}
-                  onValueChange={(value: any) =>
-                    setFormData({ ...formData, channelType: value })
-                  }
+                  onValueChange={(value: any) => {
+                    setField("channelType", value);
+                    setErrors({});
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -585,13 +685,13 @@ export default function PaymentChannelsManager() {
                   id="paybillNumber"
                   placeholder="e.g., 4012345"
                   value={formData.paybillNumber}
-                  onChange={(e) =>
-                    setFormData({ ...formData, paybillNumber: e.target.value })
-                  }
+                  onChange={(e) => setField("paybillNumber", e.target.value.replace(/\D/g, ""))}
+                  className={errors.paybillNumber ? "border-destructive" : ""}
                   pattern="\d{6,7}"
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">Your registered M-Pesa Paybill (6-7 digits)</p>
+                {errors.paybillNumber && <p className="mt-1 text-sm text-destructive">{errors.paybillNumber}</p>}
               </div>
             )}
 
@@ -602,13 +702,13 @@ export default function PaymentChannelsManager() {
                   id="tillNumber"
                   placeholder="e.g., 5123456"
                   value={formData.tillNumber}
-                  onChange={(e) =>
-                    setFormData({ ...formData, tillNumber: e.target.value })
-                  }
+                  onChange={(e) => setField("tillNumber", e.target.value.replace(/\D/g, ""))}
+                  className={errors.tillNumber ? "border-destructive" : ""}
                   pattern="\d{6,7}"
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">6-7 digit Till number</p>
+                {errors.tillNumber && <p className="mt-1 text-sm text-destructive">{errors.tillNumber}</p>}
               </div>
             )}
 
@@ -625,9 +725,10 @@ export default function PaymentChannelsManager() {
                         bankPaybillNumber: value,
                         bankName: bank?.name || "",
                       });
+                      setErrors((prev) => ({ ...prev, bankPaybillNumber: "", bankAccountNumber: "" }));
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={errors.bankPaybillNumber ? "border-destructive" : ""}>
                       <SelectValue placeholder="Choose your bank" />
                     </SelectTrigger>
                     <SelectContent>
@@ -641,22 +742,23 @@ export default function PaymentChannelsManager() {
                   <p className="text-xs text-gray-500 mt-1">
                     Select the bank where your account is held
                   </p>
+                  {errors.bankPaybillNumber && <p className="mt-1 text-sm text-destructive">{errors.bankPaybillNumber}</p>}
                 </div>
 
                 <div>
                   <Label htmlFor="bankAccountNumber">Your Bank Account Number</Label>
                   <Input
                     id="bankAccountNumber"
-                    placeholder="e.g., 1234567890"
-                    value={formData.bankAccountNumber}
-                    onChange={(e) =>
-                      setFormData({ ...formData, bankAccountNumber: e.target.value })
-                    }
-                    required
-                  />
+                  placeholder="e.g., 1234567890"
+                  value={formData.bankAccountNumber}
+                  onChange={(e) => setField("bankAccountNumber", e.target.value.replace(/\D/g, ""))}
+                  className={errors.bankAccountNumber ? "border-destructive" : ""}
+                  required
+                />
                   <p className="text-xs text-gray-500 mt-1">
                     Tenants will pay to your bank's paybill using this account number
                   </p>
+                  {errors.bankAccountNumber && <p className="mt-1 text-sm text-destructive">{errors.bankAccountNumber}</p>}
                 </div>
 
                 {formData.bankPaybillNumber && formData.bankAccountNumber && (
@@ -680,38 +782,38 @@ export default function PaymentChannelsManager() {
                   <Label htmlFor="bankName">Bank Name</Label>
                   <Input
                     id="bankName"
-                    placeholder="e.g., Equity Bank"
-                    value={formData.bankName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, bankName: e.target.value })
-                    }
-                    required
-                  />
-                </div>
+                  placeholder="e.g., Equity Bank"
+                  value={formData.bankName}
+                  onChange={(e) => setField("bankName", e.target.value)}
+                  className={errors.bankName ? "border-destructive" : ""}
+                  required
+                />
+                {errors.bankName && <p className="mt-1 text-sm text-destructive">{errors.bankName}</p>}
+              </div>
                 <div>
                   <Label htmlFor="accountNumber">Account Number</Label>
                   <Input
                     id="accountNumber"
-                    placeholder="e.g., 1234567890"
-                    value={formData.accountNumber}
-                    onChange={(e) =>
-                      setFormData({ ...formData, accountNumber: e.target.value })
-                    }
-                    required
-                  />
-                </div>
+                  placeholder="e.g., 1234567890"
+                  value={formData.accountNumber}
+                  onChange={(e) => setField("accountNumber", e.target.value.trim())}
+                  className={errors.accountNumber ? "border-destructive" : ""}
+                  required
+                />
+                {errors.accountNumber && <p className="mt-1 text-sm text-destructive">{errors.accountNumber}</p>}
+              </div>
                 <div>
                   <Label htmlFor="accountName">Account Name</Label>
                   <Input
                     id="accountName"
-                    placeholder="e.g., ABC Properties Ltd"
-                    value={formData.accountName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, accountName: e.target.value })
-                    }
-                    required
-                  />
-                </div>
+                  placeholder="e.g., ABC Properties Ltd"
+                  value={formData.accountName}
+                  onChange={(e) => setField("accountName", e.target.value)}
+                  className={errors.accountName ? "border-destructive" : ""}
+                  required
+                />
+                {errors.accountName && <p className="mt-1 text-sm text-destructive">{errors.accountName}</p>}
+              </div>
               </>
             )}
 
@@ -721,11 +823,11 @@ export default function PaymentChannelsManager() {
                 id="displayName"
                 placeholder="e.g., Main Paybill"
                 value={formData.displayName}
-                onChange={(e) =>
-                  setFormData({ ...formData, displayName: e.target.value })
-                }
+                onChange={(e) => setField("displayName", e.target.value)}
+                className={errors.displayName ? "border-destructive" : ""}
                 required
               />
+              {errors.displayName && <p className="mt-1 text-sm text-destructive">{errors.displayName}</p>}
             </div>
 
             <div>
@@ -734,11 +836,11 @@ export default function PaymentChannelsManager() {
                 id="notes"
                 placeholder="Any additional notes..."
                 value={formData.notes}
-                onChange={(e) =>
-                  setFormData({ ...formData, notes: e.target.value })
-                }
+                onChange={(e) => setField("notes", e.target.value)}
+                className={errors.notes ? "border-destructive" : ""}
                 rows={2}
               />
+              {errors.notes && <p className="mt-1 text-sm text-destructive">{errors.notes}</p>}
             </div>
 
             <div className="flex items-center space-x-2">
@@ -746,9 +848,7 @@ export default function PaymentChannelsManager() {
                 type="checkbox"
                 id="isPrimary"
                 checked={formData.isPrimary}
-                onChange={(e) =>
-                  setFormData({ ...formData, isPrimary: e.target.checked })
-                }
+                onChange={(e) => setField("isPrimary", e.target.checked)}
                 className="rounded border-gray-300"
               />
               <Label htmlFor="isPrimary" className="font-normal cursor-pointer">

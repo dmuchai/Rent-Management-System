@@ -16,6 +16,58 @@ import { relations } from "drizzle-orm";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
+const requiredText = (field: string, max = 120) =>
+  z.string().trim().min(1, `${field} is required`).max(max, `${field} must be ${max} characters or less`);
+
+const optionalText = (field: string, max = 500) =>
+  z
+    .string()
+    .trim()
+    .max(max, `${field} must be ${max} characters or less`)
+    .optional()
+    .nullable()
+    .or(z.literal(""));
+
+export const kenyaPhoneSchema = z
+  .string()
+  .trim()
+  .regex(/^(\+254|254|0)(7|1)\d{8}$/, "Enter a valid Kenyan phone number, e.g. 0712345678 or +254712345678");
+
+const positiveDecimalString = (field: string) =>
+  z.preprocess(
+    (value) => (typeof value === "number" ? String(value) : value),
+    z
+      .string()
+      .trim()
+      .min(1, `${field} is required`)
+      .refine((value) => Number.isFinite(Number(value)) && Number(value) > 0, `${field} must be greater than 0`),
+  );
+
+const nonNegativeDecimalString = (field: string) =>
+  z.preprocess(
+    (value) => (value === "" || value === undefined ? null : typeof value === "number" ? String(value) : value),
+    z
+      .string()
+      .trim()
+      .refine((value) => Number.isFinite(Number(value)) && Number(value) >= 0, `${field} cannot be negative`)
+      .nullable()
+      .optional(),
+  );
+
+const nonNegativeInteger = (field: string) =>
+  z.preprocess(
+    (value) => (value === "" || value === undefined ? null : Number(value)),
+    z.number().int(`${field} must be a whole number`).min(0, `${field} cannot be negative`).nullable().optional(),
+  );
+
+const optionalUrl = z
+  .string()
+  .trim()
+  .url("Enter a valid URL")
+  .optional()
+  .nullable()
+  .or(z.literal(""));
+
 // Session storage table (for authentication)
 export const sessions = pgTable(
   "sessions",
@@ -493,12 +545,28 @@ export const insertPropertySchema = createInsertSchema(properties).omit({
   createdAt: true,
   updatedAt: true,
   totalUnits: true, // Auto-calculated from units count
+}).extend({
+  name: requiredText("Property name"),
+  address: requiredText("Address", 500),
+  propertyType: z.enum(["apartment", "villa", "house", "townhouse", "commercial"], {
+    required_error: "Property type is required",
+    invalid_type_error: "Property type is required",
+  }),
+  description: optionalText("Description", 1000),
+  imageUrl: optionalUrl,
 });
 
 export const insertUnitSchema = createInsertSchema(units).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  propertyId: requiredText("Property"),
+  unitNumber: requiredText("Unit number", 50),
+  bedrooms: nonNegativeInteger("Bedrooms"),
+  bathrooms: nonNegativeInteger("Bathrooms"),
+  size: nonNegativeDecimalString("Size"),
+  rentAmount: positiveDecimalString("Rent amount"),
 });
 
 export const insertTenantSchema = createInsertSchema(tenants).omit({
@@ -509,6 +577,12 @@ export const insertTenantSchema = createInsertSchema(tenants).omit({
   invitationSentAt: true,
   invitationAcceptedAt: true,
   accountStatus: true,
+}).extend({
+  firstName: requiredText("First name", 80),
+  lastName: requiredText("Last name", 80),
+  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
+  phone: kenyaPhoneSchema,
+  emergencyContact: kenyaPhoneSchema.optional().nullable().or(z.literal("")),
 });
 
 export const updateTenantSchema = createInsertSchema(tenants).omit({
@@ -520,24 +594,44 @@ export const updateTenantSchema = createInsertSchema(tenants).omit({
   invitationSentAt: true,
   invitationAcceptedAt: true,
   accountStatus: true,
+}).extend({
+  firstName: requiredText("First name", 80),
+  lastName: requiredText("Last name", 80),
+  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
+  phone: kenyaPhoneSchema,
+  emergencyContact: kenyaPhoneSchema.optional().nullable().or(z.literal("")),
 }).partial();
 
 export const insertLeaseSchema = createInsertSchema(leases).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  tenantId: requiredText("Tenant"),
+  unitId: requiredText("Unit"),
+  monthlyRent: positiveDecimalString("Monthly rent"),
+  securityDeposit: nonNegativeDecimalString("Security deposit"),
 });
 
 export const insertPaymentSchema = createInsertSchema(payments).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  leaseId: requiredText("Lease"),
+  amount: positiveDecimalString("Amount"),
+  paymentMethod: optionalText("Payment method", 40),
+  description: optionalText("Description", 500),
 });
 
 export const insertMaintenanceRequestSchema = createInsertSchema(maintenanceRequests).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  title: requiredText("Title", 120).min(3, "Title must be at least 3 characters"),
+  description: requiredText("Description", 1000).min(10, "Description must be at least 10 characters"),
+  priority: z.enum(["low", "medium", "high", "urgent"]),
 });
 
 export const insertDocumentSchema = createInsertSchema(documents).omit({

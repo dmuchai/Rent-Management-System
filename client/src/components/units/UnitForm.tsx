@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import type { Unit, InsertUnit } from "@/../../shared/schema";
+import { insertUnitSchema, type Unit, type InsertUnit } from "@/../../shared/schema";
 
 // Request and Response interfaces for API operations
 interface UnitCreateRequest extends Omit<InsertUnit, 'id' | 'createdAt' | 'updatedAt'> {}
@@ -24,6 +24,7 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEdit = !!unit;
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Form state
   const [unitForm, setUnitForm] = useState({
@@ -103,34 +104,34 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
   });
 
   const handleSubmit = () => {
-    // Form validation
-    if (!unitForm.unitNumber) {
-      toast({
-        title: "Error",
-        description: "Please enter a unit number",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!unitForm.rentAmount || parseFloat(unitForm.rentAmount) <= 0) {
-      toast({
-        title: "Error",
-        description: "Please enter a valid rent amount",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Prepare data for submission
     const submitData = {
       ...unitForm,
-      bedrooms: unitForm.bedrooms ? parseInt(String(unitForm.bedrooms)) : null,
-      bathrooms: unitForm.bathrooms ? parseInt(String(unitForm.bathrooms)) : null,
-      size: unitForm.size ? unitForm.size : null, // Keep as string for decimal field
-      rentAmount: unitForm.rentAmount, // Keep as string for decimal field
+      unitNumber: unitForm.unitNumber.trim(),
+      bedrooms: unitForm.bedrooms === "" ? null : Number(unitForm.bedrooms),
+      bathrooms: unitForm.bathrooms === "" ? null : Number(unitForm.bathrooms),
+      size: unitForm.size ? unitForm.size.trim() : null,
+      rentAmount: unitForm.rentAmount.trim(),
     };
 
-    mutation.mutate(submitData);
+    const validation = insertUnitSchema.safeParse(submitData);
+
+    if (!validation.success) {
+      const fieldErrors: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        const field = issue.path[0];
+        if (field) fieldErrors[String(field)] = issue.message;
+      });
+      setErrors(fieldErrors);
+      toast({
+        title: "Validation Error",
+        description: "Please correct the highlighted fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setErrors({});
+    mutation.mutate(validation.data);
   };
 
   return (
@@ -153,8 +154,13 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
               id="unitNumber"
               placeholder="e.g. A1, 101, Unit 1"
               value={unitForm.unitNumber}
-              onChange={(e) => setUnitForm(prev => ({ ...prev, unitNumber: e.target.value }))}
+              onChange={(e) => {
+                setUnitForm(prev => ({ ...prev, unitNumber: e.target.value }));
+                setErrors(prev => ({ ...prev, unitNumber: "" }));
+              }}
+              className={errors.unitNumber ? "border-destructive" : ""}
             />
+            {errors.unitNumber && <p className="mt-1 text-sm text-destructive">{errors.unitNumber}</p>}
           </div>
 
           {/* Bedrooms and Bathrooms */}
@@ -167,8 +173,13 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
                 min="0"
                 placeholder="0"
                 value={unitForm.bedrooms}
-                onChange={(e) => setUnitForm(prev => ({ ...prev, bedrooms: e.target.value }))}
+                onChange={(e) => {
+                  setUnitForm(prev => ({ ...prev, bedrooms: e.target.value }));
+                  setErrors(prev => ({ ...prev, bedrooms: "" }));
+                }}
+                className={errors.bedrooms ? "border-destructive" : ""}
               />
+              {errors.bedrooms && <p className="mt-1 text-sm text-destructive">{errors.bedrooms}</p>}
             </div>
             <div>
               <Label htmlFor="bathrooms">Bathrooms</Label>
@@ -179,8 +190,13 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
                 step="0.5"
                 placeholder="0"
                 value={unitForm.bathrooms}
-                onChange={(e) => setUnitForm(prev => ({ ...prev, bathrooms: e.target.value }))}
+                onChange={(e) => {
+                  setUnitForm(prev => ({ ...prev, bathrooms: e.target.value }));
+                  setErrors(prev => ({ ...prev, bathrooms: "" }));
+                }}
+                className={errors.bathrooms ? "border-destructive" : ""}
               />
+              {errors.bathrooms && <p className="mt-1 text-sm text-destructive">{errors.bathrooms}</p>}
             </div>
           </div>
 
@@ -194,8 +210,13 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
                 min="0"
                 placeholder="e.g. 1200"
                 value={unitForm.size}
-                onChange={(e) => setUnitForm(prev => ({ ...prev, size: e.target.value }))}
+                onChange={(e) => {
+                  setUnitForm(prev => ({ ...prev, size: e.target.value }));
+                  setErrors(prev => ({ ...prev, size: "" }));
+                }}
+                className={errors.size ? "border-destructive" : ""}
               />
+              {errors.size && <p className="mt-1 text-sm text-destructive">{errors.size}</p>}
             </div>
             <div>
               <Label htmlFor="rentAmount">Monthly Rent (KES) *</Label>
@@ -206,8 +227,13 @@ export default function UnitForm({ open, onOpenChange, propertyId, unit }: UnitF
                 step="0.01"
                 placeholder="e.g. 25000"
                 value={unitForm.rentAmount}
-                onChange={(e) => setUnitForm(prev => ({ ...prev, rentAmount: e.target.value }))}
+                onChange={(e) => {
+                  setUnitForm(prev => ({ ...prev, rentAmount: e.target.value }));
+                  setErrors(prev => ({ ...prev, rentAmount: "" }));
+                }}
+                className={errors.rentAmount ? "border-destructive" : ""}
               />
+              {errors.rentAmount && <p className="mt-1 text-sm text-destructive">{errors.rentAmount}</p>}
             </div>
           </div>
 

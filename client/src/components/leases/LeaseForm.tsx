@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Property, Tenant, Lease, InsertLease, Unit } from "@/../../shared/schema";
+import { insertLeaseSchema, type Property, type Tenant, type Lease, type InsertLease, type Unit } from "@/../../shared/schema";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEdit = !!lease;
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Form state
   const [leaseForm, setLeaseForm] = useState<LeaseFormState>({
@@ -195,70 +196,44 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
   });
 
   const handleSubmit = () => {
-    // Form validation
-    if (!leaseForm.tenantId) {
-      toast({
-        title: "Error",
-        description: "Please select a tenant",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!leaseForm.unitId) {
-      toast({
-        title: "Error", 
-        description: "Please select a unit",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!leaseForm.startDate) {
-      toast({
-        title: "Error",
-        description: "Please select a start date",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!leaseForm.endDate) {
-      toast({
-        title: "Error",
-        description: "Please select an end date",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!leaseForm.monthlyRent || parseFloat(leaseForm.monthlyRent) <= 0) {
-      toast({
-        title: "Error",
-        description: "Please enter a valid monthly rent amount",
-        variant: "destructive",
-      });
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
 
-    // Check that end date is after start date
+    if (!leaseForm.startDate) nextErrors.startDate = "Start date is required";
+    if (!leaseForm.endDate) nextErrors.endDate = "End date is required";
     if (new Date(leaseForm.endDate) <= new Date(leaseForm.startDate)) {
-      toast({
-        title: "Error",
-        description: "End date must be after start date",
-        variant: "destructive",
-      });
-      return;
+      nextErrors.endDate = "End date must be after start date";
     }
 
-    // Convert form data to API format
     const leaseData = {
       tenantId: leaseForm.tenantId,
       unitId: leaseForm.unitId,
-      startDate: new Date(leaseForm.startDate),
-      endDate: new Date(leaseForm.endDate),
-      monthlyRent: leaseForm.monthlyRent,
-      securityDeposit: leaseForm.securityDeposit || "0",
+      startDate: leaseForm.startDate ? new Date(leaseForm.startDate) : undefined,
+      endDate: leaseForm.endDate ? new Date(leaseForm.endDate) : undefined,
+      monthlyRent: leaseForm.monthlyRent.trim(),
+      securityDeposit: leaseForm.securityDeposit.trim() || "0",
       isActive: isEdit ? leaseForm.isActive : false,
     };
 
-    mutation.mutate(leaseData);
+    const validation = insertLeaseSchema.safeParse(leaseData);
+    if (!validation.success) {
+      validation.error.issues.forEach((issue) => {
+        const field = issue.path[0];
+        if (field && !nextErrors[String(field)]) nextErrors[String(field)] = issue.message;
+      });
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      toast({
+        title: "Validation Error",
+        description: "Please correct the highlighted fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setErrors({});
+    mutation.mutate(validation.success ? validation.data : leaseData as any);
   };
 
   return (
@@ -274,9 +249,12 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
             <Label htmlFor="tenant">Tenant *</Label>
             <Select
               value={leaseForm.tenantId}
-              onValueChange={(value) => setLeaseForm(prev => ({ ...prev, tenantId: value }))}
+              onValueChange={(value) => {
+                setLeaseForm(prev => ({ ...prev, tenantId: value }));
+                setErrors(prev => ({ ...prev, tenantId: "" }));
+              }}
             >
-              <SelectTrigger>
+              <SelectTrigger className={errors.tenantId ? "border-destructive" : ""}>
                 <SelectValue placeholder="Select a tenant" />
               </SelectTrigger>
               <SelectContent>
@@ -293,6 +271,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
                 )}
               </SelectContent>
             </Select>
+            {errors.tenantId && <p className="mt-1 text-sm text-destructive">{errors.tenantId}</p>}
           </div>
 
           {/* Unit Selection */}
@@ -300,9 +279,12 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
             <Label htmlFor="unit">Unit *</Label>
             <Select
               value={leaseForm.unitId}
-              onValueChange={(value) => setLeaseForm(prev => ({ ...prev, unitId: value }))}
+              onValueChange={(value) => {
+                setLeaseForm(prev => ({ ...prev, unitId: value }));
+                setErrors(prev => ({ ...prev, unitId: "" }));
+              }}
             >
-              <SelectTrigger>
+              <SelectTrigger className={errors.unitId ? "border-destructive" : ""}>
                 <SelectValue placeholder="Select a unit" />
               </SelectTrigger>
               <SelectContent>
@@ -319,6 +301,7 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
                 )}
               </SelectContent>
             </Select>
+            {errors.unitId && <p className="mt-1 text-sm text-destructive">{errors.unitId}</p>}
           </div>
 
           {/* Lease Dates */}
@@ -329,8 +312,13 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
                 id="startDate"
                 type="date"
                 value={leaseForm.startDate}
-                onChange={(e) => setLeaseForm(prev => ({ ...prev, startDate: e.target.value }))}
+                onChange={(e) => {
+                  setLeaseForm(prev => ({ ...prev, startDate: e.target.value }));
+                  setErrors(prev => ({ ...prev, startDate: "" }));
+                }}
+                className={errors.startDate ? "border-destructive" : ""}
               />
+              {errors.startDate && <p className="mt-1 text-sm text-destructive">{errors.startDate}</p>}
             </div>
             <div>
               <Label htmlFor="endDate">End Date *</Label>
@@ -338,8 +326,13 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
                 id="endDate"
                 type="date"
                 value={leaseForm.endDate}
-                onChange={(e) => setLeaseForm(prev => ({ ...prev, endDate: e.target.value }))}
+                onChange={(e) => {
+                  setLeaseForm(prev => ({ ...prev, endDate: e.target.value }));
+                  setErrors(prev => ({ ...prev, endDate: "" }));
+                }}
+                className={errors.endDate ? "border-destructive" : ""}
               />
+              {errors.endDate && <p className="mt-1 text-sm text-destructive">{errors.endDate}</p>}
             </div>
           </div>
 
@@ -354,8 +347,13 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
                 min="0"
                 placeholder="Enter monthly rent amount"
                 value={leaseForm.monthlyRent}
-                onChange={(e) => setLeaseForm(prev => ({ ...prev, monthlyRent: e.target.value }))}
+                onChange={(e) => {
+                  setLeaseForm(prev => ({ ...prev, monthlyRent: e.target.value }));
+                  setErrors(prev => ({ ...prev, monthlyRent: "" }));
+                }}
+                className={errors.monthlyRent ? "border-destructive" : ""}
               />
+              {errors.monthlyRent && <p className="mt-1 text-sm text-destructive">{errors.monthlyRent}</p>}
             </div>
             <div>
               <Label htmlFor="securityDeposit">Security Deposit (KES)</Label>
@@ -366,8 +364,13 @@ export default function LeaseForm({ open, onOpenChange, lease }: LeaseFormProps)
                 min="0"
                 placeholder="Enter security deposit (optional)"
                 value={leaseForm.securityDeposit}
-                onChange={(e) => setLeaseForm(prev => ({ ...prev, securityDeposit: e.target.value }))}
+                onChange={(e) => {
+                  setLeaseForm(prev => ({ ...prev, securityDeposit: e.target.value }));
+                  setErrors(prev => ({ ...prev, securityDeposit: "" }));
+                }}
+                className={errors.securityDeposit ? "border-destructive" : ""}
               />
+              {errors.securityDeposit && <p className="mt-1 text-sm text-destructive">{errors.securityDeposit}</p>}
             </div>
           </div>
 

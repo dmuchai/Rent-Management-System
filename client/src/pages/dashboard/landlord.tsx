@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useAuth } from "@/hooks/useAuth";
@@ -38,7 +39,7 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/lib/supabase";
 import { AUTH_QUERY_KEYS, clearAuthQueries } from "@/lib/auth-keys";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import type { Lease } from "@/../../shared/schema";
+import { kenyaPhoneSchema, type Lease } from "@/../../shared/schema";
 
 type DashboardSection = "overview" | "properties" | "tenants" | "caretakers" | "leases" | "maintenance" | "payments" | "payment-settings" | "reconciliation" | "documents" | "reports" | "profile";
 
@@ -62,6 +63,61 @@ function validatePassword(password: string): { isValid: boolean; failedRequireme
     failedRequirements
   };
 }
+
+const profileFormSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required").max(80, "First name is too long"),
+  lastName: z.string().trim().min(1, "Last name is required").max(80, "Last name is too long"),
+  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
+  phoneNumber: kenyaPhoneSchema.optional().or(z.literal("")),
+});
+
+const otpSchema = z.string().regex(/^\d{6}$/, "Enter the 6-digit verification code");
+
+const passwordFormSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required"),
+    newPassword: z.string().min(1, "New password is required"),
+    confirmPassword: z.string().min(1, "Please confirm your new password"),
+  })
+  .superRefine((data, ctx) => {
+    const passwordValidation = validatePassword(data.newPassword);
+    if (!passwordValidation.isValid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["newPassword"],
+        message: `Password must contain ${passwordValidation.failedRequirements.join(", ")}.`,
+      });
+    }
+    if (data.newPassword !== data.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["confirmPassword"],
+        message: "Passwords don't match",
+      });
+    }
+  });
+
+const manualPaymentFormSchema = z.object({
+  tenantId: z.string().min(1, "Please select a lease"),
+  amount: z.string().trim().refine((value) => Number.isFinite(Number(value)) && Number(value) > 0, "Payment amount must be greater than 0"),
+  paymentDate: z.string().min(1, "Payment date is required"),
+  paymentMethod: z.string().min(1, "Payment method is required"),
+  paymentType: z.string().min(1, "Payment type is required"),
+  reference: z.string().trim().max(80, "Reference is too long"),
+  notes: z.string().trim().max(500, "Notes are too long"),
+});
+
+const caretakerInviteSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required").max(80, "First name is too long"),
+  lastName: z.string().trim().min(1, "Last name is required").max(80, "Last name is too long"),
+  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
+  propertyId: z.string().min(1, "Property is required"),
+});
+
+const caretakerAssignmentSchema = z.object({
+  caretakerId: z.string().min(1, "Caretaker is required"),
+  propertyId: z.string().min(1, "Property is required"),
+});
 
 export default function LandlordDashboard() {
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
@@ -109,15 +165,18 @@ export default function LandlordDashboard() {
     email: "",
     phoneNumber: "",
   });
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
 
   const [isOtpDialogOpen, setIsOtpDialogOpen] = useState(false);
   const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState("");
 
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
+  const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
 
   const [paymentForm, setPaymentForm] = useState({
     tenantId: "",
@@ -129,6 +188,7 @@ export default function LandlordDashboard() {
     reference: "",
     notes: "",
   });
+  const [paymentErrors, setPaymentErrors] = useState<Record<string, string>>({});
 
   const [caretakerInviteForm, setCaretakerInviteForm] = useState({
     firstName: "",
@@ -136,11 +196,13 @@ export default function LandlordDashboard() {
     email: "",
     propertyId: "",
   });
+  const [caretakerInviteErrors, setCaretakerInviteErrors] = useState<Record<string, string>>({});
 
   const [caretakerAssignmentForm, setCaretakerAssignmentForm] = useState({
     caretakerId: "",
     propertyId: "",
   });
+  const [caretakerAssignmentErrors, setCaretakerAssignmentErrors] = useState<Record<string, string>>({});
 
   const [caretakerAssignmentSearch, setCaretakerAssignmentSearch] = useState("");
   const [caretakerAssignmentStatus, setCaretakerAssignmentStatus] = useState("all");
@@ -261,6 +323,7 @@ export default function LandlordDashboard() {
         description: "Invitation email sent successfully.",
       });
       setCaretakerInviteForm({ firstName: "", lastName: "", email: "", propertyId: "" });
+      setCaretakerInviteErrors({});
     },
     onError: (error: any) => {
       toast({
@@ -304,6 +367,7 @@ export default function LandlordDashboard() {
         description: "Caretaker assignment saved successfully.",
       });
       setCaretakerAssignmentForm({ caretakerId: "", propertyId: "" });
+      setCaretakerAssignmentErrors({});
     },
     onError: (error: any) => {
       toast({
@@ -545,9 +609,26 @@ export default function LandlordDashboard() {
   });
 
   const handleRecordPayment = () => {
+    const validation = manualPaymentFormSchema.safeParse(paymentForm);
+    if (!validation.success) {
+      const fieldErrors: Record<string, string> = {};
+      validation.error.issues.forEach((issue) => {
+        const field = issue.path[0];
+        if (field) fieldErrors[String(field)] = issue.message;
+      });
+      setPaymentErrors(fieldErrors);
+      toast({
+        title: "Validation Error",
+        description: "Please correct the highlighted fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const selectedLease = leases.find((l: any) => l.id === paymentForm.tenantId);
 
     if (!selectedLease) {
+      setPaymentErrors({ tenantId: "Please select a valid lease" });
       toast({
         title: "Error",
         description: "Please select a lease",
@@ -555,33 +636,7 @@ export default function LandlordDashboard() {
       });
       return;
     }
-
-    if (!paymentForm.amount || parseFloat(paymentForm.amount) <= 0) {
-      toast({
-        title: "Error",
-        description: "Please enter a valid payment amount",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!paymentForm.paymentMethod) {
-      toast({
-        title: "Error",
-        description: "Please select a payment method",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!paymentForm.paymentDate) {
-      toast({
-        title: "Error",
-        description: "Please select a payment date",
-        variant: "destructive",
-      });
-      return;
-    }
+    setPaymentErrors({});
 
     const description = paymentForm.notes || `${paymentForm.paymentType || 'Payment'} - Reference: ${paymentForm.reference || 'N/A'}`;
 
@@ -605,6 +660,7 @@ export default function LandlordDashboard() {
         email: user.email || "",
         phoneNumber: user.phoneNumber || "",
       });
+      setProfileErrors({});
     }
   }, [isProfileEditOpen, user]);
 
@@ -1526,23 +1582,41 @@ export default function LandlordDashboard() {
 
         const handleInviteSubmit = (event: React.FormEvent) => {
           event.preventDefault();
-          if (!canSubmitInvite) return;
+          const validation = caretakerInviteSchema.safeParse(caretakerInviteForm);
+          if (!validation.success) {
+            const fieldErrors: Record<string, string> = {};
+            validation.error.issues.forEach((issue) => {
+              const field = issue.path[0];
+              if (field) fieldErrors[String(field)] = issue.message;
+            });
+            setCaretakerInviteErrors(fieldErrors);
+            return;
+          }
 
           createCaretakerInviteMutation.mutate({
-            firstName: caretakerInviteForm.firstName.trim(),
-            lastName: caretakerInviteForm.lastName.trim(),
-            email: caretakerInviteForm.email.trim(),
-            propertyId: caretakerInviteForm.propertyId || undefined,
+            firstName: validation.data.firstName,
+            lastName: validation.data.lastName,
+            email: validation.data.email,
+            propertyId: validation.data.propertyId,
           });
         };
 
         const handleAssignmentSubmit = (event: React.FormEvent) => {
           event.preventDefault();
-          if (!canSubmitAssignment) return;
+          const validation = caretakerAssignmentSchema.safeParse(caretakerAssignmentForm);
+          if (!validation.success) {
+            const fieldErrors: Record<string, string> = {};
+            validation.error.issues.forEach((issue) => {
+              const field = issue.path[0];
+              if (field) fieldErrors[String(field)] = issue.message;
+            });
+            setCaretakerAssignmentErrors(fieldErrors);
+            return;
+          }
 
           assignCaretakerMutation.mutate({
-            caretakerId: caretakerAssignmentForm.caretakerId,
-            propertyId: caretakerAssignmentForm.propertyId || undefined,
+            caretakerId: validation.data.caretakerId,
+            propertyId: validation.data.propertyId,
           });
         };
 
@@ -1576,10 +1650,15 @@ export default function LandlordDashboard() {
                           id="caretakerFirstName"
                           value={caretakerInviteForm.firstName}
                           onChange={(event) =>
-                            setCaretakerInviteForm((prev) => ({ ...prev, firstName: event.target.value }))
+                            {
+                              setCaretakerInviteForm((prev) => ({ ...prev, firstName: event.target.value }));
+                              setCaretakerInviteErrors((prev) => ({ ...prev, firstName: "" }));
+                            }
                           }
                           placeholder="Jane"
+                          className={caretakerInviteErrors.firstName ? "border-destructive" : ""}
                         />
+                        {caretakerInviteErrors.firstName && <p className="text-sm text-destructive">{caretakerInviteErrors.firstName}</p>}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="caretakerLastName">Last name</Label>
@@ -1587,10 +1666,15 @@ export default function LandlordDashboard() {
                           id="caretakerLastName"
                           value={caretakerInviteForm.lastName}
                           onChange={(event) =>
-                            setCaretakerInviteForm((prev) => ({ ...prev, lastName: event.target.value }))
+                            {
+                              setCaretakerInviteForm((prev) => ({ ...prev, lastName: event.target.value }));
+                              setCaretakerInviteErrors((prev) => ({ ...prev, lastName: "" }));
+                            }
                           }
                           placeholder="Doe"
+                          className={caretakerInviteErrors.lastName ? "border-destructive" : ""}
                         />
+                        {caretakerInviteErrors.lastName && <p className="text-sm text-destructive">{caretakerInviteErrors.lastName}</p>}
                       </div>
                     </div>
                     <div className="space-y-2">
@@ -1600,24 +1684,30 @@ export default function LandlordDashboard() {
                         type="email"
                         value={caretakerInviteForm.email}
                         onChange={(event) =>
-                          setCaretakerInviteForm((prev) => ({ ...prev, email: event.target.value }))
+                          {
+                            setCaretakerInviteForm((prev) => ({ ...prev, email: event.target.value }));
+                            setCaretakerInviteErrors((prev) => ({ ...prev, email: "" }));
+                          }
                         }
                         placeholder="caretaker@example.com"
+                        className={caretakerInviteErrors.email ? "border-destructive" : ""}
                       />
+                      {caretakerInviteErrors.email && <p className="text-sm text-destructive">{caretakerInviteErrors.email}</p>}
                     </div>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label>Assign property</Label>
                         <Select
                           value={caretakerInviteForm.propertyId}
-                          onValueChange={(value) =>
+                          onValueChange={(value) => {
                             setCaretakerInviteForm((prev) => ({
                               ...prev,
                               propertyId: value,
-                            }))
-                          }
+                            }));
+                            setCaretakerInviteErrors((prev) => ({ ...prev, propertyId: "" }));
+                          }}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className={caretakerInviteErrors.propertyId ? "border-destructive" : ""}>
                             <SelectValue placeholder="Select property" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1628,10 +1718,11 @@ export default function LandlordDashboard() {
                             ))}
                           </SelectContent>
                         </Select>
+                        {caretakerInviteErrors.propertyId && <p className="text-sm text-destructive">{caretakerInviteErrors.propertyId}</p>}
                       </div>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <Button type="submit" disabled={!canSubmitInvite || createCaretakerInviteMutation.isPending}>
+                      <Button type="submit" disabled={createCaretakerInviteMutation.isPending}>
                         {createCaretakerInviteMutation.isPending ? "Sending invite..." : "Send Invitation"}
                       </Button>
                       <p className="text-xs text-muted-foreground">Property assignment is required.</p>
@@ -1651,11 +1742,12 @@ export default function LandlordDashboard() {
                       <Label>Caretaker</Label>
                       <Select
                         value={caretakerAssignmentForm.caretakerId}
-                        onValueChange={(value) =>
-                          setCaretakerAssignmentForm((prev) => ({ ...prev, caretakerId: value }))
-                        }
+                        onValueChange={(value) => {
+                          setCaretakerAssignmentForm((prev) => ({ ...prev, caretakerId: value }));
+                          setCaretakerAssignmentErrors((prev) => ({ ...prev, caretakerId: "" }));
+                        }}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className={caretakerAssignmentErrors.caretakerId ? "border-destructive" : ""}>
                           <SelectValue placeholder={caretakersLoading ? "Loading caretakers..." : "Select caretaker"} />
                         </SelectTrigger>
                         <SelectContent>
@@ -1666,19 +1758,21 @@ export default function LandlordDashboard() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {caretakerAssignmentErrors.caretakerId && <p className="text-sm text-destructive">{caretakerAssignmentErrors.caretakerId}</p>}
                     </div>
                     <div className="space-y-2">
                       <Label>Property</Label>
                       <Select
                         value={caretakerAssignmentForm.propertyId}
-                        onValueChange={(value) =>
+                        onValueChange={(value) => {
                           setCaretakerAssignmentForm((prev) => ({
                             ...prev,
                             propertyId: value,
-                          }))
-                        }
-                      >
-                        <SelectTrigger>
+                          }));
+                          setCaretakerAssignmentErrors((prev) => ({ ...prev, propertyId: "" }));
+                        }}
+                        >
+                        <SelectTrigger className={caretakerAssignmentErrors.propertyId ? "border-destructive" : ""}>
                           <SelectValue placeholder="Select property" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1689,9 +1783,10 @@ export default function LandlordDashboard() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {caretakerAssignmentErrors.propertyId && <p className="text-sm text-destructive">{caretakerAssignmentErrors.propertyId}</p>}
                     </div>
                     <div className="flex flex-col gap-2">
-                      <Button type="submit" disabled={!canSubmitAssignment || assignCaretakerMutation.isPending}>
+                      <Button type="submit" disabled={assignCaretakerMutation.isPending}>
                         {assignCaretakerMutation.isPending ? "Assigning..." : "Assign Caretaker"}
                       </Button>
                       <p className="text-xs text-muted-foreground">Property assignment is required.</p>
@@ -2352,18 +2447,20 @@ export default function LandlordDashboard() {
                 </Card>
               </div>
 
-              <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
-                <PaymentHistory
-                  payments={payments}
-                  loading={paymentsLoading}
-                  onViewPayment={(payment) => {
-                    setViewingPayment(payment);
-                  }}
-                  onEditPayment={(payment) => {
-                    // TODO: Implement payment edit modal
-                  }}
-                />
-                <Card>
+              <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr),minmax(0,1fr)]">
+                <div className="min-w-0">
+                  <PaymentHistory
+                    payments={payments}
+                    loading={paymentsLoading}
+                    onViewPayment={(payment) => {
+                      setViewingPayment(payment);
+                    }}
+                    onEditPayment={(payment) => {
+                      // TODO: Implement payment edit modal
+                    }}
+                  />
+                </div>
+                <Card className="min-w-0">
                   <CardHeader>
                     <CardTitle>Latest Payments</CardTitle>
                     <CardDescription>Most recent transactions</CardDescription>
@@ -2654,18 +2751,28 @@ export default function LandlordDashboard() {
                 <Input
                   id="firstName"
                   value={profileForm.firstName}
-                  onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                  onChange={(e) => {
+                    setProfileForm({ ...profileForm, firstName: e.target.value });
+                    setProfileErrors((prev) => ({ ...prev, firstName: "" }));
+                  }}
                   placeholder="Enter first name"
+                  className={profileErrors.firstName ? "border-destructive" : ""}
                 />
+                {profileErrors.firstName && <p className="mt-1 text-sm text-destructive">{profileErrors.firstName}</p>}
               </div>
               <div>
                 <Label htmlFor="lastName">Last Name</Label>
                 <Input
                   id="lastName"
                   value={profileForm.lastName}
-                  onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                  onChange={(e) => {
+                    setProfileForm({ ...profileForm, lastName: e.target.value });
+                    setProfileErrors((prev) => ({ ...prev, lastName: "" }));
+                  }}
                   placeholder="Enter last name"
+                  className={profileErrors.lastName ? "border-destructive" : ""}
                 />
+                {profileErrors.lastName && <p className="mt-1 text-sm text-destructive">{profileErrors.lastName}</p>}
               </div>
             </div>
             <div>
@@ -2674,9 +2781,14 @@ export default function LandlordDashboard() {
                 id="email"
                 type="email"
                 value={profileForm.email}
-                onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                onChange={(e) => {
+                  setProfileForm({ ...profileForm, email: e.target.value });
+                  setProfileErrors((prev) => ({ ...prev, email: "" }));
+                }}
                 placeholder="Enter email address"
+                className={profileErrors.email ? "border-destructive" : ""}
               />
+              {profileErrors.email && <p className="mt-1 text-sm text-destructive">{profileErrors.email}</p>}
             </div>
             <div>
               <Label htmlFor="phoneNumber">Phone Number (with +254...)</Label>
@@ -2684,15 +2796,25 @@ export default function LandlordDashboard() {
                 <Input
                   id="phoneNumber"
                   value={profileForm.phoneNumber}
-                  onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
+                  onChange={(e) => {
+                    setProfileForm({ ...profileForm, phoneNumber: e.target.value });
+                    setProfileErrors((prev) => ({ ...prev, phoneNumber: "" }));
+                  }}
                   placeholder="+254712345678"
-                  className="flex-1"
+                  className={`flex-1 ${profileErrors.phoneNumber ? "border-destructive" : ""}`}
                 />
                 {profileForm.phoneNumber && profileForm.phoneNumber !== user?.phoneNumber && (
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
+                    onClick={() => {
+                      const validation = profileFormSchema.pick({ phoneNumber: true }).safeParse({ phoneNumber: profileForm.phoneNumber });
+                      if (!validation.success) {
+                        setProfileErrors((prev) => ({ ...prev, phoneNumber: validation.error.issues[0]?.message || "Invalid phone number" }));
+                        return;
+                      }
+                      requestPhoneUpdateMutation.mutate(validation.data.phoneNumber || "");
+                    }}
                     disabled={requestPhoneUpdateMutation.isPending}
                   >
                     {requestPhoneUpdateMutation.isPending ? "Sending..." : "Verify"}
@@ -2702,7 +2824,14 @@ export default function LandlordDashboard() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
+                    onClick={() => {
+                      const validation = profileFormSchema.pick({ phoneNumber: true }).safeParse({ phoneNumber: profileForm.phoneNumber });
+                      if (!validation.success) {
+                        setProfileErrors((prev) => ({ ...prev, phoneNumber: validation.error.issues[0]?.message || "Invalid phone number" }));
+                        return;
+                      }
+                      requestPhoneUpdateMutation.mutate(validation.data.phoneNumber || "");
+                    }}
                     disabled={requestPhoneUpdateMutation.isPending}
                   >
                     {requestPhoneUpdateMutation.isPending ? "Verify" : "Resend OTP"}
@@ -2714,6 +2843,7 @@ export default function LandlordDashboard() {
                   <i className="fas fa-check-circle mr-1"></i> Verified
                 </p>
               )}
+              {profileErrors.phoneNumber && <p className="mt-1 text-sm text-destructive">{profileErrors.phoneNumber}</p>}
             </div>
             <div className="flex justify-end space-x-2 pt-4">
               <Button variant="outline" onClick={() => setIsProfileEditOpen(false)}>
@@ -2721,10 +2851,21 @@ export default function LandlordDashboard() {
               </Button>
               <Button
                 onClick={() => {
+                  const validation = profileFormSchema.safeParse(profileForm);
+                  if (!validation.success) {
+                    const fieldErrors: Record<string, string> = {};
+                    validation.error.issues.forEach((issue) => {
+                      const field = issue.path[0];
+                      if (field) fieldErrors[String(field)] = issue.message;
+                    });
+                    setProfileErrors(fieldErrors);
+                    return;
+                  }
+                  setProfileErrors({});
                   profileUpdateMutation.mutate({
-                    firstName: profileForm.firstName,
-                    lastName: profileForm.lastName,
-                    email: profileForm.email
+                    firstName: validation.data.firstName,
+                    lastName: validation.data.lastName,
+                    email: validation.data.email
                   });
                 }}
                 disabled={profileUpdateMutation.isPending}
@@ -2749,19 +2890,31 @@ export default function LandlordDashboard() {
             <div className="flex justify-center">
               <Input
                 value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, "").substring(0, 6))}
-                className="text-center text-2xl tracking-[0.5em] h-12 w-48"
+                onChange={(e) => {
+                  setOtpCode(e.target.value.replace(/[^0-9]/g, "").substring(0, 6));
+                  setOtpError("");
+                }}
+                className={`text-center text-2xl tracking-[0.5em] h-12 w-48 ${otpError ? "border-destructive" : ""}`}
                 placeholder="000000"
                 autoFocus
               />
             </div>
+            {otpError && <p className="text-center text-sm text-destructive">{otpError}</p>}
             <Button
               className="w-full h-12"
-              disabled={otpCode.length !== 6 || verifyPhoneUpdateMutation.isPending}
-              onClick={() => verifyPhoneUpdateMutation.mutate({
-                phoneNumber: profileForm.phoneNumber,
-                code: otpCode
-              })}
+              disabled={verifyPhoneUpdateMutation.isPending}
+              onClick={() => {
+                const validation = otpSchema.safeParse(otpCode);
+                if (!validation.success) {
+                  setOtpError(validation.error.issues[0]?.message || "Invalid code");
+                  return;
+                }
+                setOtpError("");
+                verifyPhoneUpdateMutation.mutate({
+                  phoneNumber: profileForm.phoneNumber,
+                  code: validation.data
+                });
+              }}
             >
               {verifyPhoneUpdateMutation.isPending ? (
                 <><i className="fas fa-spinner fa-spin mr-2"></i> Verifying...</>
@@ -2791,9 +2944,14 @@ export default function LandlordDashboard() {
                 id="currentPassword"
                 type="password"
                 value={passwordForm.currentPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                onChange={(e) => {
+                  setPasswordForm({ ...passwordForm, currentPassword: e.target.value });
+                  setPasswordErrors((prev) => ({ ...prev, currentPassword: "" }));
+                }}
                 placeholder="Enter current password"
+                className={passwordErrors.currentPassword ? "border-destructive" : ""}
               />
+              {passwordErrors.currentPassword && <p className="mt-1 text-sm text-destructive">{passwordErrors.currentPassword}</p>}
             </div>
             <div>
               <Label htmlFor="newPassword">New Password</Label>
@@ -2801,9 +2959,14 @@ export default function LandlordDashboard() {
                 id="newPassword"
                 type="password"
                 value={passwordForm.newPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                onChange={(e) => {
+                  setPasswordForm({ ...passwordForm, newPassword: e.target.value });
+                  setPasswordErrors((prev) => ({ ...prev, newPassword: "" }));
+                }}
                 placeholder="Enter new password (min 8 characters)"
+                className={passwordErrors.newPassword ? "border-destructive" : ""}
               />
+              {passwordErrors.newPassword && <p className="mt-1 text-sm text-destructive">{passwordErrors.newPassword}</p>}
 
               {/* Password Strength Meter */}
               {passwordForm.newPassword && (
@@ -2861,9 +3024,14 @@ export default function LandlordDashboard() {
                 id="confirmPassword"
                 type="password"
                 value={passwordForm.confirmPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                onChange={(e) => {
+                  setPasswordForm({ ...passwordForm, confirmPassword: e.target.value });
+                  setPasswordErrors((prev) => ({ ...prev, confirmPassword: "" }));
+                }}
                 placeholder="Confirm new password"
+                className={passwordErrors.confirmPassword ? "border-destructive" : ""}
               />
+              {passwordErrors.confirmPassword && <p className="mt-1 text-sm text-destructive">{passwordErrors.confirmPassword}</p>}
             </div>
             <div className="flex justify-end space-x-2 pt-4">
               <Button variant="outline" onClick={() => setIsPasswordChangeOpen(false)}>
@@ -2871,28 +3039,20 @@ export default function LandlordDashboard() {
               </Button>
               <Button
                 onClick={() => {
-                  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-                    toast({
-                      title: "Error",
-                      description: "Passwords don't match",
-                      variant: "destructive",
+                  const validation = passwordFormSchema.safeParse(passwordForm);
+                  if (!validation.success) {
+                    const fieldErrors: Record<string, string> = {};
+                    validation.error.issues.forEach((issue) => {
+                      const field = issue.path[0];
+                      if (field) fieldErrors[String(field)] = issue.message;
                     });
+                    setPasswordErrors(fieldErrors);
                     return;
                   }
-                  // Enhanced password validation
-                  const passwordValidation = validatePassword(passwordForm.newPassword);
-                  if (!passwordValidation.isValid) {
-                    const errorMessage = `Password must contain ${passwordValidation.failedRequirements.join(", ")}.`;
-                    toast({
-                      title: "Password Too Weak",
-                      description: errorMessage,
-                      variant: "destructive",
-                    });
-                    return;
-                  }
+                  setPasswordErrors({});
                   passwordChangeMutation.mutate({
-                    currentPassword: passwordForm.currentPassword,
-                    newPassword: passwordForm.newPassword
+                    currentPassword: validation.data.currentPassword,
+                    newPassword: validation.data.newPassword
                   });
                 }}
                 disabled={passwordChangeMutation.isPending}
@@ -2937,10 +3097,11 @@ export default function LandlordDashboard() {
                       amount: selectedLease.monthlyRent || prev.amount,
                       propertyId: selectedLease.unitId || prev.propertyId
                     }));
+                    setPaymentErrors((prev) => ({ ...prev, tenantId: "", amount: "" }));
                   }
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className={paymentErrors.tenantId ? "border-destructive" : ""}>
                   <SelectValue placeholder="Choose a lease" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2964,6 +3125,7 @@ export default function LandlordDashboard() {
               <p className="text-xs text-muted-foreground mt-1">
                 Lease automatically includes tenant, property, and unit details
               </p>
+              {paymentErrors.tenantId && <p className="mt-1 text-sm text-destructive">{paymentErrors.tenantId}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -2976,8 +3138,13 @@ export default function LandlordDashboard() {
                   min="0"
                   step="0.01"
                   value={paymentForm.amount}
-                  onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: e.target.value }))}
+                  onChange={(e) => {
+                    setPaymentForm(prev => ({ ...prev, amount: e.target.value }));
+                    setPaymentErrors((prev) => ({ ...prev, amount: "" }));
+                  }}
+                  className={paymentErrors.amount ? "border-destructive" : ""}
                 />
+                {paymentErrors.amount && <p className="mt-1 text-sm text-destructive">{paymentErrors.amount}</p>}
               </div>
               <div>
                 <Label htmlFor="paymentDate">Payment Date *</Label>
@@ -2985,8 +3152,13 @@ export default function LandlordDashboard() {
                   id="paymentDate"
                   type="date"
                   value={paymentForm.paymentDate}
-                  onChange={(e) => setPaymentForm(prev => ({ ...prev, paymentDate: e.target.value }))}
+                  onChange={(e) => {
+                    setPaymentForm(prev => ({ ...prev, paymentDate: e.target.value }));
+                    setPaymentErrors((prev) => ({ ...prev, paymentDate: "" }));
+                  }}
+                  className={paymentErrors.paymentDate ? "border-destructive" : ""}
                 />
+                {paymentErrors.paymentDate && <p className="mt-1 text-sm text-destructive">{paymentErrors.paymentDate}</p>}
               </div>
             </div>
 
@@ -2995,9 +3167,12 @@ export default function LandlordDashboard() {
                 <Label htmlFor="paymentMethod">Payment Method *</Label>
                 <Select
                   value={paymentForm.paymentMethod}
-                  onValueChange={(value) => setPaymentForm(prev => ({ ...prev, paymentMethod: value }))}
+                  onValueChange={(value) => {
+                    setPaymentForm(prev => ({ ...prev, paymentMethod: value }));
+                    setPaymentErrors((prev) => ({ ...prev, paymentMethod: "" }));
+                  }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={paymentErrors.paymentMethod ? "border-destructive" : ""}>
                     <SelectValue placeholder="Select method" />
                   </SelectTrigger>
                   <SelectContent>
@@ -3007,14 +3182,18 @@ export default function LandlordDashboard() {
                     <SelectItem value="check">Check</SelectItem>
                   </SelectContent>
                 </Select>
+                {paymentErrors.paymentMethod && <p className="mt-1 text-sm text-destructive">{paymentErrors.paymentMethod}</p>}
               </div>
               <div>
                 <Label htmlFor="paymentType">Payment Type *</Label>
                 <Select
                   value={paymentForm.paymentType}
-                  onValueChange={(value) => setPaymentForm(prev => ({ ...prev, paymentType: value }))}
+                  onValueChange={(value) => {
+                    setPaymentForm(prev => ({ ...prev, paymentType: value }));
+                    setPaymentErrors((prev) => ({ ...prev, paymentType: "" }));
+                  }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={paymentErrors.paymentType ? "border-destructive" : ""}>
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -3026,6 +3205,7 @@ export default function LandlordDashboard() {
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
+                {paymentErrors.paymentType && <p className="mt-1 text-sm text-destructive">{paymentErrors.paymentType}</p>}
               </div>
             </div>
 
@@ -3035,8 +3215,13 @@ export default function LandlordDashboard() {
                 id="reference"
                 placeholder="Enter reference number (optional)"
                 value={paymentForm.reference}
-                onChange={(e) => setPaymentForm(prev => ({ ...prev, reference: e.target.value }))}
+                onChange={(e) => {
+                  setPaymentForm(prev => ({ ...prev, reference: e.target.value }));
+                  setPaymentErrors((prev) => ({ ...prev, reference: "" }));
+                }}
+                className={paymentErrors.reference ? "border-destructive" : ""}
               />
+              {paymentErrors.reference && <p className="mt-1 text-sm text-destructive">{paymentErrors.reference}</p>}
             </div>
 
             <div>
@@ -3045,8 +3230,13 @@ export default function LandlordDashboard() {
                 id="notes"
                 placeholder="Add any notes about this payment (optional)"
                 value={paymentForm.notes}
-                onChange={(e) => setPaymentForm(prev => ({ ...prev, notes: e.target.value }))}
+                onChange={(e) => {
+                  setPaymentForm(prev => ({ ...prev, notes: e.target.value }));
+                  setPaymentErrors((prev) => ({ ...prev, notes: "" }));
+                }}
+                className={paymentErrors.notes ? "border-destructive" : ""}
               />
+              {paymentErrors.notes && <p className="mt-1 text-sm text-destructive">{paymentErrors.notes}</p>}
             </div>
 
             <div className="bg-blue-50 p-4 rounded-lg">
@@ -3079,7 +3269,7 @@ export default function LandlordDashboard() {
       </Dialog>
 
       <Dialog open={Boolean(viewingPayment)} onOpenChange={(open) => !open && setViewingPayment(null)}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-lg">
+        <DialogContent className="w-[calc(100%_-_2rem)] max-w-lg">
           <DialogHeader>
             <DialogTitle>Payment Details</DialogTitle>
           </DialogHeader>
