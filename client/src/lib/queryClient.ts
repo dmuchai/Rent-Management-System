@@ -5,7 +5,13 @@ import { supabase } from "./supabase";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let payload: { error?: string; message?: string } | undefined;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      // Some endpoints return plain text errors.
+    }
+    throw new Error(payload?.error || payload?.message || text || `Request failed (${res.status})`);
   }
 }
 

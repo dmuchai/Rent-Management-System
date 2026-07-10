@@ -4,11 +4,29 @@
  * 
  * Handles sending text messages using Africa's Talking API or Infobip.
  */
+import { randomInt } from 'node:crypto';
 
 export interface SmsOptions {
     to: string;
     message: string;
     metadata?: any;
+}
+
+export class SmsDeliveryError extends Error {
+    constructor(
+        message: string,
+        public readonly provider: string,
+        public readonly providerStatus?: string,
+        public readonly providerCode?: string | number,
+    ) {
+        super(message);
+        this.name = 'SmsDeliveryError';
+    }
+}
+
+export function maskPhoneNumber(phone: string): string {
+    const digits = phone.replace(/\D/g, '');
+    return digits.length >= 4 ? `***${digits.slice(-4)}` : '***';
 }
 
 export class SmsService {
@@ -37,28 +55,25 @@ export class SmsService {
     }
 
     /**
-     * Normalizes a phone number to E.164 format (no leading +).
+     * Normalizes a Kenyan mobile number to its international MSISDN form.
      * Handles Kenya numbers (country code 254) by default.
      * Examples:
      *   0707213241   → 254707213241
      *   +254707213241 → 254707213241
      *   254707213241  → 254707213241  (unchanged)
      */
-    normalizePhoneNumber(phone: string, defaultCountryCode: string = '254'): string {
-        // Strip all spaces and dashes
-        let normalized = phone.replace(/[\s\-]/g, '');
+    normalizePhoneNumber(phone: string): string {
+        const compact = phone.trim().replace(/[\s()-]/g, '');
+        const digits = compact.startsWith('+') ? compact.slice(1) : compact;
+        const normalized = digits.startsWith('0') ? `254${digits.slice(1)}` : digits;
 
-        if (normalized.startsWith('+')) {
-            // Remove leading + (Infobip expects digits only, no +)
-            normalized = normalized.slice(1);
-        } else if (normalized.startsWith('0')) {
-            // Local format: replace leading 0 with country code
-            normalized = defaultCountryCode + normalized.slice(1);
-        } else if (!normalized.startsWith(defaultCountryCode)) {
-            // No prefix at all — prepend country code
-            normalized = defaultCountryCode + normalized;
+        if (!/^254(?:7|1)\d{8}$/.test(normalized)) {
+            throw new SmsDeliveryError(
+                'Enter a valid Kenyan mobile number, for example 0712345678 or +254712345678.',
+                'validation',
+                'INVALID_PHONE_NUMBER',
+            );
         }
-
         return normalized;
     }
 
@@ -69,24 +84,19 @@ export class SmsService {
         const normalizedTo = this.normalizePhoneNumber(options.to);
         const normalizedOptions = { ...options, to: normalizedTo };
 
-        if (normalizedTo !== options.to) {
-            console.log(`[SMS] Normalized phone: ${options.to} → ${normalizedTo}`);
-        }
-
-        console.log(`[SMS] Sending via ${provider} to ${normalizedTo}`);
+        const maskedTo = maskPhoneNumber(normalizedTo);
+        console.info('[SMS] Dispatch requested', { provider, recipient: maskedTo });
 
         if (provider === 'infobip') {
             return this.sendViaInfobip(normalizedOptions);
         } else {
-            return this.sendViaAt(normalizedOptions);
+            return this.sendViaAt({ ...normalizedOptions, to: `+${normalizedTo}` });
         }
     }
 
     private async sendViaInfobip(options: SmsOptions): Promise<any> {
         if (!this.infobipApiKey || !this.infobipBaseUrl) {
-            console.warn('[SMS] Infobip credentials not configured. Falling back to console.');
-            console.log(`[SMS MOCK] To: ${options.to} | Message: ${options.message}`);
-            return { status: 'mocked', message: 'Infobip credentials missing' };
+            throw new SmsDeliveryError('SMS delivery is temporarily unavailable.', 'infobip', 'NOT_CONFIGURED');
         }
 
         let baseUrl = this.infobipBaseUrl.endsWith('/') ? this.infobipBaseUrl.slice(0, -1) : this.infobipBaseUrl;
@@ -99,7 +109,7 @@ export class SmsService {
             messages: [
                 {
                     destinations: [{ to: options.to }],
-                    from: "Landee", // Default sender name
+                    from: process.env.INFOBIP_SENDER_ID || 'Landee',
                     text: options.message
                 }
             ]
@@ -118,8 +128,8 @@ export class SmsService {
 
             if (!response.ok) {
                 const errorData = await response.text();
-                console.error('[SMS] Infobip API error:', errorData);
-                throw new Error(`Infobip API failed: ${response.status}`);
+                console.error('[SMS] Infobip HTTP rejection', { httpStatus: response.status });
+                throw new SmsDeliveryError('The SMS provider rejected the request.', 'infobip', 'HTTP_ERROR', response.status);
             }
 
             const data = await response.json();
@@ -127,23 +137,26 @@ export class SmsService {
             const statusName = messageStatus?.name || 'Unknown';
             const statusDesc = messageStatus?.description || 'No description';
 
-            if (['PENDING', 'ACCEPTED', 'MESSAGE_ACCEPTED', 'PENDING_ACCEPTED', 'PENDING_ENROUTE', 'DELIVERED_TO_HANDSET'].includes(statusName)) {
-                console.info(`✅ [SMS] Infobip: Accepted for delivery | To: ${options.to} | Status: ${statusName}`);
-            } else {
-                console.warn(`[SMS] Infobip Warning | To: ${options.to} | Status: ${statusName} (${statusDesc})`);
+            const accepted = messageStatus?.groupId === 1 || messageStatus?.groupId === 3 ||
+                ['PENDING', 'ACCEPTED', 'MESSAGE_ACCEPTED', 'PENDING_ACCEPTED', 'PENDING_ENROUTE', 'DELIVERED_TO_HANDSET'].includes(statusName);
+            if (!accepted) {
+                console.error('[SMS] Infobip recipient rejected', {
+                    recipient: maskPhoneNumber(options.to), status: statusName,
+                    code: messageStatus?.id, description: statusDesc,
+                });
+                throw new SmsDeliveryError('The SMS provider could not accept this phone number.', 'infobip', statusName, messageStatus?.id);
             }
+            console.info('[SMS] Infobip accepted message', { recipient: maskPhoneNumber(options.to), status: statusName });
             return data;
         } catch (error) {
-            console.error('[SMS] Infobip send failed:', error);
+            if (!(error instanceof SmsDeliveryError)) console.error('[SMS] Infobip request failed', { error: error instanceof Error ? error.name : 'unknown' });
             throw error;
         }
     }
 
     private async sendViaAt(options: SmsOptions): Promise<any> {
         if (!this.atUsername || !this.atApiKey) {
-            console.warn('[SMS] Africa\'s Talking credentials not configured. SMS will be logged to console only.');
-            console.log(`[SMS MOCK] To: ${options.to} | Message: ${options.message}`);
-            return { status: 'mocked', message: 'SMS credentials missing' };
+            throw new SmsDeliveryError('SMS delivery is temporarily unavailable.', 'africastalking', 'NOT_CONFIGURED');
         }
 
         const params = new URLSearchParams();
@@ -171,8 +184,8 @@ export class SmsService {
 
             if (!response.ok) {
                 const errorData = await response.text();
-                console.error('[SMS] AT API error:', errorData);
-                throw new Error(`AT API failed: ${response.status}`);
+                console.error('[SMS] Africa\'s Talking HTTP rejection', { httpStatus: response.status });
+                throw new SmsDeliveryError('The SMS provider rejected the request.', 'africastalking', 'HTTP_ERROR', response.status);
             }
 
             const data = await response.json();
@@ -183,19 +196,21 @@ export class SmsService {
                 const status = recipients[0].status;
                 const cost = recipients[0].cost;
 
-                if (status === 'Success' || status === 'Sent') {
-                    console.info(`✅ [SMS] AT Success | To: ${options.to} | Cost: ${cost}`);
-                } else {
-                    console.warn(`[SMS] Status: ${status} | To: ${options.to} | Cost: ${cost}`);
-                    console.warn(`[SMS] Delivery status warning: ${status} for ${options.to}`);
+                if (status !== 'Success' && status !== 'Sent') {
+                    console.error('[SMS] Africa\'s Talking recipient rejected', {
+                        recipient: maskPhoneNumber(options.to), status,
+                        code: recipients[0].statusCode,
+                    });
+                    throw new SmsDeliveryError('The SMS provider could not accept this phone number.', 'africastalking', status, recipients[0].statusCode);
                 }
+                console.info('[SMS] Africa\'s Talking accepted message', { recipient: maskPhoneNumber(options.to), status, cost });
             } else {
-                console.info('✅ [SMS] AT Sent successfully to:', options.to);
+                throw new SmsDeliveryError('The SMS provider returned no recipient result.', 'africastalking', 'EMPTY_RECIPIENTS');
             }
 
             return data;
         } catch (error) {
-            console.error('[SMS] Send failed:', error);
+            if (!(error instanceof SmsDeliveryError)) console.error('[SMS] Africa\'s Talking request failed', { error: error instanceof Error ? error.name : 'unknown' });
             throw error;
         } finally {
             clearTimeout(timeoutId);
@@ -203,7 +218,9 @@ export class SmsService {
     }
 
     generateOtp(length: number = 6): string {
-        return Math.floor(100000 + Math.random() * 900000).toString().substring(0, length);
+        if (!Number.isInteger(length) || length < 1 || length > 9) throw new Error('OTP length must be between 1 and 9');
+        const lowerBound = length === 1 ? 0 : 10 ** (length - 1);
+        return randomInt(lowerBound, 10 ** length).toString().padStart(length, '0');
     }
 
     composePaymentConfirmation(
