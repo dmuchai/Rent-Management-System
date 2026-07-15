@@ -238,7 +238,7 @@ export const maintenanceRequests = pgTable("maintenance_requests", {
   priority: varchar("priority").notNull().default("medium"), // low, medium, high, urgent
   status: varchar("status").notNull().default("open"), // open, in_progress, completed, cancelled
   assignedTo: varchar("assigned_to"),
-  completedDate: timestamp("completed_date"),
+  completedDate: timestamp("completion_date"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
