@@ -28,16 +28,18 @@ These should also be updated if they contain domain references:
 - `PESAPAL_CALLBACK_URL` → Should be `https://landee.kejalink.co.ke/api/payments/pesapal/ipn`
 - `PAYMENT_SUCCESS_URL` → Should be `https://landee.kejalink.co.ke/dashboard?payment=success`
 
-### 📲 SMS VARIABLES (Africa's Talking Live Testing)
+### 📲 SMS VARIABLES (Infobip Live Testing)
 
 Set these before testing phone verification from user profiles:
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `SMS_PROVIDER` | `africastalking` | Routes SMS through Africa's Talking |
-| `AT_USERNAME` | Your live Africa's Talking username | Africa's Talking account/project username |
-| `AT_API_KEY` | Your live Africa's Talking API key | API authentication |
-| `AT_SENDER_ID` | Optional approved sender ID | Branded sender, if approved |
+| `SMS_PROVIDER` | `infobip` | Routes SMS through Infobip |
+| `INFOBIP_BASE_URL` | Your Infobip API base URL, such as `xxxxx.api.infobip.com` | Infobip account endpoint |
+| `INFOBIP_API_KEY` | Your active Infobip API key | API authentication |
+| `INFOBIP_SENDER_ID` | Your registered sender, such as `Landee` | Sender used for Kenyan SMS traffic |
+
+Keep the Africa's Talking variables only if you want a quick rollback path; they are ignored while `SMS_PROVIDER=infobip`.
 
 Signup no longer requires SMS OTP. Users verify email first, then verify their phone number later from their profile.
 

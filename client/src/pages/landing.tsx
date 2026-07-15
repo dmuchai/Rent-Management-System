@@ -117,8 +117,8 @@ export default function Landing() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="bg-card border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
+        <div className="mx-auto max-w-7xl px-4 pt-[env(safe-area-inset-top,0px)] sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-2 py-6">
             <div className="flex items-center gap-3">
               <img src="/favicon.png" alt="Landee" className="h-10 w-10 md:h-12 md:w-12" />
               <div className="flex flex-col">
@@ -133,15 +133,20 @@ export default function Landing() {
             </nav>
             <div className="flex items-center space-x-4">
               <Button
+                type="button"
                 variant="ghost"
                 onClick={redirectToLogin}
                 data-testid="button-signin"
+                className="h-11 min-w-20 shrink-0 touch-manipulation"
+                aria-label="Sign in to Landee"
               >
                 Sign In
               </Button>
               <Button
+                type="button"
                 onClick={redirectToLogin}
                 data-testid="button-getstarted"
+                className="h-11 shrink-0 touch-manipulation"
               >
                 Get Started
               </Button>
