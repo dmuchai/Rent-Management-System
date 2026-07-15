@@ -113,7 +113,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         priority: request.priority,
         status: request.status,
         assignedTo: request.assigned_to,
-        completedDate: request.completed_date,
+        completedDate: request.completion_date,
         createdAt: request.created_at,
         updatedAt: request.updated_at,
         unit: {
@@ -310,7 +310,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         SET 
           status = COALESCE(${updateData.status ?? null}, status),
           assigned_to = COALESCE(${updateData.assignedTo ?? null}, assigned_to),
-          completed_date = COALESCE(${updateData.completedDate ? new Date(updateData.completedDate).toISOString() : null}, completed_date),
+          completion_date = COALESCE(${updateData.completedDate ? new Date(updateData.completedDate).toISOString() : null}, completion_date),
           updated_at = NOW()
         WHERE id = ${id}
         RETURNING *

@@ -28,7 +28,7 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
       requests = (data || []).map((row: any) => ({
         id: row.id, unitId: row.unit_id, tenantId: row.tenant_id, title: row.title,
         description: row.description, priority: row.priority, status: row.status,
-        assignedTo: row.assigned_to, completedDate: row.completed_date,
+        assignedTo: row.assigned_to, completedDate: row.completion_date,
         createdAt: row.created_at, updatedAt: row.updated_at,
       }));
     } else {
@@ -80,7 +80,7 @@ router.put("/:id", isAuthenticated, async (req: any, res: any) => {
     if (updateData.status !== undefined) updatePayload.status = updateData.status;
     if (updateData.assignedTo !== undefined) updatePayload.assigned_to = updateData.assignedTo;
     if (updateData.completedDate !== undefined) {
-      updatePayload.completed_date = updateData.completedDate ? new Date(updateData.completedDate).toISOString() : null;
+      updatePayload.completion_date = updateData.completedDate ? new Date(updateData.completedDate).toISOString() : null;
     }
 
     const { data, error } = await supabase
@@ -91,7 +91,7 @@ router.put("/:id", isAuthenticated, async (req: any, res: any) => {
     res.json({
       id: data.id, unitId: data.unit_id, tenantId: data.tenant_id, title: data.title,
       description: data.description, priority: data.priority, status: data.status,
-      assignedTo: data.assigned_to, completedDate: data.completed_date,
+      assignedTo: data.assigned_to, completedDate: data.completion_date,
       createdAt: data.created_at, updatedAt: data.updated_at,
     });
   } catch (error) {

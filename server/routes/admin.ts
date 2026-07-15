@@ -63,7 +63,7 @@ router.post("/create-tables", async (_req: any, res: any) => {
       CREATE TABLE IF NOT EXISTS maintenance_requests (
         id TEXT PRIMARY KEY, unit_id TEXT NOT NULL, tenant_id TEXT NOT NULL,
         title TEXT NOT NULL, description TEXT, priority TEXT DEFAULT 'medium',
-        status TEXT DEFAULT 'open', assigned_to TEXT, completed_date TIMESTAMP,
+        status TEXT DEFAULT 'open', assigned_to TEXT, completion_date TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()
       )
     `);

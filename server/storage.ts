@@ -513,7 +513,7 @@ export class SupabaseStorage {
         priority: r.priority,
         status: r.status,
         assignedTo: r.assigned_to,
-        completedDate: r.completed_date,
+        completedDate: r.completion_date,
         createdAt: r.created_at,
         updatedAt: r.updated_at
       })) as MaintenanceRequest[];
@@ -542,7 +542,7 @@ export class SupabaseStorage {
         priority: r.priority,
         status: r.status,
         assignedTo: r.assigned_to,
-        completedDate: r.completed_date,
+        completedDate: r.completion_date,
         createdAt: r.created_at,
         updatedAt: r.updated_at
       })) as MaintenanceRequest[];
@@ -577,7 +577,7 @@ export class SupabaseStorage {
       priority: data.priority,
       status: data.status,
       assignedTo: data.assigned_to,
-      completedDate: data.completed_date,
+      completedDate: data.completion_date,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     } as MaintenanceRequest;
@@ -588,7 +588,7 @@ export class SupabaseStorage {
 
     if (request.status !== undefined) updateData.status = request.status;
     if (request.assignedTo !== undefined) updateData.assigned_to = request.assignedTo;
-    if (request.completedDate !== undefined) updateData.completed_date = request.completedDate;
+    if (request.completedDate !== undefined) updateData.completion_date = request.completedDate;
     updateData.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase
@@ -609,7 +609,7 @@ export class SupabaseStorage {
       priority: data.priority,
       status: data.status,
       assignedTo: data.assigned_to,
-      completedDate: data.completed_date,
+      completedDate: data.completion_date,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     } as MaintenanceRequest;
