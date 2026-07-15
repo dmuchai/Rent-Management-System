@@ -80,7 +80,7 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
         isCollapsed ? "md:w-20" : "md:w-64",
         "w-64" // Mobile width
       )}>
-        <div className="flex flex-col h-full">
+        <div className="flex h-full flex-col pt-[env(safe-area-inset-top,0px)] md:pt-0">
           {/* Header */}
           <div className="p-6 flex items-center justify-between">
             <div className="flex items-center">
@@ -99,10 +99,12 @@ export default function Sidebar({ activeSection, onSectionChange, isOpen, onClos
               </div>
             </div>
             <Button
+              type="button"
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="h-11 w-11 shrink-0 touch-manipulation md:hidden"
               onClick={onClose}
+              aria-label="Close navigation menu"
             >
               <X className="h-5 w-5" />
             </Button>
