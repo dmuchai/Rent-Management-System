@@ -211,15 +211,18 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
 
   return (
     <header className="bg-card border-b border-border">
-      <div className="px-4 md:px-6 py-4">
+      <div className="px-4 pb-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] md:px-6 md:py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 md:gap-4">
             {/* Mobile hamburger menu */}
             <Button
+              type="button"
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="h-11 w-11 shrink-0 touch-manipulation md:hidden"
               onClick={onMenuClick}
+              aria-label="Open navigation menu"
+              data-testid="button-mobile-menu"
             >
               <Menu className="h-5 w-5" />
             </Button>

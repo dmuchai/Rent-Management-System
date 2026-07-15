@@ -18,6 +18,7 @@
     "db:pull": "dotenv drizzle-kit introspect",
     "test:supabase": "node test-supabase.js",
     "test:api": "node test-api.js",
+    "test:otp": "tsx --test tests/otp/*.test.ts",
     "mobile:sync": "VITE_API_URL=https://landee.kejalink.co.ke npm run build:frontend && npx cap sync",
     "mobile:android": "npm run mobile:sync && npx cap open android",
     "mobile:ios": "npm run mobile:sync && npx cap open ios",

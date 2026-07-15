@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { smsService } from "./_lib/smsService.js";
+import { SmsDeliveryError, maskPhoneNumber, smsService } from "./_lib/smsService.js";
+import { isOtpRateLimited, kenyanPhoneSchema, OTP_EXPIRY_MS, OTP_RESEND_WINDOW_MS } from "./_lib/otp.js";
 import { emailService } from "./_lib/emailService.js";
 import { createDbConnection } from "./_lib/db.js";
 
@@ -398,8 +399,8 @@ export default async function handler(
     /* ---------------------------------------------------------------------- */
     if (action === "verify-otp" && req.method === "POST") {
       const verifySchema = z.object({
-        phoneNumber: z.string().min(10),
-        code: z.string().length(6),
+        phoneNumber: kenyanPhoneSchema,
+        code: z.string().regex(/^\d{6}$/),
       });
 
       const { phoneNumber, code } = verifySchema.parse(req.body);
@@ -453,7 +454,7 @@ export default async function handler(
     /* ---------------------------------------------------------------------- */
     if (action === "send-otp" && req.method === "POST") {
       const sendSchema = z.object({
-        phoneNumber: z.string().min(10),
+        phoneNumber: kenyanPhoneSchema,
       });
 
       const { phoneNumber } = sendSchema.parse(req.body);
@@ -461,7 +462,7 @@ export default async function handler(
 
       try {
         const code = smsService.generateOtp();
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+        const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
 
         await sql`
           INSERT INTO public.otp_codes (phone_number, code, expires_at)
@@ -843,13 +844,23 @@ export default async function handler(
       const user = await getUserFromAuthHeader(req);
       if (!user) return res.status(401).json({ error: "Unauthorized" });
 
-      const requestSchema = z.object({ phoneNumber: z.string() });
+      const requestSchema = z.object({ phoneNumber: kenyanPhoneSchema });
       const { phoneNumber } = requestSchema.parse(req.body);
 
       const sql = createDbConnection();
       try {
+        const [{ count }] = await sql`
+          SELECT COUNT(*)::int AS count FROM public.otp_codes
+          WHERE phone_number = ${phoneNumber}
+            AND created_at > ${new Date(Date.now() - OTP_RESEND_WINDOW_MS)}
+        `;
+        if (isOtpRateLimited(count)) {
+          res.setHeader('Retry-After', Math.ceil(OTP_RESEND_WINDOW_MS / 1000));
+          return res.status(429).json({ error: 'Too many verification requests. Please wait 15 minutes and try again.' });
+        }
+
         const code = smsService.generateOtp();
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
 
         await sql`
           INSERT INTO public.otp_codes (phone_number, code, expires_at)
@@ -861,10 +872,26 @@ export default async function handler(
           message: `Your Landee verification code is: ${code}. Valid for 10 minutes.`
         });
 
+        await sql`
+          UPDATE public.otp_codes SET used = true
+          WHERE phone_number = ${phoneNumber} AND code <> ${code} AND used = false
+        `;
+
         return res.status(200).json({ message: "Verification code sent" });
       } catch (err: any) {
-        console.error("[Auth] Failed to send phone update OTP:", err);
-        return res.status(500).json({ error: "Failed to send verification code" });
+        try {
+          await sql`UPDATE public.otp_codes SET used = true WHERE phone_number = ${phoneNumber} AND used = false`;
+        } catch (cleanupError) {
+          console.error('[Auth] Failed to invalidate undelivered OTP records', { recipient: maskPhoneNumber(phoneNumber) });
+        }
+        console.error('[Auth] Phone verification SMS failed', {
+          recipient: maskPhoneNumber(phoneNumber),
+          provider: err instanceof SmsDeliveryError ? err.provider : 'unknown',
+          status: err instanceof SmsDeliveryError ? err.providerStatus : 'INTERNAL_ERROR',
+          code: err instanceof SmsDeliveryError ? err.providerCode : undefined,
+        });
+        const status = err instanceof SmsDeliveryError && err.provider === 'validation' ? 400 : 502;
+        return res.status(status).json({ error: err instanceof SmsDeliveryError ? err.message : 'Could not send the verification code. Please try again later.' });
       } finally {
         await sql.end();
       }
@@ -879,8 +906,8 @@ export default async function handler(
       if (!user) return res.status(401).json({ error: "Unauthorized" });
 
       const verifySchema = z.object({
-        phoneNumber: z.string(),
-        code: z.string()
+        phoneNumber: kenyanPhoneSchema,
+        code: z.string().regex(/^\d{6}$/)
       });
       const { phoneNumber, code } = verifySchema.parse(req.body);
 
