@@ -1193,22 +1193,37 @@ export default function TenantDashboard() {
                           </div>
                           <div className="space-y-2">
                             <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                               <p className="text-foreground bg-muted/30 p-3 rounded-md border flex-1">
                                 {(user as any)?.phoneNumber || 'Not provided'}
                               </p>
                               {(user as any)?.phoneNumber && (
-                                <Badge variant={(user as any).phoneVerified ? "default" : "destructive"} className={(user as any).phoneVerified ? "bg-green-100 text-green-700" : ""}>
-                                  {(user as any).phoneVerified ? (
-                                    <>
-                                      <CheckCircle className="h-3 w-3 mr-1" /> Verified
-                                    </>
-                                  ) : (
-                                    <>
-                                      <AlertCircle className="h-3 w-3 mr-1" /> Unverified
-                                    </>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant={(user as any).phoneVerified ? "default" : "destructive"} className={(user as any).phoneVerified ? "bg-green-100 text-green-700" : ""}>
+                                    {(user as any).phoneVerified ? (
+                                      <>
+                                        <CheckCircle className="h-3 w-3 mr-1" /> Verified
+                                      </>
+                                    ) : (
+                                      <>
+                                        <AlertCircle className="h-3 w-3 mr-1" /> Unverified
+                                      </>
+                                    )}
+                                  </Badge>
+                                  {!(user as any).phoneVerified && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => {
+                                        const phoneNumber = (user as any).phoneNumber || "";
+                                        setProfileForm((current) => ({ ...current, phoneNumber }));
+                                        requestPhoneUpdateMutation.mutate(phoneNumber);
+                                      }}
+                                      disabled={requestPhoneUpdateMutation.isPending}
+                                    >
+                                      {requestPhoneUpdateMutation.isPending ? "Sending..." : "Verify now"}
+                                    </Button>
                                   )}
-                                </Badge>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -1316,7 +1331,7 @@ export default function TenantDashboard() {
                       onClick={() => requestPhoneUpdateMutation.mutate(profileForm.phoneNumber)}
                       disabled={requestPhoneUpdateMutation.isPending}
                     >
-                      {requestPhoneUpdateMutation.isPending ? "Verify" : "Resend OTP"}
+                      {requestPhoneUpdateMutation.isPending ? "Sending..." : "Send OTP"}
                     </Button>
                   )}
                 </div>

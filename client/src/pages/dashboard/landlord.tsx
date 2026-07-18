@@ -2569,18 +2569,32 @@ export default function LandlordDashboard() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <p className="text-foreground bg-muted/30 p-3 rounded-md border flex-1">
                           {user?.phoneNumber || 'Not provided'}
                         </p>
                         {user?.phoneNumber && (
-                          <Badge variant={user.phoneVerified ? "default" : "destructive"} className={user.phoneVerified ? "bg-green-100 text-green-700" : ""}>
-                            {user.phoneVerified ? (
-                              <><i className="fas fa-check-circle mr-1"></i> Verified</>
-                            ) : (
-                              <><i className="fas fa-exclamation-circle mr-1"></i> Unverified</>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={user.phoneVerified ? "default" : "destructive"} className={user.phoneVerified ? "bg-green-100 text-green-700" : ""}>
+                              {user.phoneVerified ? (
+                                <><i className="fas fa-check-circle mr-1"></i> Verified</>
+                              ) : (
+                                <><i className="fas fa-exclamation-circle mr-1"></i> Unverified</>
+                              )}
+                            </Badge>
+                            {!user.phoneVerified && (
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setProfileForm((current) => ({ ...current, phoneNumber: user.phoneNumber || "" }));
+                                  requestPhoneUpdateMutation.mutate(user.phoneNumber || "");
+                                }}
+                                disabled={requestPhoneUpdateMutation.isPending}
+                              >
+                                {requestPhoneUpdateMutation.isPending ? "Sending..." : "Verify now"}
+                              </Button>
                             )}
-                          </Badge>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -2834,7 +2848,7 @@ export default function LandlordDashboard() {
                     }}
                     disabled={requestPhoneUpdateMutation.isPending}
                   >
-                    {requestPhoneUpdateMutation.isPending ? "Verify" : "Resend OTP"}
+                    {requestPhoneUpdateMutation.isPending ? "Sending..." : "Send OTP"}
                   </Button>
                 )}
               </div>
