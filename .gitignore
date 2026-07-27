@@ -41,6 +41,11 @@ android/app/src/*
 !android/app/src/main/
 android/app/src/main/*
 !android/app/src/main/AndroidManifest.xml
+!android/app/src/main/res/
+android/app/src/main/res/*
+!android/app/src/main/res/values/
+android/app/src/main/res/values/*
+!android/app/src/main/res/values/styles.xml
 !android/app/src/main/java/
 android/app/src/main/java/*
 !android/app/src/main/java/com/
