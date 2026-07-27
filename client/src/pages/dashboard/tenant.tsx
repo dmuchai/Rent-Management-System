@@ -434,7 +434,7 @@ export default function TenantDashboard() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 md:pb-8">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
               {/* Mobile Sticky Navigation Bar */}
-              <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border px-2 py-3 shadow-lg">
+              <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-3 shadow-lg">
                 <TabsList className="grid w-full grid-cols-6 h-14 bg-transparent p-0 gap-1">
                   <TabsTrigger
                     value="overview"
