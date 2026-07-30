@@ -50,6 +50,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AUTH_QUERY_KEYS } from "@/lib/auth-keys";
 import { calculateLedger } from "@/lib/ledger";
+import { resolvePaymentLandlordId } from "@/lib/tenantPayments";
 
 interface DashboardStats {
   activeLease: {
@@ -402,7 +403,10 @@ export default function TenantDashboard() {
     profile: "Profile",
   };
 
-  const landlordId = tenantProfile?.landlordId;
+  // The lease already carries the property's owner. Use it as a resilient
+  // fallback if a previously installed mobile client cannot load the profile.
+  const landlordId = resolvePaymentLandlordId(tenantProfile, activeLease);
+  const paymentLandlordLoading = tenantProfileLoading && !activeLease?.ownerId;
 
   return (
     <div className="min-h-screen bg-background md:flex">
@@ -626,7 +630,7 @@ export default function TenantDashboard() {
                       </CardHeader>
                       <CardContent>
                         {activeLease ? (
-                          tenantProfileLoading ? (
+                          paymentLandlordLoading ? (
                             <div className="text-center py-8">
                               <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                               <p className="text-muted-foreground">Loading payment details...</p>
@@ -906,7 +910,7 @@ export default function TenantDashboard() {
                       </CardHeader>
                       <CardContent>
                         {activeLease ? (
-                          tenantProfileLoading ? (
+                          paymentLandlordLoading ? (
                             <div className="text-center py-8">
                               <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                               <p className="text-muted-foreground">Loading payment details...</p>
