@@ -31,6 +31,7 @@ ios/
 !android/
 android/*
 !android/capacitor.settings.gradle
+!android/gradle.properties
 !android/app/
 android/app/*
 !android/app/build.gradle
@@ -40,6 +41,20 @@ android/app/src/*
 !android/app/src/main/
 android/app/src/main/*
 !android/app/src/main/AndroidManifest.xml
+!android/app/src/main/res/
+android/app/src/main/res/*
+!android/app/src/main/res/values/
+android/app/src/main/res/values/*
+!android/app/src/main/res/values/styles.xml
+!android/app/src/main/java/
+android/app/src/main/java/*
+!android/app/src/main/java/com/
+android/app/src/main/java/com/*
+!android/app/src/main/java/com/rentmanagement/
+android/app/src/main/java/com/rentmanagement/*
+!android/app/src/main/java/com/rentmanagement/app/
+android/app/src/main/java/com/rentmanagement/app/*
+!android/app/src/main/java/com/rentmanagement/app/MainActivity.java
 
 # Ignore IDE cache files
 .idea/caches/

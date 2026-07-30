@@ -769,7 +769,7 @@ export default function Landing() {
       </section>
 
       {/* Sticky CTA */}
-      <div className="fixed bottom-4 left-4 right-4 z-40 sm:left-auto sm:right-6 sm:w-auto">
+      <div className="fixed bottom-4 right-6 z-40 hidden sm:block">
         <Button
           size="lg"
           className="w-full sm:w-auto shadow-lg"

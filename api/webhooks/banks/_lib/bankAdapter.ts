@@ -224,6 +224,9 @@ export const kcbAdapter: BankWebhookAdapter = {
       'requestPayload.additionalData.accountNumber',
       'requestPayload.additionalData.accountNo',
       'requestPayload.additionalData.creditAccountIdentifier',
+      'tillNumber',
+      'requestPayload.primaryData.tillNumber',
+      'requestPayload.additionalData.tillNumber',
     ]);
 
     const destinationPaybill = pickStringByPaths(body, [
@@ -239,8 +242,6 @@ export const kcbAdapter: BankWebhookAdapter = {
       'requestPayload.additionalData.paybillNumber',
       'requestPayload.additionalData.businessNo',
       'requestPayload.additionalData.organizationShortCode',
-      'requestPayload.primaryData.tillNumber',
-      'requestPayload.additionalData.tillNumber',
     ]);
 
     const payerPhone = normalizePhone(

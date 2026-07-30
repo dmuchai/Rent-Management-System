@@ -52,7 +52,7 @@ function stableStringify(value: unknown): string {
   return `{${body}}`;
 }
 
-function verifyRsaSha256(
+export function verifyRsaSha256(
   payload: string,
   signatureBase64: string,
   publicKeyPem: string
@@ -274,7 +274,8 @@ export async function handleBankWebhook(
         payer_account_ref,
         transaction_time,
         raw_payload,
-        reconciliation_status
+        reconciliation_status,
+        is_verified
       ) VALUES (
         'bank_webhook',
         ${provider},
@@ -288,7 +289,8 @@ export async function handleBankWebhook(
         ${normalized.payerAccountRef || normalized.referenceCode || null},
         ${normalized.transactionTime.toISOString()},
         ${JSON.stringify(normalized.rawPayload)},
-        'unmatched'
+        'unmatched',
+        ${provider === 'kcb' && Boolean(process.env.KCB_WEBHOOK_PUBLIC_KEY)}
       )
       ON CONFLICT (provider, external_transaction_id) DO NOTHING
       RETURNING id

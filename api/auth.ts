@@ -5,13 +5,16 @@ import { SmsDeliveryError, maskPhoneNumber, smsService } from "./_lib/smsService
 import { isOtpRateLimited, kenyanPhoneSchema, OTP_EXPIRY_MS, OTP_RESEND_WINDOW_MS } from "./_lib/otp.js";
 import { emailService } from "./_lib/emailService.js";
 import { createDbConnection } from "./_lib/db.js";
+import { checkRateLimit } from "./_lib/rate-limit.js";
 
 /**
  * IMPORTANT PRINCIPLES
  * --------------------
  * • Browser owns authentication & sessions
- * • Backend NEVER creates, stores, or refreshes sessions
- * • Backend ONLY:
+ * • Backend never stores or refreshes sessions
+ * • The mobile-username exchange returns Supabase tokens to the browser,
+ *   which immediately takes ownership of the session
+ * • Backend otherwise only:
  *   - syncs user profile data
  *   - performs authenticated domain logic
  */
@@ -131,6 +134,65 @@ export default async function handler(
   }
 
   try {
+
+    /* ---------------------------------------------------------------------- */
+    /* Login with mobile-number username                                      */
+    /* POST /api/auth?action=login                                             */
+    /* ---------------------------------------------------------------------- */
+    if (action === "login" && req.method === "POST") {
+      const rateLimitResult = await checkRateLimit(req, "login");
+      res.setHeader("X-RateLimit-Remaining", String(rateLimitResult.remaining));
+
+      if (!rateLimitResult.allowed) {
+        res.setHeader("Retry-After", String(rateLimitResult.retryAfter || 60));
+        return res.status(429).json({
+          error: "Too many sign-in attempts. Please wait a minute and try again.",
+        });
+      }
+
+      const loginSchema = z.object({
+        username: kenyanPhoneSchema,
+        password: z.string().min(1, "Password is required"),
+      });
+      const { username, password } = loginSchema.parse(req.body || {});
+
+      // Older accounts may contain any of the formats accepted by the UI.
+      // Search all canonical variants so this change does not lock them out.
+      const localPhone = `0${username.slice(3)}`;
+      const phoneVariants = [username, `+${username}`, localPhone];
+      const admin = getAdminClient();
+      const { data: profiles, error: lookupError } = await admin
+        .from("users")
+        .select("email")
+        .in("phone_number", phoneVariants)
+        .limit(2);
+
+      if (lookupError) {
+        console.error("[Auth] Username lookup failed:", lookupError.message);
+        return res.status(500).json({ error: "Sign-in is temporarily unavailable. Please try again." });
+      }
+
+      const email = profiles?.length === 1 ? profiles[0]?.email : null;
+      if (!email) {
+        return res.status(400).json({ error: "Invalid username or password" });
+      }
+
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (error || !data.session) {
+        // Keep this response generic so the endpoint does not reveal registered numbers.
+        return res.status(400).json({ error: "Invalid username or password" });
+      }
+
+      return res.status(200).json({
+        session: {
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        },
+        user: { id: data.user.id },
+      });
+    }
 
     /* ---------------------------------------------------------------------- */
     /* Sync user to public.users                                               */
@@ -274,7 +336,7 @@ export default async function handler(
         password: z.string().min(8),
         firstName: z.string().min(1),
         lastName: z.string().min(1),
-        phoneNumber: z.string().min(10).max(15).regex(/^\+?[0-9]+$/, "Invalid phone number"),
+        phoneNumber: kenyanPhoneSchema,
         role: z.enum(["landlord", "tenant", "property_manager"]).optional(),
       });
 

@@ -24,6 +24,9 @@ export default async (req: VercelRequest, res: VercelResponse) => {
           updated_at
         FROM public.tenants 
         WHERE user_id = ${auth.userId}
+           OR LOWER(email) = LOWER(${auth.user.email || ''})
+        ORDER BY CASE WHEN user_id = ${auth.userId} THEN 0 ELSE 1 END
+        LIMIT 1
       `;
 
             if (!tenant) {

@@ -41,7 +41,7 @@ function Router() {
           return;
         }
 
-        // If authenticated and on landing/login page, redirect to dashboard
+        // The root route is the sign-in page for returning users.
         if (location === "/" || location === "/login") {
           console.log('[Router] Authenticated user on public page, redirecting to /dashboard');
           setLocation("/dashboard");
@@ -66,8 +66,9 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/" component={Landing} />
+      <Route path="/" component={Login} />
       <Route path="/login" component={Login} />
+      <Route path="/home" component={Landing} />
       <Route path="/register" component={Register} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/check-email" component={CheckEmail} />

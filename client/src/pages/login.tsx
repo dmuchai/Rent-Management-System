@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE_URL } from "@/lib/config";
 import { apiRequest } from "@/lib/queryClient";
 import { Eye, EyeOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,7 +21,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
-    email: "",
+    username: "",
     password: "",
   });
   // Auth guard: redirect authenticated users to dashboard
@@ -70,40 +69,33 @@ export default function Login() {
     }
   }, [toast]);
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      console.log('[Login] Starting email login process...');
+      console.log('[Login] Starting mobile-number login process...');
 
-      // Perform sign-in directly from the browser so Supabase can manage
-      // the session (browser owns sessions). This avoids a server-side
-      // `/api/auth?action=login` route and is the recommended flow.
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: formData.email,
+      const response = await apiRequest("POST", "/api/auth?action=login", {
+        username: formData.username,
         password: formData.password,
       });
+      const data = await response.json();
 
-      if (error) {
-        console.error('[Login] Sign-in failed:', error.message);
-        // Supabase returns this exact string when email is unconfirmed
-        if (error.message?.toLowerCase().includes('email not confirmed')) {
-          toast({
-            title: "Email not verified",
-            description: "Please click the verification link in your email before signing in. Check your spam folder if you can't find it.",
-            variant: "destructive",
-            duration: 8000,
-          });
-          setIsLoading(false);
-          return;
-        }
-        throw new Error(error.message || "Login failed");
+      if (!data.session?.access_token || !data.session?.refresh_token) {
+        throw new Error("Sign-in failed. Please try again.");
+      }
+
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+      if (sessionError) {
+        throw sessionError;
       }
 
       if (import.meta.env.DEV) {
         console.log('[Login] Sign-in successful. User ID:', data.user?.id);
-        console.log('[Login] Session:', data.session ? 'Created' : 'None');
       }
 
       toast({ title: "Success", description: "Logged in successfully!" });
@@ -128,7 +120,7 @@ export default function Login() {
       console.error('[Login] Login error:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Invalid email or password",
+        description: error instanceof Error ? error.message : "Invalid username or password",
         variant: "destructive",
       });
     } finally {
@@ -202,19 +194,25 @@ export default function Login() {
             <CardDescription>Sign in to your account to continue</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Email/Password Form */}
-            <form onSubmit={handleEmailLogin} className="space-y-4">
+            {/* Username/Password Form */}
+            <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="username">Username</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  id="username"
+                  name="username"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="username"
+                  placeholder="0712 345 678"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   required
                   disabled={isLoading}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Use your registered mobile number.
+                </p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -306,13 +304,13 @@ export default function Login() {
           </CardContent>
         </Card>
 
-        {/* Back to Home */}
+        {/* Marketing website link */}
         <div className="text-center mt-4">
           <button
-            onClick={() => setLocation("/")}
+            onClick={() => setLocation("/home")}
             className="text-sm text-muted-foreground hover:text-foreground"
           >
-            ← Back to home
+            Visit the Landee homepage
           </button>
         </div>
 
