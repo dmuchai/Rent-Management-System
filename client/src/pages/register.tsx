@@ -315,7 +315,7 @@ export default function Register() {
         {/* Back to Home */}
         <div className="text-center mt-4">
           <button
-            onClick={() => setLocation("/")}
+            onClick={() => setLocation("/home")}
             className="text-sm text-muted-foreground hover:text-foreground"
           >
             ← Back to home

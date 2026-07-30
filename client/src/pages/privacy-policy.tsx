@@ -15,7 +15,7 @@ export default function PrivacyPolicy() {
             <p className="text-sm text-muted-foreground mt-2">Effective date: Feb 12, 2026</p>
           </div>
           <Button asChild variant="outline">
-            <Link href="/">Back to home</Link>
+            <Link href="/home">Back to home</Link>
           </Button>
         </div>
       </header>
