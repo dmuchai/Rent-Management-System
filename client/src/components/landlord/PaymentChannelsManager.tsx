@@ -104,9 +104,32 @@ const paymentChannelFormSchema = paymentChannelBaseSchema
   });
 
 const paymentChannelEditSchema = paymentChannelBaseSchema.pick({
+  channelType: true,
+  bankPaybillNumber: true,
+  bankAccountNumber: true,
   displayName: true,
   notes: true,
   isPrimary: true,
+}).superRefine((data, ctx) => {
+  if (data.channelType !== "mpesa_to_bank") return;
+
+  if (!data.bankAccountNumber) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["bankAccountNumber"],
+      message: "KCB creditAccountIdentifier is required",
+    });
+    return;
+  }
+
+  const accountValidation = validateBankAccount(data.bankPaybillNumber, data.bankAccountNumber);
+  if (!accountValidation.valid) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["bankAccountNumber"],
+      message: accountValidation.error || "Enter a valid bank account identifier",
+    });
+  }
 });
 
 export default function PaymentChannelsManager() {
@@ -276,6 +299,9 @@ export default function PaymentChannelsManager() {
           displayName: validation.data.displayName,
           notes: validation.data.notes,
           isPrimary: validation.data.isPrimary,
+          ...(editingChannel.channelType === "mpesa_to_bank"
+            ? { bankAccountNumber: validation.data.bankAccountNumber }
+            : {}),
         },
       }, {
         onSuccess: () => {
@@ -316,8 +342,8 @@ export default function PaymentChannelsManager() {
       channelType: channel.channelType as any,
       paybillNumber: channel.paybillNumber || "",
       tillNumber: channel.tillNumber || "",
-      bankPaybillNumber: "",
-      bankAccountNumber: "",
+      bankPaybillNumber: channel.bankPaybillNumber || "",
+      bankAccountNumber: channel.bankAccountNumber || "",
       bankName: channel.bankName || "",
       accountNumber: channel.accountNumber || "",
       accountName: channel.accountName || "",
@@ -649,7 +675,7 @@ export default function PaymentChannelsManager() {
             <DialogTitle>{editingChannel ? "Edit Payment Channel" : "Add Payment Channel"}</DialogTitle>
             <DialogDescription>
               {editingChannel
-                ? "Update display name or notes. Channel details are read-only."
+                ? "Update the saved payment information tenants and KCB use."
                 : "Configure how you receive rent payments from your tenants"}
             </DialogDescription>
           </DialogHeader>
@@ -814,6 +840,41 @@ export default function PaymentChannelsManager() {
                 />
                 {errors.accountName && <p className="mt-1 text-sm text-destructive">{errors.accountName}</p>}
               </div>
+              </>
+            )}
+
+            {editingChannel && formData.channelType === "mpesa_to_bank" && (
+              <>
+                <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                  <p className="font-medium">{formData.bankName || "Bank account channel"}</p>
+                  <p className="text-muted-foreground">Bank paybill: {formData.bankPaybillNumber}</p>
+                </div>
+
+                <div>
+                  <Label htmlFor="bankAccountNumber">
+                    KCB creditAccountIdentifier / Bank Account Number
+                  </Label>
+                  <Input
+                    id="bankAccountNumber"
+                    placeholder="Enter the production account identifier"
+                    value={formData.bankAccountNumber}
+                    onChange={(e) =>
+                      setField(
+                        "bankAccountNumber",
+                        e.target.value.replace(/[^A-Za-z0-9]/g, "")
+                      )
+                    }
+                    className={errors.bankAccountNumber ? "border-destructive" : ""}
+                    autoComplete="off"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    This must exactly match the creditAccountIdentifier sent in KCB Account IPN callbacks.
+                  </p>
+                  {errors.bankAccountNumber && (
+                    <p className="mt-1 text-sm text-destructive">{errors.bankAccountNumber}</p>
+                  )}
+                </div>
               </>
             )}
 
