@@ -87,15 +87,15 @@ function parseTimestamp(value: unknown): Date {
     return direct;
   }
 
-  // Supports compact format: YYYYMMDDHHmmss
+  // KCB documents both YYYYMMDDHHmm and YYYYMMDDHHmmss timestamps.
   const compact = value.trim();
-  if (/^\d{14}$/.test(compact)) {
+  if (/^\d{12}(?:\d{2})?$/.test(compact)) {
     const year = Number(compact.slice(0, 4));
     const month = Number(compact.slice(4, 6)) - 1;
     const day = Number(compact.slice(6, 8));
     const hour = Number(compact.slice(8, 10));
     const minute = Number(compact.slice(10, 12));
-    const second = Number(compact.slice(12, 14));
+    const second = compact.length === 14 ? Number(compact.slice(12, 14)) : 0;
     const parsed = new Date(Date.UTC(year, month, day, hour, minute, second));
     if (!Number.isNaN(parsed.getTime())) {
       return parsed;
@@ -146,6 +146,8 @@ export const kcbAdapter: BankWebhookAdapter = {
       'requestPayload.additionalData.transactionId',
       'requestPayload.additionalData.transactionID',
       'requestPayload.additionalData.transactionReference',
+      'requestPayload.additionalData.notificationData.transactionID',
+      'requestPayload.additionalData.notificationData.transactionId',
       'responsePayload.transactionInfo.transactionId',
       'responsePayload.transactionInfo.transactionID',
       'id',
@@ -165,6 +167,8 @@ export const kcbAdapter: BankWebhookAdapter = {
       getByPath(body, 'requestPayload.primaryData.amount'),
       getByPath(body, 'requestPayload.additionalData.amount'),
       getByPath(body, 'requestPayload.additionalData.transactionAmount'),
+      getByPath(body, 'requestPayload.additionalData.notificationData.transactionAmt'),
+      getByPath(body, 'requestPayload.additionalData.notificationData.transactionAmount'),
       getByPath(body, 'responsePayload.transactionInfo.amount'),
     ].find((value) => {
       try {
@@ -190,6 +194,7 @@ export const kcbAdapter: BankWebhookAdapter = {
       getByPath(body, 'requestPayload.primaryData.timeStamp'),
       getByPath(body, 'requestPayload.additionalData.timestamp'),
       getByPath(body, 'requestPayload.additionalData.timeStamp'),
+      getByPath(body, 'requestPayload.additionalData.notificationData.transactionDate'),
     ].find((value) => {
       try {
         parseTimestamp(value);
@@ -206,6 +211,7 @@ export const kcbAdapter: BankWebhookAdapter = {
         'transaction_currency',
         'requestPayload.primaryData.currency',
         'requestPayload.additionalData.currency',
+        'requestPayload.additionalData.notificationData.currency',
       ]) || 'KES';
 
     const destinationAccount = pickStringByPaths(body, [
@@ -227,6 +233,7 @@ export const kcbAdapter: BankWebhookAdapter = {
       'tillNumber',
       'requestPayload.primaryData.tillNumber',
       'requestPayload.additionalData.tillNumber',
+      'requestPayload.primaryData.businessKey',
     ]);
 
     const destinationPaybill = pickStringByPaths(body, [
@@ -257,6 +264,7 @@ export const kcbAdapter: BankWebhookAdapter = {
         'requestPayload.additionalData.phoneNumber',
         'requestPayload.additionalData.msisdn',
         'requestPayload.additionalData.customerMobileNumber',
+        'requestPayload.additionalData.notificationData.debitMSISDN',
       ])
     );
 
@@ -267,6 +275,7 @@ export const kcbAdapter: BankWebhookAdapter = {
       'customerName',
       'requestPayload.primaryData.customerName',
       'requestPayload.additionalData.customerName',
+      'requestPayload.additionalData.notificationData.firstName',
     ]);
     const payerAccountRef = pickStringByPaths(body, [
       'payer_account_ref',
@@ -281,6 +290,8 @@ export const kcbAdapter: BankWebhookAdapter = {
       'requestPayload.additionalData.accountReference',
       'requestPayload.additionalData.customerReference',
       'requestPayload.additionalData.narration',
+      'requestPayload.additionalData.notificationData.businessKey',
+      'requestPayload.additionalData.notificationData.narration',
     ]);
     const referenceCode = pickStringByPaths(body, [
       'reference_code',
@@ -296,6 +307,8 @@ export const kcbAdapter: BankWebhookAdapter = {
       'requestPayload.additionalData.referenceCode',
       'requestPayload.additionalData.transactionReference',
       'requestPayload.additionalData.customerReference',
+      'requestPayload.additionalData.notificationData.businessKey',
+      'requestPayload.additionalData.notificationData.transactionID',
     ]);
 
     return {

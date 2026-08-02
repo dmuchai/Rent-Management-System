@@ -19,6 +19,38 @@ const sampleIpn = {
   tillNumber: "1234567",
 };
 
+const documentedTillIpn = {
+  header: {
+    messageID: "12345",
+    originatorConversationID: "TEJ6CQQPBQ",
+    channelCode: "202",
+    timeStamp: "20250519133100",
+  },
+  requestPayload: {
+    primaryData: {
+      businessKey: "1234567",
+      businessKeyType: "notifyBiller",
+    },
+    additionalData: {
+      notificationData: {
+        businessKey: "INV-CATHERINE-0826",
+        businessKeyType: "BillReferenceNumber",
+        debitMSISDN: "254711000000",
+        transactionAmt: "1000",
+        transactionDate: "Mon May 19 13:30:54 EAT 2025",
+        transactionID: "FT25139M3RM6",
+        firstName: "PETER BOR",
+        middleName: "",
+        lastName: "",
+        currency: "KES",
+        narration: "School Fees",
+        transactionType: "MPESA",
+        balance: "0",
+      },
+    },
+  },
+};
+
 test("normalizes a KCB account IPN for channel lookup and reconciliation", () => {
   const payment = kcbAdapter.normalize(sampleIpn);
 
@@ -38,6 +70,25 @@ test("uses tillNumber as the channel identifier when no account identifier is pr
   const payment = kcbAdapter.normalize(tillIpn);
 
   assert.equal(payment.destinationAccount, "1234567");
+});
+
+test("normalizes KCB's documented nested till notification", () => {
+  const payment = kcbAdapter.normalize(documentedTillIpn);
+
+  assert.equal(payment.transactionId, "FT25139M3RM6");
+  assert.equal(payment.amount, 1_000);
+  assert.equal(payment.currency, "KES");
+  assert.equal(payment.payerPhone, "+254711000000");
+  assert.equal(payment.payerName, "PETER BOR");
+  assert.equal(payment.payerAccountRef, "INV-CATHERINE-0826");
+  assert.equal(payment.destinationAccount, "1234567");
+  assert.equal(payment.transactionTime.toISOString(), "2025-05-19T13:31:00.000Z");
+});
+
+test("normalizes KCB's documented 12-digit account timestamp", () => {
+  const payment = kcbAdapter.normalize({ ...sampleIpn, timestamp: "202111110305" });
+
+  assert.equal(payment.transactionTime.toISOString(), "2021-11-11T03:05:00.000Z");
 });
 
 test("verifies SHA256withRSA signatures and rejects altered payloads", () => {
