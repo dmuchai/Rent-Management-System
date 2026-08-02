@@ -87,15 +87,16 @@ function parseTimestamp(value: unknown): Date {
     return direct;
   }
 
-  // KCB documents both YYYYMMDDHHmm and YYYYMMDDHHmmss timestamps.
+  // KCB examples contain YYYYMMDDHHmm, YYYYMMDDHHmms, and YYYYMMDDHHmmss.
   const compact = value.trim();
-  if (/^\d{12}(?:\d{2})?$/.test(compact)) {
+  if (/^\d{12,14}$/.test(compact)) {
     const year = Number(compact.slice(0, 4));
     const month = Number(compact.slice(4, 6)) - 1;
     const day = Number(compact.slice(6, 8));
     const hour = Number(compact.slice(8, 10));
     const minute = Number(compact.slice(10, 12));
-    const second = compact.length === 14 ? Number(compact.slice(12, 14)) : 0;
+    const secondDigits = compact.slice(12);
+    const second = secondDigits ? Number(secondDigits.padStart(2, '0')) : 0;
     const parsed = new Date(Date.UTC(year, month, day, hour, minute, second));
     if (!Number.isNaN(parsed.getTime())) {
       return parsed;

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createVerify } from 'crypto';
+import { createVerify, randomUUID } from 'crypto';
 import { createDbConnection } from '../../../_lib/db.js';
 import { reconcilePayment, recordReconciliation } from '../../../_lib/reconciliationEngine.js';
 import { bankWebhookAdapters, type BankProvider } from './bankAdapter.js';
@@ -35,21 +35,18 @@ function normalizePemKey(value: string): string {
   return value.replace(/\\n/g, '\n').trim();
 }
 
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value);
-  }
+const MAX_KCB_REQUEST_BYTES = 1024 * 1024;
 
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`;
-  }
+export type KcbNotificationKind = 'auto' | 'till' | 'account';
 
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  const body = keys
-    .map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`)
-    .join(',');
-  return `{${body}}`;
+export class KcbRequestError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    message: string
+  ) {
+    super(message);
+    this.name = 'KcbRequestError';
+  }
 }
 
 export function verifyRsaSha256(
@@ -67,45 +64,66 @@ export function verifyRsaSha256(
   }
 }
 
-function hasValidKcbSignature(req: VercelRequest, provider: BankProvider): boolean {
-  if (provider !== 'kcb') {
-    return true;
-  }
-
-  const configuredKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
-  if (!configuredKey) {
-    // Allow non-production sandbox/dev flow without a configured key.
-    return process.env.NODE_ENV !== 'production';
-  }
-
+function getKcbSignature(req: VercelRequest): string | undefined {
   const headerName = (process.env.KCB_WEBHOOK_SIGNATURE_HEADER || 'signature').toLowerCase();
   const signatureHeader =
     req.headers[headerName] ?? req.headers.signature ?? req.headers['x-signature'];
-  const signature = Array.isArray(signatureHeader)
+  return Array.isArray(signatureHeader)
     ? signatureHeader[0]
     : signatureHeader?.toString();
+}
+
+export async function readKcbRawBody(req: VercelRequest): Promise<string> {
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > MAX_KCB_REQUEST_BYTES) {
+      throw new KcbRequestError(413, 'KCB request body is too large');
+    }
+    chunks.push(buffer);
+  }
+
+  if (chunks.length === 0) {
+    throw new KcbRequestError(400, 'KCB request body is required');
+  }
+
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+export async function readAndVerifyKcbPayload(
+  req: VercelRequest
+): Promise<Record<string, unknown>> {
+  const configuredKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  if (!configuredKey && process.env.NODE_ENV === 'production') {
+    throw new KcbRequestError(500, 'KCB webhook public key is not configured');
+  }
+
+  const rawBody = await readKcbRawBody(req);
+  const signature = getKcbSignature(req);
 
   if (!signature) {
-    return false;
+    throw new KcbRequestError(403, 'Invalid signature');
   }
 
-  const publicKeyPem = normalizePemKey(configuredKey);
-  const payloadCandidates: string[] = [];
-
-  if (typeof req.body === 'string') {
-    payloadCandidates.push(req.body);
-  } else if (Buffer.isBuffer(req.body)) {
-    payloadCandidates.push(req.body.toString('utf8'));
-  } else {
-    payloadCandidates.push(JSON.stringify(req.body));
-    payloadCandidates.push(stableStringify(req.body));
+  if (configuredKey) {
+    const publicKeyPem = normalizePemKey(configuredKey);
+    if (!verifyRsaSha256(rawBody, signature, publicKeyPem)) {
+      throw new KcbRequestError(403, 'Invalid signature');
+    }
   }
 
-  // Try a small set of canonical payload encodings to improve interop with
-  // providers that sign minified or key-sorted JSON.
-  return payloadCandidates.some((candidate) =>
-    verifyRsaSha256(candidate, signature, publicKeyPem)
-  );
+  try {
+    const parsed = JSON.parse(rawBody);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Expected a JSON object');
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    throw new KcbRequestError(400, 'Invalid JSON payload');
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -128,20 +146,23 @@ function pickString(obj: Record<string, unknown> | undefined, keys: string[]): s
   return undefined;
 }
 
-function isKcbTillNotification(req: VercelRequest): boolean {
-  const body = asRecord(req.body);
-  return Boolean(asRecord(body?.header) || asRecord(body?.requestPayload));
+export function detectKcbNotificationKind(payload: unknown): 'till' | 'account' {
+  const body = asRecord(payload);
+  return asRecord(body?.header) && asRecord(body?.requestPayload) ? 'till' : 'account';
 }
 
-function buildKcbTillAck(
-  req: VercelRequest,
+export function buildKcbTillAck(
+  payload: unknown,
   options: { statusCode: string; statusMessage: string; transactionId?: string }
 ): Record<string, unknown> {
-  const body = asRecord(req.body);
+  const body = asRecord(payload);
   const header = asRecord(body?.header);
 
-  const messageID = (header?.messageID as string) || 'N/A';
-  const originatorConversationID = (header?.originatorConversationID as string) || 'N/A';
+  const messageID = typeof header?.messageID === 'string' ? header.messageID : 'N/A';
+  const originatorConversationID =
+    typeof header?.originatorConversationID === 'string'
+      ? header.originatorConversationID
+      : '';
 
   const ack: Record<string, unknown> = {
     header: {
@@ -160,15 +181,15 @@ function buildKcbTillAck(
   return ack;
 }
 
-function buildKcbAccountAck(
-  req: VercelRequest,
+export function buildKcbAccountAck(
+  payload: unknown,
   options: { statusCode: string; statusMessage: string; transactionId?: string }
 ): Record<string, unknown> {
-  const body = asRecord(req.body);
+  const body = asRecord(payload);
   const transactionID =
-    pickString(body, ['requestId', 'transactionID', 'transactionId', 'transactionReference']) ||
     options.transactionId ||
-    'N/A';
+    pickString(body, ['requestId', 'transactionID', 'transactionId', 'transactionReference']) ||
+    randomUUID();
 
   return {
     transactionID,
@@ -177,56 +198,82 @@ function buildKcbAccountAck(
   };
 }
 
-function buildKcbAck(
-  req: VercelRequest,
+export function buildKcbAck(
+  payload: unknown,
+  kind: KcbNotificationKind,
   options: { statusCode: string; statusMessage: string; transactionId?: string }
 ): Record<string, unknown> {
-  return isKcbTillNotification(req)
-    ? buildKcbTillAck(req, options)
-    : buildKcbAccountAck(req, options);
+  const resolvedKind = kind === 'auto' ? detectKcbNotificationKind(payload) : kind;
+  return resolvedKind === 'till'
+    ? buildKcbTillAck(payload, options)
+    : buildKcbAccountAck(payload, options);
+}
+
+export function resolveKcbAcknowledgementId(
+  insertedEventId?: string,
+  existingEventId?: string
+): string {
+  return insertedEventId || existingEventId || randomUUID();
 }
 
 function sendProviderResponse(
-  req: VercelRequest,
+  payload: unknown,
   res: VercelResponse,
   provider: BankProvider,
   body: Record<string, unknown>,
-  ack: { statusCode: string; statusMessage: string; transactionId?: string }
+  ack: { statusCode: string; statusMessage: string; transactionId?: string },
+  kcbKind: KcbNotificationKind
 ) {
   if (provider !== 'kcb') {
     return res.status(200).json(body);
   }
 
-  return res.status(200).json(buildKcbAck(req, ack));
+  return res.status(200).json(buildKcbAck(payload, kcbKind, ack));
 }
 
 export async function handleBankWebhook(
   req: VercelRequest,
   res: VercelResponse,
-  provider: BankProvider
+  provider: BankProvider,
+  options: { kcbNotificationKind?: KcbNotificationKind } = {}
 ) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!hasValidKcbSignature(req, provider)) {
-    if (provider === 'kcb' && !process.env.KCB_WEBHOOK_PUBLIC_KEY && process.env.NODE_ENV === 'production') {
-      return res.status(500).json({
-        error: 'KCB webhook public key is not configured',
-      });
+  const kcbKind = options.kcbNotificationKind || 'auto';
+  let payload: unknown;
+
+  if (provider === 'kcb') {
+    try {
+      payload = await readAndVerifyKcbPayload(req);
+    } catch (error) {
+      if (error instanceof KcbRequestError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      return res.status(400).json({ error: 'Invalid KCB request' });
     }
-    return res.status(403).json({ error: 'Invalid signature' });
+  } else {
+    payload = req.body;
   }
 
   if (!hasValidWebhookSecret(req, provider)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
+  if (provider === 'kcb' && kcbKind !== 'auto' && detectKcbNotificationKind(payload) !== kcbKind) {
+    return res.status(200).json(buildKcbAck(payload, kcbKind, {
+      statusCode: '1',
+      statusMessage: `Invalid ${kcbKind} notification payload`,
+      transactionId: randomUUID(),
+    }));
+  }
+
   const adapter = bankWebhookAdapters[provider];
   const sql = createDbConnection();
 
   try {
-    const normalized = adapter.normalize(req.body);
+    const normalized = adapter.normalize(payload);
 
     // Build the WHERE clause to avoid NULL parameter type inference issues
     let channel: any = undefined;
@@ -297,27 +344,37 @@ export async function handleBankWebhook(
     `;
 
     if (inserted.count === 0) {
-      return sendProviderResponse(req, res, provider, {
+      const [existingEvent] = await sql`
+        SELECT id
+        FROM public.external_payment_events
+        WHERE provider = ${provider}
+          AND external_transaction_id = ${normalized.transactionId}
+        LIMIT 1
+      `;
+      const acknowledgementId = resolveKcbAcknowledgementId(undefined, existingEvent?.id);
+
+      return sendProviderResponse(payload, res, provider, {
         success: true,
         message: 'Already processed',
       }, {
         statusCode: '0',
         statusMessage: 'Already processed',
-        transactionId: normalized.transactionId,
-      });
+        transactionId: acknowledgementId,
+      }, kcbKind);
     }
 
     const [paymentEvent] = inserted;
+    const acknowledgementId = resolveKcbAcknowledgementId(paymentEvent.id);
 
     if (!channel) {
-      return sendProviderResponse(req, res, provider, {
+      return sendProviderResponse(payload, res, provider, {
         success: true,
         message: 'Payment stored (channel not recognized)',
       }, {
         statusCode: '0',
         statusMessage: 'Payment stored',
-        transactionId: normalized.transactionId,
-      });
+        transactionId: acknowledgementId,
+      }, kcbKind);
     }
 
     const reconciliationResult = await reconcilePayment(sql, {
@@ -334,7 +391,7 @@ export async function handleBankWebhook(
 
     await recordReconciliation(sql, paymentEvent.id, normalized.amount, reconciliationResult);
 
-    return sendProviderResponse(req, res, provider, {
+    return sendProviderResponse(payload, res, provider, {
       success: true,
       message: reconciliationResult.matched ? 'Payment matched' : 'Payment queued for review',
       matched: reconciliationResult.matched,
@@ -344,11 +401,11 @@ export async function handleBankWebhook(
     }, {
       statusCode: '0',
       statusMessage: reconciliationResult.matched ? 'Notification received successfully' : 'Notification received',
-      transactionId: normalized.transactionId,
-    });
+      transactionId: acknowledgementId,
+    }, kcbKind);
   } catch (error: any) {
     console.error(`[${provider.toUpperCase()} Webhook] Error:`, error);
-    return sendProviderResponse(req, res, provider, {
+    return sendProviderResponse(payload, res, provider, {
       success: false,
       message: 'Payment received (processing error)',
       error: process.env.NODE_ENV === 'development' ? error?.message : undefined,
@@ -356,7 +413,8 @@ export async function handleBankWebhook(
     }, {
       statusCode: '1',
       statusMessage: 'Processing error',
-    });
+      transactionId: randomUUID(),
+    }, kcbKind);
   } finally {
     await sql.end();
   }

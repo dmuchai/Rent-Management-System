@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
+import { validateBankAccount } from '../../shared/bankPaybills.js';
 import { z } from 'zod';
 
 // GET /api/landlord/payment-channels - List landlord's payment channels (auth required)
@@ -334,22 +335,59 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       }
 
       const updateSchema = z.object({
-        displayName: z.string().min(1).optional(),
+        displayName: z.string().trim().min(1).max(80).optional(),
+        bankAccountNumber: z.string().trim().optional(),
         isPrimary: z.boolean().optional(),
         isActive: z.boolean().optional(),
-        notes: z.string().optional(),
+        notes: z.string().trim().max(500).optional(),
       });
 
       const updateData = updateSchema.parse(req.body);
 
       // Verify ownership
       const [channel] = await sql`
-        SELECT id FROM public.landlord_payment_channels
+        SELECT id, channel_type, bank_paybill_number, bank_account_number
+        FROM public.landlord_payment_channels
         WHERE id = ${channelId} AND landlord_id = ${auth.userId}
       `;
 
       if (!channel) {
         return res.status(404).json({ error: 'Channel not found' });
+      }
+
+      if (updateData.bankAccountNumber !== undefined) {
+        if (channel.channel_type !== 'mpesa_to_bank' || !channel.bank_paybill_number) {
+          return res.status(400).json({
+            error: 'Bank account identifier can only be changed for M-Pesa-to-bank channels',
+          });
+        }
+
+        const accountValidation = validateBankAccount(
+          channel.bank_paybill_number,
+          updateData.bankAccountNumber
+        );
+        if (!accountValidation.valid) {
+          return res.status(400).json({
+            error: 'Invalid bank account identifier',
+            details: accountValidation.error,
+          });
+        }
+
+        const [duplicateChannel] = await sql`
+          SELECT id
+          FROM public.landlord_payment_channels
+          WHERE landlord_id = ${auth.userId}
+            AND bank_paybill_number = ${channel.bank_paybill_number}
+            AND bank_account_number = ${updateData.bankAccountNumber}
+            AND id != ${channelId}
+          LIMIT 1
+        `;
+
+        if (duplicateChannel) {
+          return res.status(400).json({
+            error: 'This bank account identifier is already registered',
+          });
+        }
       }
 
       // If setting as primary, unset other primary channels
@@ -365,10 +403,11 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       const [updated] = await sql`
         UPDATE public.landlord_payment_channels
         SET 
-          display_name = COALESCE(${updateData.displayName || null}, display_name),
+          display_name = COALESCE(${updateData.displayName ?? null}, display_name),
+          bank_account_number = COALESCE(${updateData.bankAccountNumber ?? null}, bank_account_number),
           is_primary = COALESCE(${updateData.isPrimary ?? null}, is_primary),
           is_active = COALESCE(${updateData.isActive ?? null}, is_active),
-          notes = COALESCE(${updateData.notes || null}, notes),
+          notes = COALESCE(${updateData.notes ?? null}, notes),
           updated_at = NOW()
         WHERE id = ${channelId} AND landlord_id = ${auth.userId}
         RETURNING *
@@ -379,6 +418,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         channelType: updated.channel_type,
         paybillNumber: updated.paybill_number,
         tillNumber: updated.till_number,
+        bankPaybillNumber: updated.bank_paybill_number,
+        bankAccountNumber: updated.bank_account_number,
         bankName: updated.bank_name,
         accountNumber: updated.account_number,
         accountName: updated.account_name,

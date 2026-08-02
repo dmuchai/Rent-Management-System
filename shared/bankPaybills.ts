@@ -20,7 +20,7 @@ export const KENYA_BANK_PAYBILLS = {
   KCB_VOOMA_TILL: {
     name: "KCB Bank (Lipa na KCB / Vooma Till)",
     paybill: "522533",
-    accountFormat: /^\d{6,13}$/,  // Till or account references may vary by setup
+    accountFormat: /^[A-Za-z0-9]{6,13}$/,  // Till or account references may vary by setup
   },
   COOPERATIVE_BANK: {
     name: "Co-operative Bank",
