@@ -175,7 +175,9 @@ export default function Register() {
                   <Label htmlFor="email">Email Address</Label>
                   <Input
                     id="email"
+                    name="email"
                     type="email"
+                    autoComplete="email"
                     placeholder="you@example.com"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -187,7 +189,10 @@ export default function Register() {
                   <Label htmlFor="phoneNumber">Mobile Number</Label>
                   <Input
                     id="phoneNumber"
+                    name="username"
                     type="tel"
+                    inputMode="tel"
+                    autoComplete="username"
                     placeholder="+254712345678"
                     value={formData.phoneNumber}
                     onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
@@ -206,7 +211,9 @@ export default function Register() {
                   <div className="relative">
                     <Input
                       id="password"
+                      name="new-password"
                       type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
                       placeholder="Create a strong password"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -234,7 +241,9 @@ export default function Register() {
                   <div className="relative">
                     <Input
                       id="confirmPassword"
+                      name="confirm-password"
                       type={showConfirmPassword ? "text" : "password"}
+                      autoComplete="new-password"
                       placeholder="Re-enter your password"
                       value={formData.confirmPassword}
                       onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
