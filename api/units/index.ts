@@ -2,8 +2,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
+import { getEffectiveSubscriptionAccess, createPlanLimitError } from '../_lib/subscription.js';
 import { insertUnitSchema } from '../../shared/schema.js';
 import { z } from 'zod';
+import { canAddUnit } from '../../shared/subscription/index.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   const sql = createDbConnection();
@@ -24,6 +26,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       } else {
         const propertyUnits = await sql`
           SELECT * FROM public.units WHERE property_id = ${propertyId}
+          ORDER BY archived_at NULLS FIRST, unit_number ASC
         `;
         // Transform to camelCase for frontend
         const transformedUnits = propertyUnits.map(unit => ({
@@ -35,6 +38,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           size: unit.size,
           rentAmount: unit.rent_amount,
           isOccupied: unit.is_occupied,
+          archivedAt: unit.archived_at,
           createdAt: unit.created_at,
           updatedAt: unit.updated_at
         }));
@@ -47,7 +51,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         FROM public.units u
         INNER JOIN public.properties p ON u.property_id = p.id
         WHERE p.owner_id = ${auth.userId}
-        ORDER BY u.created_at DESC
+        ORDER BY u.archived_at NULLS FIRST, u.created_at DESC
       `;
       // Transform to camelCase for frontend
       const transformedUnits = allUnits.map(unit => ({
@@ -59,6 +63,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         size: unit.size,
         rentAmount: unit.rent_amount,
         isOccupied: unit.is_occupied,
+        archivedAt: unit.archived_at,
         createdAt: unit.created_at,
         updatedAt: unit.updated_at
       }));
@@ -66,9 +71,25 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     } else if (req.method === 'POST') {
       const unitData = insertUnitSchema.parse(req.body);
 
+      const { planCode } = await getEffectiveSubscriptionAccess(auth.userId);
+
+      const unitCountResult = await sql`
+        SELECT COUNT(*)::int AS count
+        FROM public.units u
+        INNER JOIN public.properties p ON p.id = u.property_id
+        WHERE p.owner_id = ${auth.userId}
+          AND p.archived_at IS NULL
+          AND u.archived_at IS NULL
+      `;
+
+      const currentUnits = Number(unitCountResult[0]?.count || 0);
+      if (!canAddUnit(planCode, currentUnits)) {
+        return res.status(409).json(createPlanLimitError(planCode, 'active_units', currentUnits));
+      }
+
       // Verify property ownership before transaction
       const properties = await sql`
-        SELECT * FROM public.properties WHERE id = ${unitData.propertyId}
+        SELECT * FROM public.properties WHERE id = ${unitData.propertyId} AND archived_at IS NULL
       `;
 
       if (properties.length === 0) {
@@ -121,6 +142,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         size: result.size,
         rentAmount: result.rent_amount,
         isOccupied: result.is_occupied,
+        archivedAt: result.archived_at,
         createdAt: result.created_at,
         updatedAt: result.updated_at
       };
@@ -191,6 +213,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         size: updatedUnit.size,
         rentAmount: updatedUnit.rent_amount,
         isOccupied: updatedUnit.is_occupied,
+        archivedAt: updatedUnit.archived_at,
         createdAt: updatedUnit.created_at,
         updatedAt: updatedUnit.updated_at
       };

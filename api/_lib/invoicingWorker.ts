@@ -1,4 +1,5 @@
 import { createDbConnection } from './db.js';
+import { ownerHasSubscriptionFeature } from './subscription.js';
 
 /**
  * Iterates through all active leases and generates "Pending" rent payments
@@ -17,18 +18,33 @@ export async function runAutomatedInvoicing() {
 
         // 1. Get all active leases
         const activeLeases = await sql`
-            SELECT id, tenant_id, unit_id, monthly_rent
-            FROM public.leases
-            WHERE is_active = true
+            SELECT l.id, l.tenant_id, l.unit_id, l.monthly_rent, p.owner_id AS landlord_id
+            FROM public.leases l
+            JOIN public.units u ON u.id = l.unit_id
+            JOIN public.properties p ON p.id = u.property_id
+            WHERE l.is_active = true
+              AND u.archived_at IS NULL
+              AND p.archived_at IS NULL
         `;
         console.log(`${logPrefix} Found ${activeLeases.length} active leases.`);
 
         let generatedCount = 0;
         let skippedCount = 0;
         let errorCount = 0;
+        const featureCache = new Map<string, Promise<boolean>>();
+        const hasFeature = (ownerId: string, feature: 'recurring_charges' | 'scheduled_reminders' | 'sms_messaging') => {
+            const key = `${ownerId}:${feature}`;
+            const cached = featureCache.get(key) ?? ownerHasSubscriptionFeature(ownerId, feature);
+            featureCache.set(key, cached);
+            return cached;
+        };
 
         for (const lease of activeLeases) {
             try {
+                if (!(await hasFeature(lease.landlord_id, 'recurring_charges'))) {
+                    skippedCount++;
+                    continue;
+                }
                 // 2. Check if a rent payment for this period already exists
                 const [existingPayment] = await sql`
                     SELECT id FROM public.payments
@@ -89,21 +105,23 @@ export async function runAutomatedInvoicing() {
                     `;
                     const textContent = `Dear ${details.tenant_name}, your rent invoice for ${now.toLocaleString('default', { month: 'long' })} ${currentYear} has been generated. Amount Due: KES ${lease.monthly_rent}. Due Date: ${dueDate.toLocaleDateString()}.`;
 
-                    await sql`
-                        INSERT INTO public.email_queue ("to", subject, html_content, text_content, metadata, created_at, updated_at)
-                        VALUES (
-                            ${details.tenant_email}, 
-                            ${`New Rent Invoice - ${details.property_name} Unit ${details.unit_number}`}, 
-                            ${htmlContent}, 
-                            ${textContent}, 
-                            ${JSON.stringify({ type: 'new_invoice', leaseId: lease.id, paymentId: payment.id })},
-                            NOW(), 
-                            NOW()
-                        )
-                    `;
+                    if (await hasFeature(lease.landlord_id, 'scheduled_reminders')) {
+                        await sql`
+                            INSERT INTO public.email_queue ("to", subject, html_content, text_content, metadata, created_at, updated_at)
+                            VALUES (
+                                ${details.tenant_email},
+                                ${`New Rent Invoice - ${details.property_name} Unit ${details.unit_number}`},
+                                ${htmlContent},
+                                ${textContent},
+                                ${JSON.stringify({ type: 'new_invoice', landlordId: lease.landlord_id, leaseId: lease.id, paymentId: payment.id })},
+                                NOW(),
+                                NOW()
+                            )
+                        `;
+                    }
 
                     // 7. Enqueue SMS notification
-                    if (details.tenant_phone) {
+                    if (details.tenant_phone && await hasFeature(lease.landlord_id, 'sms_messaging')) {
                         const { smsService } = await import('./smsService.js');
                         const smsMsg = smsService.composeRentReminder(
                             details.tenant_name,
@@ -114,7 +132,7 @@ export async function runAutomatedInvoicing() {
 
                         await sql`
                             INSERT INTO public.sms_queue ("to", message, metadata)
-                            VALUES (${details.tenant_phone}, ${smsMsg}, ${JSON.stringify({ type: 'new_invoice', paymentId: payment.id })})
+                            VALUES (${details.tenant_phone}, ${smsMsg}, ${JSON.stringify({ type: 'new_invoice', landlordId: lease.landlord_id, paymentId: payment.id })})
                         `;
                     }
 

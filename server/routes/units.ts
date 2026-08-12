@@ -4,6 +4,8 @@ import { supabaseStorage } from "../storageInstance";
 import { insertUnitSchema } from "../../shared/schema";
 import { ensurePropertyOwnership, requireUnitOwnership } from "../middleware/ownership";
 import { z } from "zod";
+import { buildPlanLimitError, canAddUnit } from "../../shared/subscription/index.js";
+import { getOwnerSubscriptionAccess } from "../utils/subscriptionAccess";
 
 const router = Router();
 
@@ -65,6 +67,17 @@ router.post("/", isAuthenticated, async (req: any, res: any) => {
     if (!(await ensurePropertyOwnership(req, res, unitData.propertyId))) {
       return;
     }
+    const ownerId = req.user.sub;
+    const { planCode } = await getOwnerSubscriptionAccess(ownerId);
+    const { data: ownerProperties } = await supabase.from("properties").select("id").eq("owner_id", ownerId).is("archived_at", null);
+    const propertyIds = (ownerProperties || []).map((property: any) => property.id);
+    const { count } = propertyIds.length === 0
+      ? { count: 0 }
+      : await supabase.from("units").select("id", { count: "exact", head: true }).in("property_id", propertyIds).is("archived_at", null);
+    const activeUnits = Number(count || 0);
+    if (!canAddUnit(planCode, activeUnits)) {
+      return res.status(409).json(buildPlanLimitError(planCode, "active_units", activeUnits));
+    }
     const unit = await supabaseStorage.createUnit(unitData);
     res.status(201).json(unit);
   } catch (error) {
@@ -98,8 +111,12 @@ router.put("/:id", isAuthenticated, requireUnitOwnership, async (req: any, res: 
 // DELETE /api/units/:id
 router.delete("/:id", isAuthenticated, requireUnitOwnership, async (req: any, res: any) => {
   try {
-    await supabaseStorage.deleteUnit(req.params.id);
-    res.json({ message: "Unit deleted successfully" });
+    const { error } = await supabase
+      .from("units")
+      .update({ archived_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ message: "Unit archived successfully" });
   } catch {
     res.status(500).json({ message: "Failed to delete unit" });
   }

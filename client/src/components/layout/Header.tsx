@@ -337,7 +337,13 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
                     <i className="fas fa-user-circle"></i>
                     View Profile
                   </button>
-                  <button className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent rounded-md">
+                  <button
+                    onClick={() => {
+                      onSectionChange?.('subscription');
+                      setUserMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent rounded-md"
+                  >
                     <i className="fas fa-cog"></i>
                     Settings
                   </button>

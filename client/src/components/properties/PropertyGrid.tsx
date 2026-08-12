@@ -271,6 +271,7 @@ export default function PropertyGrid({ properties, units, loading, onAddProperty
                         <div>
                           <p className="text-sm font-semibold">{property.name}</p>
                           <p className="text-xs text-muted-foreground">{property.address}</p>
+                          {property.archivedAt && <span className="mt-1 inline-block text-xs font-medium text-amber-700">Archived · read only</span>}
                         </div>
                         <span className="text-xs font-medium text-muted-foreground">
                           {property.occupancyRate}% occupied

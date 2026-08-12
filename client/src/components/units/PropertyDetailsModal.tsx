@@ -137,6 +137,11 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
           </DialogHeader>
 
           <div className="space-y-6">
+            {property.archivedAt && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                This property is archived. All records remain available in read-only mode; restore the property to add or change units.
+              </div>
+            )}
             {/* Property Overview */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-gray-50 p-4 rounded-lg">
@@ -193,15 +198,16 @@ export default function PropertyDetailsModal({ open, onOpenChange, propertyId }:
                       Manage all units in this property
                     </p>
                   </div>
-                  <Button onClick={handleAddUnit} className="flex items-center gap-2">
+                  {!property.archivedAt && <Button onClick={handleAddUnit} className="flex items-center gap-2">
                     <Plus className="h-4 w-4" />
                     Add Unit
-                  </Button>
+                  </Button>}
                 </div>
 
                 <UnitTable
                   propertyId={propertyId}
                   onEditUnit={handleEditUnit}
+                  readOnly={Boolean(property.archivedAt)}
                 />
               </TabsContent>
 

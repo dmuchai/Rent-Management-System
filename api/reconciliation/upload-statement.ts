@@ -3,6 +3,7 @@ import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
 import { parseStatement, detectStatementFormat } from './_parsers/statementParser.js';
 import { reconcilePayment, recordReconciliation } from '../_lib/reconciliationEngine.js';
+import { ownerHasSubscriptionFeature } from '../_lib/subscription.js';
 
 /**
  * Upload Bank/M-Pesa Statement for Auto-Reconciliation
@@ -21,6 +22,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   // Only landlords can upload statements
   if (auth.role !== 'landlord') {
     return res.status(403).json({ error: 'Only landlords can upload statements' });
+  }
+  if (!(await ownerHasSubscriptionFeature(auth.userId, 'payment_reconciliation'))) {
+    return res.status(403).json({ error: 'Payment reconciliation requires Silver or higher', requiredFeature: 'payment_reconciliation' });
   }
 
   const sql = createDbConnection();

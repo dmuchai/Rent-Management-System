@@ -24,6 +24,7 @@ import { StatementUpload } from "@/components/reconciliation/StatementUpload";
 import DocumentManager from "@/components/documents/DocumentManager";
 import ReportGenerator from "@/components/reports/ReportGenerator";
 import { LinkedAccountsSection } from "@/components/LinkedAccountsSection";
+import { SubscriptionContent } from "@/pages/subscription";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -36,12 +37,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { useSubscription } from "@/hooks/useSubscription";
+import { trackEvent } from "@/lib/analytics";
 import { supabase } from "@/lib/supabase";
 import { AUTH_QUERY_KEYS, clearAuthQueries } from "@/lib/auth-keys";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { kenyaPhoneSchema, type Lease } from "@/../../shared/schema";
+import { hasFeature, type PlanCode } from "@/../../shared/subscription/index.js";
 
-type DashboardSection = "overview" | "properties" | "tenants" | "caretakers" | "leases" | "maintenance" | "payments" | "payment-settings" | "reconciliation" | "documents" | "reports" | "profile";
+type DashboardSection = "overview" | "properties" | "tenants" | "caretakers" | "leases" | "maintenance" | "payments" | "payment-settings" | "subscription" | "reconciliation" | "documents" | "reports" | "profile";
 
 // Password validation helper function
 function validatePassword(password: string): { isValid: boolean; failedRequirements: string[] } {
@@ -134,6 +138,7 @@ export default function LandlordDashboard() {
     maintenance: 'Maintenance',
     payments: 'Payments',
     'payment-settings': 'Payment Settings',
+    subscription: 'Subscription',
     reconciliation: 'Payment Reconciliation',
     documents: 'Documents',
     reports: 'Reports',
@@ -143,6 +148,8 @@ export default function LandlordDashboard() {
 
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
+  const { account: subscriptionAccount } = useSubscription();
+  const hasReconciliationAccess = hasFeature((subscriptionAccount?.access.planCode || 'free') as PlanCode, 'payment_reconciliation');
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [isPropertyFormOpen, setIsPropertyFormOpen] = useState(false);
@@ -155,6 +162,9 @@ export default function LandlordDashboard() {
   const [viewingPayment, setViewingPayment] = useState<any | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [trialPromptDismissed, setTrialPromptDismissed] = useState(() => {
+    return window.localStorage.getItem('landee_trial_prompt_dismissed') === 'true';
+  });
 
   const [editingLease, setEditingLease] = useState<Lease | null>(null);
   const [viewingLease, setViewingLease] = useState<Lease | null>(null);
@@ -692,6 +702,7 @@ export default function LandlordDashboard() {
     maintenance: "Maintenance",
     payments: "Payment Management",
     "payment-settings": "Payment Settings",
+    subscription: "Subscription",
     reconciliation: "Payment Reconciliation",
     documents: "Document Management",
     reports: "Financial Reports",
@@ -716,6 +727,41 @@ export default function LandlordDashboard() {
 
         return (
           <div className="space-y-8">
+            {subscriptionAccount?.access.planCode === 'free' && (properties.length > 0 || units.length > 0) && !trialPromptDismissed && (
+              <Card className="border-sky-200 bg-sky-50">
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between gap-3">
+                    <span>Try Silver free for 30 days</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        window.localStorage.setItem('landee_trial_prompt_dismissed', 'true');
+                        setTrialPromptDismissed(true);
+                      }}
+                    >
+                      Dismiss
+                    </Button>
+                  </CardTitle>
+                  <CardDescription>
+                    You can start a trial after adding your first property or unit. It renews automatically unless cancelled in Google Play.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={() => {
+                      trackEvent('upgrade_prompt_viewed', { source: 'dashboard' });
+                      trackEvent('trial_offer_viewed', { source: 'dashboard', plan: 'silver' });
+                      window.sessionStorage.setItem('landee_trial_source', 'dashboard');
+                      setActiveSection('subscription');
+                    }}
+                  >
+                    View plans
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
@@ -1542,6 +1588,9 @@ export default function LandlordDashboard() {
             onAddProperty={() => setIsPropertyFormOpen(true)}
           />
         );
+
+      case "subscription":
+        return <SubscriptionContent embedded />;
 
       case "tenants":
         return (
@@ -2510,15 +2559,25 @@ export default function LandlordDashboard() {
         return (
           <div className="space-y-6">
             <PaymentChannelsManager />
-            <StatementUpload onUploadComplete={() => {
+            {hasReconciliationAccess ? <StatementUpload onUploadComplete={() => {
               // Refresh payments after successful upload
               queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
-            }} />
+            }} /> : (
+              <Card className="border-amber-200 bg-amber-50/60">
+                <CardHeader><CardTitle>Statement reconciliation requires Silver</CardTitle><CardDescription>Manual payment recording remains available on Free and Bronze.</CardDescription></CardHeader>
+                <CardContent><Button onClick={() => setActiveSection('subscription')}>View plans</Button></CardContent>
+              </Card>
+            )}
           </div>
         );
 
       case "reconciliation":
-        return <ReconciliationReview />;
+        return hasReconciliationAccess ? <ReconciliationReview /> : (
+          <Card className="border-amber-200 bg-amber-50/60">
+            <CardHeader><CardTitle>Payment reconciliation requires Silver</CardTitle><CardDescription>Upgrade to review and automatically match bank or M-Pesa payments.</CardDescription></CardHeader>
+            <CardContent><Button onClick={() => setActiveSection('subscription')}>View plans</Button></CardContent>
+          </Card>
+        );
 
       case "documents":
         return <DocumentManager />;
@@ -2641,6 +2700,19 @@ export default function LandlordDashboard() {
                     <Button variant="outline" onClick={() => setActiveSection("payment-settings")}>
                       Manage payment settings
                     </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <i className="fas fa-star mr-3 text-amber-600"></i>
+                      Subscription
+                    </CardTitle>
+                    <CardDescription>Review your plan or start the Silver trial.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button onClick={() => setActiveSection("subscription")}>Manage subscription</Button>
                   </CardContent>
                 </Card>
               </div>

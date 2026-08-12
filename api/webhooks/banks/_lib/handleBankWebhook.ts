@@ -3,6 +3,7 @@ import { createVerify, randomUUID } from 'crypto';
 import { createDbConnection } from '../../../_lib/db.js';
 import { reconcilePayment, recordReconciliation } from '../../../_lib/reconciliationEngine.js';
 import { bankWebhookAdapters, type BankProvider } from './bankAdapter.js';
+import { ownerHasSubscriptionFeature } from '../../../_lib/subscription.js';
 
 const PROVIDER_SECRET_ENV: Record<BankProvider, string> = {
   kcb: 'KCB_WEBHOOK_SECRET',
@@ -370,6 +371,19 @@ export async function handleBankWebhook(
       return sendProviderResponse(payload, res, provider, {
         success: true,
         message: 'Payment stored (channel not recognized)',
+      }, {
+        statusCode: '0',
+        statusMessage: 'Payment stored',
+        transactionId: acknowledgementId,
+      }, kcbKind);
+    }
+
+    if (!(await ownerHasSubscriptionFeature(channel.landlord_id, 'payment_reconciliation'))) {
+      return sendProviderResponse(payload, res, provider, {
+        success: true,
+        message: 'Payment stored',
+        matched: false,
+        provider,
       }, {
         statusCode: '0',
         statusMessage: 'Payment stored',

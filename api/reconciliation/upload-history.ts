@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
+import { ownerHasSubscriptionFeature } from '../_lib/subscription.js';
 
 /**
  * Get Statement Upload History
@@ -18,6 +19,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   // Only landlords can view upload history
   if (auth.role !== 'landlord') {
     return res.status(403).json({ error: 'Only landlords can view upload history' });
+  }
+  if (!(await ownerHasSubscriptionFeature(auth.userId, 'payment_reconciliation'))) {
+    return res.status(403).json({ error: 'Payment reconciliation requires Silver or higher', requiredFeature: 'payment_reconciliation' });
   }
 
   const sql = createDbConnection();
