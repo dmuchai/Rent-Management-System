@@ -9,11 +9,14 @@ import unitsRouter from "./units";
 import tenantsRouter from "./tenants";
 import caretakersRouter from "./caretakers";
 import paymentsRouter from "./payments";
+import reportsRouter from "./reports";
 import leasesRouter from "./leases";
 import maintenanceRouter from "./maintenance";
 import dashboardRouter from "./dashboard";
 import cronRouter from "./cron";
 import adminRouter from "./admin";
+import exportRouter from "./export";
+import subscriptionRouter from "./subscription";
 
 export async function registerRoutes(app: Express): Promise<void> {
   // Setup Supabase auth middleware
@@ -52,6 +55,9 @@ export async function registerRoutes(app: Express): Promise<void> {
   // Payments
   app.use("/api/payments", paymentsRouter);
 
+  // Reports
+  app.use("/api/reports", reportsRouter);
+
   // Leases
   app.use("/api/leases", leasesRouter);
 
@@ -60,6 +66,10 @@ export async function registerRoutes(app: Express): Promise<void> {
 
   // Dashboard
   app.use("/api/dashboard", dashboardRouter);
+
+  // Essential account portability (available on every plan)
+  app.use("/api/export", exportRouter);
+  app.use("/api/subscription", subscriptionRouter);
 
   // Cron workers
   app.use("/api/cron", cronRouter);

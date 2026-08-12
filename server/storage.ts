@@ -20,6 +20,7 @@ export class SupabaseStorage {
       size: unit.size,
       rentAmount: unit.rent_amount,
       isOccupied: unit.is_occupied,
+      archivedAt: unit.archived_at,
       createdAt: unit.created_at,
       updatedAt: unit.updated_at,
     })) || [];
@@ -50,6 +51,7 @@ export class SupabaseStorage {
       size: data.size,
       rentAmount: data.rent_amount,
       isOccupied: data.is_occupied,
+      archivedAt: data.archived_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -66,6 +68,7 @@ export class SupabaseStorage {
       size: unit.size,
       rent_amount: unit.rentAmount,
       is_occupied: unit.isOccupied || false,
+      archived_at: null,
     };
 
     console.log('Inserting unit data to Supabase:', unitData);
@@ -92,6 +95,7 @@ export class SupabaseStorage {
       size: data.size,
       rentAmount: data.rent_amount,
       isOccupied: data.is_occupied,
+      archivedAt: data.archived_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -109,6 +113,7 @@ export class SupabaseStorage {
     if (unit.size !== undefined) updateData.size = unit.size;
     if (unit.rentAmount !== undefined) updateData.rent_amount = unit.rentAmount;
     if (unit.isOccupied !== undefined) updateData.is_occupied = unit.isOccupied;
+    if ((unit as any).archivedAt !== undefined) updateData.archived_at = (unit as any).archivedAt;
 
     updateData.updated_at = new Date().toISOString();
 
@@ -137,6 +142,7 @@ export class SupabaseStorage {
       size: data.size,
       rentAmount: data.rent_amount,
       isOccupied: data.is_occupied,
+      archivedAt: data.archived_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -995,6 +1001,7 @@ export class SupabaseStorage {
           totalUnits: property.total_units,
           description: property.description,
           imageUrl: property.image_url,
+          archivedAt: property.archived_at,
           createdAt: property.created_at,
           updatedAt: property.updated_at,
           units: units, // Include units
@@ -1030,6 +1037,7 @@ export class SupabaseStorage {
       totalUnits: data.total_units,
       description: data.description,
       imageUrl: data.image_url,
+      archivedAt: data.archived_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };

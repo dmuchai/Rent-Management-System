@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Property } from "@shared/schema";
 import PropertyDetailsModal from "@/components/units/PropertyDetailsModal";
 import PropertyForm from "./PropertyForm";
-import { Home, MapPin, TrendingUp, Edit, Trash2 } from "lucide-react";
+import { Archive, Home, MapPin, RotateCcw, TrendingUp, Edit } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -42,19 +42,29 @@ export default function PropertyCard({ property, occupancyRate = 0, occupiedCoun
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       toast({
-        title: "Property Deleted",
-        description: "Property has been successfully removed",
+        title: "Property archived",
+        description: "The property and its records remain available and no longer count toward plan limits.",
       });
       setShowDeleteDialog(false);
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to delete property",
+        description: "Failed to archive property",
         variant: "destructive",
       });
       setShowDeleteDialog(false);
     },
+  });
+
+  const restorePropertyMutation = useMutation({
+    mutationFn: async () => apiRequest("PATCH", `/api/properties?id=${property.id}`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({ title: "Property restored", description: "The property is active again." });
+    },
+    onError: () => toast({ title: "Restore failed", description: "Archive another property or upgrade your plan, then try again.", variant: "destructive" }),
   });
 
   // Get occupancy badge color
@@ -81,7 +91,7 @@ export default function PropertyCard({ property, occupancyRate = 0, occupiedCoun
           <h3 className="text-lg font-semibold" data-testid={`property-name-${property.id}`}>
             {property.name}
           </h3>
-          {getOccupancyBadge()}
+          {property.archivedAt ? <Badge variant="secondary">Archived</Badge> : getOccupancyBadge()}
         </div>
         
         <div className="flex items-center gap-1 text-muted-foreground text-sm mb-4" data-testid={`property-address-${property.id}`}>
@@ -136,25 +146,20 @@ export default function PropertyCard({ property, occupancyRate = 0, occupiedCoun
           >
             View Details
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => setShowEditForm(true)}
-            data-testid={`button-edit-property-${property.id}`}
-            title="Edit property"
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => setShowDeleteDialog(true)}
-            data-testid={`button-delete-property-${property.id}`}
-            className="hover:bg-red-50 hover:text-red-600 hover:border-red-300"
-            title="Delete property"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {property.archivedAt ? (
+            <Button variant="outline" size="sm" onClick={() => restorePropertyMutation.mutate()} disabled={restorePropertyMutation.isPending} title="Restore property">
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setShowEditForm(true)} data-testid={`button-edit-property-${property.id}`} title="Edit property">
+                <Edit className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowDeleteDialog(true)} data-testid={`button-delete-property-${property.id}`} className="hover:bg-red-50 hover:text-red-600 hover:border-red-300" title="Archive property">
+                <Archive className="h-4 w-4" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
       
@@ -176,9 +181,9 @@ export default function PropertyCard({ property, occupancyRate = 0, occupiedCoun
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Property</AlertDialogTitle>
+            <AlertDialogTitle>Archive Property</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{property.name}"? This action cannot be undone and will remove all associated units and data.
+              Archive "{property.name}"? Its units and historical records remain readable and it will stop consuming the active-property and active-unit limits. You can restore it later when your plan has room.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -190,7 +195,7 @@ export default function PropertyCard({ property, occupancyRate = 0, occupiedCoun
               disabled={deletePropertyMutation.isPending}
               className="bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {deletePropertyMutation.isPending ? "Deleting..." : "Delete"}
+              {deletePropertyMutation.isPending ? "Archiving..." : "Archive"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

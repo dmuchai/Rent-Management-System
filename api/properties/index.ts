@@ -2,8 +2,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
+import { getEffectiveSubscriptionAccess, createPlanLimitError } from '../_lib/subscription.js';
 import { insertPropertySchema } from '../../shared/schema.js';
 import { z } from 'zod';
+import { canAddProperty } from '../../shared/subscription/index.js';
 
 // Update schema: omit `ownerId` so clients cannot overwrite ownership
 // during property updates. Use `.partial()` on this schema for PATCH-like
@@ -29,7 +31,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
                 'bedrooms', u.bedrooms,
                 'bathrooms', u.bathrooms,
                 'rentAmount', u.rent_amount,
-                'isOccupied', u.is_occupied
+                'isOccupied', u.is_occupied,
+                'archivedAt', u.archived_at
               )
             ) FILTER (WHERE u.id IS NOT NULL) as units
           FROM public.properties p
@@ -57,8 +60,23 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           ownerId: propertyResult[0].owner_id,
           createdAt: propertyResult[0].created_at,
           updatedAt: propertyResult[0].updated_at,
+          archivedAt: propertyResult[0].archived_at,
           units: propertyResult[0].units || []
         });
+      } else if (req.method === 'PATCH') {
+        const [existingProperty] = await sql`SELECT * FROM public.properties WHERE id = ${id}`;
+        if (!existingProperty) return res.status(404).json({ message: 'Property not found' });
+        if (existingProperty.owner_id !== auth.userId) return res.status(403).json({ message: 'Access denied' });
+        if (existingProperty.archived_at === null) return res.status(400).json({ message: 'Property is already active' });
+
+        const { planCode } = await getEffectiveSubscriptionAccess(auth.userId);
+        const [usage] = await sql`SELECT COUNT(*)::int AS count FROM public.properties WHERE owner_id = ${auth.userId} AND archived_at IS NULL`;
+        const activeProperties = Number(usage?.count || 0);
+        if (!canAddProperty(planCode, activeProperties)) {
+          return res.status(409).json(createPlanLimitError(planCode, 'active_properties', activeProperties));
+        }
+        const [restored] = await sql`UPDATE public.properties SET archived_at = NULL, updated_at = NOW() WHERE id = ${id} RETURNING *`;
+        return res.status(200).json({ message: 'Property restored successfully', id: restored.id, archivedAt: restored.archived_at });
       } else if (req.method === 'PUT') {
         // Update property
         const existingProperty = await sql`
@@ -78,7 +96,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         
         // Auto-calculate totalUnits from actual units count
         const unitsCountResult = await sql`
-          SELECT COUNT(*)::int as count FROM public.units WHERE property_id = ${id}
+          SELECT COUNT(*)::int as count FROM public.units WHERE property_id = ${id} AND archived_at IS NULL
         `;
         const totalUnits = unitsCountResult[0]?.count || 0;
         
@@ -123,8 +141,12 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           return res.status(403).json({ message: 'Access denied' });
         }
 
-        await sql`DELETE FROM public.properties WHERE id = ${id}`;
-        return res.status(204).send('');
+        await sql`
+          UPDATE public.properties
+          SET archived_at = NOW(), updated_at = NOW()
+          WHERE id = ${id}
+        `;
+        return res.status(200).json({ message: 'Property archived successfully', id });
       } else {
         return res.status(405).json({ message: 'Method not allowed' });
       }
@@ -136,7 +158,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         const userProperties = await sql`
           SELECT * FROM public.properties 
           WHERE owner_id = ${auth.userId}
-          ORDER BY created_at DESC
+          ORDER BY archived_at NULLS FIRST, created_at DESC
         `;
 
         // Transform to camelCase for frontend consistency
@@ -150,13 +172,28 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           imageUrl: prop.image_url,
           ownerId: prop.owner_id,
           createdAt: prop.created_at,
-          updatedAt: prop.updated_at
+          updatedAt: prop.updated_at,
+          archivedAt: prop.archived_at,
         }));
 
         return res.status(200).json(transformedProperties);
       } else if (req.method === 'POST') {
         console.log('Request body:', JSON.stringify(req.body, null, 2));
         console.log('Auth userId:', auth.userId);
+
+        const { planCode } = await getEffectiveSubscriptionAccess(auth.userId);
+
+        const propertyCountResult = await sql`
+          SELECT COUNT(*)::int AS count
+          FROM public.properties
+          WHERE owner_id = ${auth.userId}
+            AND archived_at IS NULL
+        `;
+
+        const currentProperties = Number(propertyCountResult[0]?.count || 0);
+        if (!canAddProperty(planCode, currentProperties)) {
+          return res.status(409).json(createPlanLimitError(planCode, 'active_properties', currentProperties));
+        }
         
         const { name, address, propertyType, description, imageUrl } = req.body;
         

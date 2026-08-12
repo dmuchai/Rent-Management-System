@@ -4,16 +4,17 @@ import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Trash2, Home } from "lucide-react";
+import { Edit, Trash2, Home, ArchiveRestore } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Unit } from "@/../../shared/schema";
 
 interface UnitTableProps {
   propertyId: string;
   onEditUnit: (unit: Unit) => void;
+  readOnly?: boolean;
 }
 
-export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
+export default function UnitTable({ propertyId, onEditUnit, readOnly = false }: UnitTableProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -31,24 +32,23 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
     },
   });
 
-  // Delete unit mutation
-  const deleteMutation = useMutation({
-    mutationFn: async (unitId: string) => {
-      const response = await apiRequest("DELETE", `/api/units/${unitId}`);
+  const archiveMutation = useMutation({
+    mutationFn: async ({ unitId, archived }: { unitId: string; archived: boolean }) => {
+      const response = await apiRequest(archived ? "PATCH" : "DELETE", `/api/units/${unitId}`);
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Failed to delete unit: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
+        throw new Error(`Failed to update unit: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
       }
 
       return await response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [`/api/units`, propertyId] });
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       toast({
         title: "Success",
-        description: "Unit deleted successfully",
+        description: variables.archived ? "Unit restored successfully" : "Unit archived successfully",
       });
     },
     onError: (error: Error) => {
@@ -100,12 +100,12 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
                 <TableCell>{unit.bedrooms || "-"}</TableCell>
                 <TableCell>KES {Number(unit.rentAmount).toLocaleString()}</TableCell>
                 <TableCell>
-                  <Badge variant={unit.isOccupied ? "destructive" : "default"}>
-                    {unit.isOccupied ? "Occupied" : "Available"}
+                  <Badge variant={unit.archivedAt ? "secondary" : unit.isOccupied ? "destructive" : "default"}>
+                    {unit.archivedAt ? "Archived" : unit.isOccupied ? "Occupied" : "Available"}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end space-x-2">
+                  {!readOnly && <div className="flex justify-end space-x-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -119,31 +119,32 @@ export default function UnitTable({ propertyId, onEditUnit }: UnitTableProps) {
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={deleteMutation.isPending}
+                          disabled={archiveMutation.isPending}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {unit.archivedAt ? <ArchiveRestore className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Unit</AlertDialogTitle>
+                          <AlertDialogTitle>{unit.archivedAt ? "Restore Unit" : "Archive Unit"}</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Are you sure you want to delete unit "{unit.unitNumber}"?
-                            This action cannot be undone and will remove all associated data.
+                            {unit.archivedAt
+                              ? `Restore unit "${unit.unitNumber}" back to the active unit list?`
+                              : `Archive unit "${unit.unitNumber}". It will be hidden from active counts but its data will remain available for recovery.`}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => deleteMutation.mutate(unit.id)}
-                            className="bg-red-600 hover:bg-red-700"
+                            onClick={() => archiveMutation.mutate({ unitId: unit.id, archived: Boolean(unit.archivedAt) })}
+                            className={unit.archivedAt ? "bg-slate-700 hover:bg-slate-800" : "bg-red-600 hover:bg-red-700"}
                           >
-                            Delete Unit
+                            {unit.archivedAt ? "Restore Unit" : "Archive Unit"}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                  </div>
+                  </div>}
                 </TableCell>
               </TableRow>
             ))}

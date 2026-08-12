@@ -4,6 +4,26 @@ import { mapCaretakerAssignmentRow } from "../utils/mappers";
 import { emailService } from "../services/emailService";
 import { z } from "zod";
 import crypto from "crypto";
+import { buildPlanLimitError, canAddManagementUser } from "../../shared/subscription/index.js";
+import { getOwnerSubscriptionAccess, subscriptionsEnabled } from "../utils/subscriptionAccess";
+
+async function getManagementUserCount(ownerUserId: string): Promise<number> {
+  const [{ count: activeCaretakers }, { count: openInvitations }] = await Promise.all([
+    supabase
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("created_by", ownerUserId)
+      .in("role", ["caretaker", "property_manager"])
+      .eq("status", "active"),
+    supabase
+      .from("caretaker_invitations")
+      .select("id", { count: "exact", head: true })
+      .eq("landlord_id", ownerUserId)
+      .in("status", ["pending", "invited"]),
+  ]);
+
+  return 1 + Number(activeCaretakers || 0) + Number(openInvitations || 0);
+}
 
 const router = Router();
 
@@ -433,6 +453,15 @@ router.post("/invitations", async (req: any, res: any, next: any) => {
       propertyId: z.string().min(1, "Property is required"),
     });
     const inviteData = inviteSchema.parse(req.body);
+
+    if (subscriptionsEnabled()) {
+      const { planCode } = await getOwnerSubscriptionAccess(userId);
+      const currentManagementUsers = await getManagementUserCount(userId);
+
+      if (!canAddManagementUser(planCode, currentManagementUsers)) {
+        return res.status(409).json(buildPlanLimitError(planCode, "management_users", currentManagementUsers));
+      }
+    }
 
     const { data: property } = await supabase
       .from("properties").select("id").eq("id", inviteData.propertyId).eq("owner_id", userId).single();

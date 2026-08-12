@@ -219,7 +219,7 @@ export default function Landing() {
               className="text-base px-8 py-6 shadow-lg hover:shadow-xl transition-all"
             >
               <i className="fas fa-rocket mr-2"></i>
-              Start Free Trial
+              Get Started Free
             </Button>
             <Button
               variant="outline"
@@ -426,47 +426,47 @@ export default function Landing() {
               <span className="text-sm font-medium text-primary">Pricing</span>
             </div>
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Simple, Transparent Pricing</h2>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">Choose the plan that fits your portfolio. All plans include M-Pesa integration.</p>
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">Start free forever, then upgrade as your active-unit portfolio grows.</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {/* Starter Plan */}
+          <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
+            {/* Free Plan */}
             <div className="bg-card border-2 border-border rounded-2xl p-8 hover:shadow-xl transition-all">
               <div className="mb-6">
-                <h3 className="text-2xl font-bold mb-2">Starter</h3>
-                <p className="text-muted-foreground">Perfect for individual landlords</p>
+                <h3 className="text-2xl font-bold mb-2">Free</h3>
+                <p className="text-muted-foreground">Free forever for small portfolios</p>
               </div>
               <div className="mb-6">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold">KES 2,499</span>
+                  <span className="text-4xl font-bold">KES 0</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">Billed monthly</p>
+                <p className="text-sm text-muted-foreground mt-2">No subscription required</p>
               </div>
               <ul className="space-y-4 mb-8">
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Up to 5 properties</span>
+                  <span>1 active property</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Up to 20 units</span>
+                  <span>Up to 4 active units</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>M-Pesa rent collection</span>
+                  <span>1 management user</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Tenant management</span>
+                  <span>Tenants, leases and maintenance</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Basic reports</span>
+                  <span>Manual rent recording and receipts</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Email support</span>
+                  <span>Basic export when leaving</span>
                 </li>
               </ul>
               <Button
@@ -474,11 +474,28 @@ export default function Landing() {
                 className="w-full text-base py-6"
                 onClick={redirectToLogin}
               >
-                Start Free Trial
+                Get Started Free
               </Button>
             </div>
 
-            {/* Professional Plan - Most Popular */}
+            {/* Bronze Plan */}
+            <div className="bg-card border-2 border-border rounded-2xl p-8 hover:shadow-xl transition-all">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold mb-2">Bronze</h3>
+                <p className="text-muted-foreground">For established landlords</p>
+              </div>
+              <div className="mb-6"><span className="text-4xl font-bold">KES 2,000</span><span className="text-muted-foreground">/month</span></div>
+              <ul className="space-y-4 mb-8">
+                <li>✓ Up to 20 active units</li>
+                <li>✓ 2 management users</li>
+                <li>✓ Scheduled reminders</li>
+                <li>✓ PDF statements and exports</li>
+                <li>✓ Recurring charges and arrears tracking</li>
+              </ul>
+              <Button variant="outline" className="w-full text-base py-6" onClick={redirectToLogin}>Choose Bronze</Button>
+            </div>
+
+            {/* Silver Plan - Most Popular */}
             <div className="bg-card border-2 border-primary rounded-2xl p-8 shadow-xl relative">
               <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                 <span className="bg-primary text-primary-foreground px-4 py-1 rounded-full text-sm font-semibold">
@@ -486,52 +503,66 @@ export default function Landing() {
                 </span>
               </div>
               <div className="mb-6">
-                <h3 className="text-2xl font-bold mb-2">Professional</h3>
+                <h3 className="text-2xl font-bold mb-2">Silver</h3>
                 <p className="text-muted-foreground">For growing property portfolios</p>
               </div>
               <div className="mb-6">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold">KES 4,999</span>
+                  <span className="text-4xl font-bold">KES 4,000</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">Billed monthly • Save 20% yearly</p>
+                <p className="text-sm text-muted-foreground mt-2">Optional 30-day trial</p>
               </div>
               <ul className="space-y-4 mb-8">
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Up to 20 properties</span>
+                  <span>Up to 50 active units</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Up to 100 units</span>
+                  <span>5 management users</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>M-Pesa rent collection</span>
+                  <span>Advanced reports and bulk actions</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Advanced tenant screening</span>
+                  <span>Payment reconciliation</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Maintenance tracking</span>
+                  <span>Audit history</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Financial reports & analytics</span>
+                  <span>SMS functionality; usage charges may apply</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Priority support</span>
+                  <span>All Bronze features</span>
                 </li>
               </ul>
               <Button
                 className="w-full text-base py-6"
                 onClick={redirectToLogin}
               >
-                Start Free Trial
+                Try Silver Free for 30 Days
               </Button>
+            </div>
+
+            {/* Gold Plan */}
+            <div className="bg-card border-2 border-border rounded-2xl p-8 hover:shadow-xl transition-all">
+              <div className="mb-6"><h3 className="text-2xl font-bold mb-2">Gold</h3><p className="text-muted-foreground">For larger portfolios</p></div>
+              <div className="mb-6"><span className="text-4xl font-bold">KES 6,000</span><span className="text-muted-foreground">/month</span></div>
+              <ul className="space-y-4 mb-8">
+                <li>✓ Up to 100 active units</li>
+                <li>✓ 15 management users</li>
+                <li>✓ Owner reporting</li>
+                <li>✓ Staff permissions</li>
+                <li>✓ Priority support and advanced reconciliation</li>
+              </ul>
+              <Button variant="outline" className="w-full text-base py-6" onClick={redirectToLogin}>Choose Gold</Button>
             </div>
 
             {/* Enterprise Plan */}
@@ -553,7 +584,7 @@ export default function Landing() {
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Unlimited units</span>
+                  <span>More than 100 active units</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
@@ -604,7 +635,7 @@ export default function Landing() {
               </div>
               <div className="flex items-center gap-2">
                 <i className="fas fa-calendar text-primary"></i>
-                <span>14-day free trial</span>
+                <span>Optional 30-day Silver trial</span>
               </div>
               <div className="flex items-center gap-2">
                 <i className="fas fa-times-circle text-primary"></i>
@@ -732,7 +763,7 @@ export default function Landing() {
                   onClick={redirectToLogin}
                 >
                   <i className="fas fa-user-plus mr-2"></i>
-                  Start Free Trial
+                  Get Started Free
                 </Button>
               </div>
             </div>

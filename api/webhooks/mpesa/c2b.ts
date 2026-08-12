@@ -1,6 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createDbConnection } from '../../_lib/db';
 import { reconcilePayment, recordReconciliation } from '../../_lib/reconciliationEngine';
+import { ownerHasSubscriptionFeature } from '../../_lib/subscription.js';
 
 const sql = createDbConnection();
 
@@ -250,6 +251,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const [paymentEvent] = result;
+
+    if (!(await ownerHasSubscriptionFeature(channel.landlord_id, 'payment_reconciliation'))) {
+      return res.status(200).json({ ResultCode: 0, ResultDesc: 'Payment received' });
+    }
 
     // Attempt automatic reconciliation
     const reconciliationResult = await reconcilePayment(sql, {

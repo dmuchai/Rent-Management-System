@@ -5,6 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSubscription } from "@/hooks/useSubscription";
+import { hasFeature } from "../../../../shared/subscription/index.js";
+import { useLocation } from "wouter";
+import { trackEvent } from "@/lib/analytics";
 
 interface ReportData {
   payments: Array<{
@@ -32,10 +36,15 @@ interface ExportEntry {
 }
 
 export default function ReportGenerator() {
+  const { enabled, account } = useSubscription();
+  const [, setLocation] = useLocation();
   const [reportType, setReportType] = useState("monthly");
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]);
   const [exportHistory, setExportHistory] = useState<ExportEntry[]>([]);
+
+  const currentPlanCode = (account?.access.planCode || 'free') as Parameters<typeof hasFeature>[0];
+  const hasReportAccess = !enabled || hasFeature(currentPlanCode, 'advanced_reports');
 
   const setPresetRange = (preset: "month" | "last-month" | "ytd") => {
     const now = new Date();
@@ -57,11 +66,13 @@ export default function ReportGenerator() {
 
   const { data: reportData, isLoading } = useQuery<ReportData>({
     queryKey: ["/api/reports/payments", { startDate, endDate }],
+    enabled: hasReportAccess,
     retry: false,
   });
 
   const handleExportReport = () => {
     if (!reportData) return;
+    trackEvent('premium_feature_used', { feature: 'advanced_reports', action: 'export' });
 
     const fileName = `rent-report-${startDate}-to-${endDate}.csv`;
 
@@ -101,6 +112,20 @@ export default function ReportGenerator() {
 
   return (
     <div className="space-y-6">
+      {!hasReportAccess && (
+        <Card className="border-amber-200 bg-amber-50/60">
+          <CardHeader>
+            <CardTitle>Upgrade to view reports</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Financial reports are available on Silver, Gold, and Enterprise plans.
+            </p>
+            <Button onClick={() => setLocation('/subscription')}>View plans</Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Reports</h2>
@@ -108,7 +133,7 @@ export default function ReportGenerator() {
         </div>
         <Button
           onClick={handleExportReport}
-          disabled={!reportData || isLoading}
+          disabled={!reportData || isLoading || !hasReportAccess}
           data-testid="button-export-report"
         >
           <i className="fas fa-download mr-2"></i>Export Report
@@ -201,7 +226,7 @@ export default function ReportGenerator() {
               />
             </div>
             <div className="flex items-end">
-              <Button className="w-full" data-testid="button-generate-report">
+              <Button className="w-full" data-testid="button-generate-report" disabled={!hasReportAccess}>
                 Generate
               </Button>
             </div>

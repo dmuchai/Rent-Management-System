@@ -108,6 +108,7 @@ export const properties = pgTable("properties", {
   description: text("description"),
   imageUrl: varchar("image_url"),
   ownerId: varchar("owner_id").notNull().references(() => users.id),
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -122,6 +123,7 @@ export const units = pgTable("units", {
   size: decimal("size"), // square feet
   rentAmount: decimal("rent_amount", { precision: 10, scale: 2 }).notNull(),
   isOccupied: boolean("is_occupied").default(false),
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -545,6 +547,7 @@ export const insertPropertySchema = createInsertSchema(properties).omit({
   createdAt: true,
   updatedAt: true,
   totalUnits: true, // Auto-calculated from units count
+  archivedAt: true,
 }).extend({
   name: requiredText("Property name"),
   address: requiredText("Address", 500),
@@ -560,6 +563,7 @@ export const insertUnitSchema = createInsertSchema(units).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  archivedAt: true,
 }).extend({
   propertyId: requiredText("Property"),
   unitNumber: requiredText("Unit number", 50),

@@ -22,7 +22,9 @@ import ResetPassword from "@/pages/reset-password";
 import SelectRole from "@/pages/select-role";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfService from "@/pages/terms-of-service";
+import SubscriptionPage from "@/pages/subscription";
 import NotFound from "@/pages/not-found";
+import { SubscriptionProvider } from "@/hooks/useSubscription";
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -78,6 +80,7 @@ function Router() {
       <Route path="/auth-callback" component={AuthCallback} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
+      <Route path="/subscription" component={SubscriptionPage} />
       <Route path="/select-role" component={SelectRole} />
       <Route path="/dashboard" component={() => {
         if (!isAuthenticated) {
@@ -105,10 +108,12 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <SubscriptionProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </SubscriptionProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
