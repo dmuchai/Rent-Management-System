@@ -140,6 +140,16 @@ VITE_ENABLE_ANALYTICS=true
 5. Set both `ENABLE_SUBSCRIPTIONS=true` and `VITE_ENABLE_SUBSCRIPTIONS=true`, then redeploy/rebuild. The backend flag enables enforcement and webhook processing; the Vite flag exposes the native subscription UI.
 6. Complete the sandbox verification below before promoting the Android release.
 
+Build the signed App Bundle with:
+
+```bash
+VITE_REVENUECAT_ANDROID_PUBLIC_SDK_KEY=goog_... npm run aab:build
+```
+
+The release script enables subscriptions, rejects missing or non-Google public
+SDK keys, syncs the RevenueCat native Capacitor plugin, and prints the AAB's
+SHA-256 checksum. The current Android release is `1.1.19` (version code `33`).
+
 ## 7. What is gated
 
 - Free plan: 1 active property, 4 active units, 1 management user

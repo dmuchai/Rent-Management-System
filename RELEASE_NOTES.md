@@ -1,5 +1,37 @@
 # Landee Release Notes
 
+## Android 1.1.19 (Build 33) - August 14, 2026
+
+### Highlights
+
+- Added RevenueCat-powered Google Play subscriptions for Bronze, Silver, and Gold plans.
+- Added purchase, restore, and Play subscription-management flows for Android billing owners.
+- Added subscription lifecycle synchronization through authenticated RevenueCat webhooks.
+- Added plan limits and feature gates across properties, units, management users, reports, and reconciliation.
+
+### Build And Deployment
+
+- Android app version: `1.1.19`
+- Android version code: `33`
+- Package ID: `com.rentmanagement.app`
+- RevenueCat entitlement: `landee_access`
+- Play Store release command:
+
+```bash
+VITE_REVENUECAT_ANDROID_PUBLIC_SDK_KEY=goog_... npm run aab:build
+```
+
+The release build requires the public Google/Android RevenueCat SDK key, enables
+subscriptions at build time, syncs the native Capacitor plugin, and produces a
+signed AAB for Google Play internal or closed testing.
+
+### Verification
+
+- TypeScript check passed.
+- All 9 subscription mapping, access, and webhook lifecycle tests passed.
+- The Android release variant compiled successfully with the RevenueCat native module.
+- The merged release manifest contains `com.android.vending.BILLING`.
+
 ## Android 1.1.0 (Build 16) - July 8, 2026
 
 ### Highlights

@@ -27,6 +27,8 @@
     "mobile:ios": "npm run mobile:sync && npx cap open ios",
     "mobile:build": "NODE_ENV=production VITE_API_URL=https://landee.kejalink.co.ke npm run build:frontend && NODE_ENV=production npx cap sync",
     "apk:build": "bash build-apk.sh",
+    "aab:build": "bash build-apk.sh bundle",
+    "android:release": "bash build-apk.sh all",
     "apk:install": "adb install -r android/app/build/outputs/apk/release/app-release.apk"
   },
   "dependencies": {

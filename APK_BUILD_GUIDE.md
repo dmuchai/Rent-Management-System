@@ -2,18 +2,18 @@
 
 ## Quick Start
 
-The easiest way to build the APK with correct configuration:
+The easiest way to build a signed, RevenueCat-enabled App Bundle for Google Play:
 
 ```bash
-npm run apk:build
+VITE_REVENUECAT_ANDROID_PUBLIC_SDK_KEY=goog_... npm run aab:build
 ```
 
 This automatically:
 1. Sets `VITE_API_URL=https://landee.kejalink.co.ke`
-2. Builds the frontend
-3. Syncs files to Android
-4. Builds the APK
-5. Shows the output location
+2. Enables the subscription UI at build time
+3. Validates the RevenueCat Android public SDK key
+4. Builds the frontend and syncs the RevenueCat native plugin
+5. Builds a signed AAB and prints its location and SHA-256 checksum
 
 ## What's New
 
@@ -33,15 +33,21 @@ Ensure you have installed:
 ### Method 1: Using NPM Script (Recommended)
 
 ```bash
-npm run apk:build
+VITE_REVENUECAT_ANDROID_PUBLIC_SDK_KEY=goog_... npm run aab:build
 ```
 
-**Output:** `android/app/build/outputs/apk/release/app-release.apk`
+**Output:** `android/app/build/outputs/bundle/release/app-release.aab`
+
+To produce both a Play Store AAB and an installable APK:
+
+```bash
+VITE_REVENUECAT_ANDROID_PUBLIC_SDK_KEY=goog_... npm run android:release
+```
 
 ### Method 2: Using Bash Script Directly
 
 ```bash
-./build-apk.sh
+VITE_REVENUECAT_ANDROID_PUBLIC_SDK_KEY=goog_... ./build-apk.sh bundle
 ```
 
 ### Method 3: Manual Build Steps
@@ -49,6 +55,8 @@ npm run apk:build
 Set the API URL:
 ```bash
 export VITE_API_URL=https://landee.kejalink.co.ke
+export VITE_ENABLE_SUBSCRIPTIONS=true
+export VITE_REVENUECAT_ANDROID_PUBLIC_SDK_KEY=goog_...
 export NODE_ENV=production
 ```
 
@@ -59,13 +67,13 @@ npm run build:frontend
 
 Sync to Android:
 ```bash
-npx cap sync
+npx cap sync android
 ```
 
 Build APK:
 ```bash
 cd android
-./gradlew assembleRelease
+./gradlew bundleRelease
 ```
 
 ## Installation
@@ -203,12 +211,18 @@ zipalign -v 4 \
 
 ## Environment Variables
 
-The build script automatically sets:
+The build script sets the production API URL and enables subscriptions. Supply the
+public RevenueCat Google SDK key in the build environment:
 
 ```bash
 VITE_API_URL=https://landee.kejalink.co.ke
+VITE_ENABLE_SUBSCRIPTIONS=true
+VITE_REVENUECAT_ANDROID_PUBLIC_SDK_KEY=goog_...
 NODE_ENV=production
 ```
+
+The SDK key is embedded in the app and is safe to use client-side. Never provide
+the RevenueCat secret API key or webhook secret to a `VITE_*` variable.
 
 If you need to use a different backend:
 ```bash
