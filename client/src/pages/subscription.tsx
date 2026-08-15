@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,6 +38,7 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const { enabled, isLoading, isPurchasing, isRestoring, account, offerings, purchasePackage, restorePurchases, manageSubscription, refreshSubscription, error } = useSubscription();
+  const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
   useEffect(() => {
     trackEvent('subscription_page_viewed', { embedded });
@@ -337,9 +339,13 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
         {plansToDisplay.length === 0 ? (
           <Card className="md:col-span-2 xl:col-span-3">
             <CardHeader>
-              <CardTitle>No packages loaded</CardTitle>
+              <CardTitle>
+                {isNativeAndroid ? 'No packages loaded' : 'Subscribe in the Landee Android app'}
+              </CardTitle>
               <CardDescription>
-                We could not load the default RevenueCat offering from Google Play.
+                {isNativeAndroid
+                  ? 'We could not load the default RevenueCat offering from Google Play.'
+                  : 'Google Play plans and localized prices are available in the installed Android app. Purchases made there automatically sync to this web account.'}
               </CardDescription>
             </CardHeader>
           </Card>
