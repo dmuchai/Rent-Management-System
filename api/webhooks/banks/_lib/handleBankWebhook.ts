@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createVerify, randomUUID } from 'crypto';
+import { createHash, createVerify, randomUUID } from 'crypto';
 import { createDbConnection } from '../../../_lib/db.js';
 import { reconcilePayment, recordReconciliation } from '../../../_lib/reconciliationEngine.js';
 import { bankWebhookAdapters, type BankProvider } from './bankAdapter.js';
@@ -36,6 +36,27 @@ function normalizePemKey(value: string): string {
   return value.replace(/\\n/g, '\n').trim();
 }
 
+function getConfiguredKcbPublicKeys(): string[] {
+  return [
+    process.env.KCB_WEBHOOK_PUBLIC_KEY,
+    process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS,
+  ]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .map(normalizePemKey);
+}
+
+function transactionFingerprint(transactionId: string): string {
+  return createHash('sha256').update(transactionId, 'utf8').digest('hex').slice(0, 12);
+}
+
+function logKcbWebhook(
+  level: 'info' | 'warn' | 'error',
+  event: string,
+  details: Record<string, string | number | boolean | undefined> = {}
+) {
+  console[level]('[KCB Webhook]', JSON.stringify({ event, ...details }));
+}
+
 const MAX_KCB_REQUEST_BYTES = 1024 * 1024;
 
 export type KcbNotificationKind = 'auto' | 'till' | 'account';
@@ -63,6 +84,16 @@ export function verifyRsaSha256(
   } catch (error) {
     return false;
   }
+}
+
+export function verifyRsaSha256WithKeys(
+  payload: string,
+  signatureBase64: string,
+  publicKeysPem: string[]
+): boolean {
+  return publicKeysPem.some((publicKeyPem) =>
+    verifyRsaSha256(payload, signatureBase64, publicKeyPem)
+  );
 }
 
 function getKcbSignature(req: VercelRequest): string | undefined {
@@ -97,8 +128,8 @@ export async function readKcbRawBody(req: VercelRequest): Promise<string> {
 export async function readAndVerifyKcbPayload(
   req: VercelRequest
 ): Promise<Record<string, unknown>> {
-  const configuredKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
-  if (!configuredKey && process.env.NODE_ENV === 'production') {
+  const configuredKeys = getConfiguredKcbPublicKeys();
+  if (configuredKeys.length === 0 && process.env.NODE_ENV === 'production') {
     throw new KcbRequestError(500, 'KCB webhook public key is not configured');
   }
 
@@ -106,12 +137,13 @@ export async function readAndVerifyKcbPayload(
   const signature = getKcbSignature(req);
 
   if (!signature) {
+    logKcbWebhook('warn', 'signature_missing');
     throw new KcbRequestError(403, 'Invalid signature');
   }
 
-  if (configuredKey) {
-    const publicKeyPem = normalizePemKey(configuredKey);
-    if (!verifyRsaSha256(rawBody, signature, publicKeyPem)) {
+  if (configuredKeys.length > 0) {
+    if (!verifyRsaSha256WithKeys(rawBody, signature, configuredKeys)) {
+      logKcbWebhook('warn', 'signature_invalid');
       throw new KcbRequestError(403, 'Invalid signature');
     }
   }
@@ -238,6 +270,7 @@ export async function handleBankWebhook(
   provider: BankProvider,
   options: { kcbNotificationKind?: KcbNotificationKind } = {}
 ) {
+  const startedAt = Date.now();
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -275,6 +308,7 @@ export async function handleBankWebhook(
 
   try {
     const normalized = adapter.normalize(payload);
+    const transactionRef = transactionFingerprint(normalized.transactionId);
 
     // Build the WHERE clause to avoid NULL parameter type inference issues
     let channel: any = undefined;
@@ -338,7 +372,7 @@ export async function handleBankWebhook(
         ${normalized.transactionTime.toISOString()},
         ${JSON.stringify(normalized.rawPayload)},
         'unmatched',
-        ${provider === 'kcb' && Boolean(process.env.KCB_WEBHOOK_PUBLIC_KEY)}
+        ${provider === 'kcb' && getConfiguredKcbPublicKeys().length > 0}
       )
       ON CONFLICT (provider, external_transaction_id) DO NOTHING
       RETURNING id
@@ -354,6 +388,13 @@ export async function handleBankWebhook(
       `;
       const acknowledgementId = resolveKcbAcknowledgementId(undefined, existingEvent?.id);
 
+      if (provider === 'kcb') {
+        logKcbWebhook('info', 'replay_acknowledged', {
+          transactionRef,
+          latencyMs: Date.now() - startedAt,
+        });
+      }
+
       return sendProviderResponse(payload, res, provider, {
         success: true,
         message: 'Already processed',
@@ -368,6 +409,13 @@ export async function handleBankWebhook(
     const acknowledgementId = resolveKcbAcknowledgementId(paymentEvent.id);
 
     if (!channel) {
+      if (provider === 'kcb') {
+        logKcbWebhook('warn', 'payment_channel_unrecognized', {
+          transactionRef,
+          eventId: acknowledgementId,
+          latencyMs: Date.now() - startedAt,
+        });
+      }
       return sendProviderResponse(payload, res, provider, {
         success: true,
         message: 'Payment stored (channel not recognized)',
@@ -379,6 +427,13 @@ export async function handleBankWebhook(
     }
 
     if (!(await ownerHasSubscriptionFeature(channel.landlord_id, 'payment_reconciliation'))) {
+      if (provider === 'kcb') {
+        logKcbWebhook('info', 'reconciliation_not_entitled', {
+          transactionRef,
+          eventId: acknowledgementId,
+          latencyMs: Date.now() - startedAt,
+        });
+      }
       return sendProviderResponse(payload, res, provider, {
         success: true,
         message: 'Payment stored',
@@ -405,6 +460,16 @@ export async function handleBankWebhook(
 
     await recordReconciliation(sql, paymentEvent.id, normalized.amount, reconciliationResult);
 
+    if (provider === 'kcb') {
+      logKcbWebhook('info', 'reconciliation_completed', {
+        transactionRef,
+        eventId: acknowledgementId,
+        matched: reconciliationResult.matched,
+        method: reconciliationResult.method,
+        latencyMs: Date.now() - startedAt,
+      });
+    }
+
     return sendProviderResponse(payload, res, provider, {
       success: true,
       message: reconciliationResult.matched ? 'Payment matched' : 'Payment queued for review',
@@ -418,7 +483,14 @@ export async function handleBankWebhook(
       transactionId: acknowledgementId,
     }, kcbKind);
   } catch (error: any) {
-    console.error(`[${provider.toUpperCase()} Webhook] Error:`, error);
+    if (provider === 'kcb') {
+      logKcbWebhook('error', 'processing_error', {
+        errorType: error?.name || 'Error',
+        latencyMs: Date.now() - startedAt,
+      });
+    } else {
+      console.error(`[${provider.toUpperCase()} Webhook] Error:`, error);
+    }
     return sendProviderResponse(payload, res, provider, {
       success: false,
       message: 'Payment received (processing error)',

@@ -10,11 +10,13 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { createClient } from '@supabase/supabase-js';
-import type { Express, RequestHandler, Request } from 'express';
-// Extend Express Request type to allow 'user' property
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: any;
+import type { Express, RequestHandler } from 'express';
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: any;
+    }
   }
 }
 
