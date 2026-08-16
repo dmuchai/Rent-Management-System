@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Sql } from 'postgres';
 import {
   buildPlanLimitError,
@@ -10,19 +10,25 @@ import {
 } from '../../shared/subscription/index.js';
 import type { PlanCode, SubscriptionFeatureKey, SubscriptionResourceKey, SubscriptionStatus } from '../../shared/subscription/index.js';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let subscriptionAdmin: SupabaseClient<any, 'public', any> | undefined;
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error('Missing required Supabase environment variables for subscription helpers');
+function getSubscriptionAdmin(): SupabaseClient<any, 'public', any> {
+  if (subscriptionAdmin) return subscriptionAdmin;
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing required Supabase environment variables for subscription helpers');
+  }
+
+  subscriptionAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+  return subscriptionAdmin;
 }
-
-export const subscriptionAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
 
 export function isSubscriptionsEnabled(): boolean {
   return process.env.ENABLE_SUBSCRIPTIONS === 'true';
@@ -37,7 +43,7 @@ export function createPlanLimitError(plan: PlanCode, resource: SubscriptionResou
 }
 
 export async function getBillingAccountForOwner(ownerUserId: string) {
-  const { data, error } = await subscriptionAdmin
+  const { data, error } = await getSubscriptionAdmin()
     .from('billing_accounts')
     .select('*')
     .eq('owner_user_id', ownerUserId)
@@ -66,7 +72,8 @@ export async function ensureBillingAccountForOwner(ownerUserId: string) {
   const existing = await getBillingAccountForOwner(ownerUserId);
   if (existing) return existing;
 
-  const { data: owner, error: ownerError } = await subscriptionAdmin
+  const admin = getSubscriptionAdmin();
+  const { data: owner, error: ownerError } = await admin
     .from('users')
     .select('id, role, created_at')
     .eq('id', ownerUserId)
@@ -75,7 +82,7 @@ export async function ensureBillingAccountForOwner(ownerUserId: string) {
   if (ownerError) throw ownerError;
   if (!owner || !['landlord', 'property_manager'].includes(owner.role)) return null;
 
-  const { data, error } = await subscriptionAdmin
+  const { data, error } = await admin
     .from('billing_accounts')
     .upsert({
       owner_user_id: ownerUserId,

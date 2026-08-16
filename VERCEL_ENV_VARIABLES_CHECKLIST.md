@@ -4,33 +4,29 @@
 
 These variables are used by the backend and must point to your new domain.
 
-### ✅ TO UPDATE (Domain-Related)
+### TO UPDATE (Domain-Related)
 
 | Variable | Old Value | New Value | Purpose |
 |----------|-----------|-----------|---------|
 | `FRONTEND_URL` | `https://property-manager-ke.vercel.app` | `https://landee.kejalink.co.ke` | Password reset links, OAuth redirects, payment callbacks |
 
-### ℹ️ ALREADY CORRECT
+### ALREADY CORRECT
 
-These are set with the correct domain via `.env.production`:
+Verify these by name and environment in Vercel. Never store their values in source control.
 
 | Variable | Current Value | Purpose |
 |----------|---------------|---------|
-| `DATABASE_URL` | `postgresql://...:x!u+&YRK4su%40e9P@...` | Database connection (@ symbol encoded) |
-| `VITE_SUPABASE_URL` | `https://emdahodfztpfdjkrbnqz.supabase.co` | Supabase frontend |
-| `VITE_SUPABASE_ANON_KEY` | `eyJ...` | Supabase anon key |
+| `DATABASE_URL` | Configured in Vercel (value intentionally omitted) | PostgreSQL database connection |
+| `VITE_SUPABASE_URL` | Configured in Vercel | Supabase frontend |
+| `VITE_SUPABASE_ANON_KEY` | Configured in Vercel (value intentionally omitted) | Supabase anon key |
 
-### 📋 PAYMENT VARIABLES (Check if Used)
+### PAYMENT VARIABLES (Check if Used)
 
-These should also be updated if they contain domain references:
+- `MPESA_CALLBACK_URL` should use `https://landee.kejalink.co.ke/api/payments/mpesa/callback` in Production.
+- `PESAPAL_CALLBACK_URL` should use `https://landee.kejalink.co.ke/api/payments/pesapal/ipn` in Production.
+- `PAYMENT_SUCCESS_URL` should use `https://landee.kejalink.co.ke/dashboard?payment=success` in Production.
 
-- `MPESA_CALLBACK_URL` → Should be `https://landee.kejalink.co.ke/api/payments/mpesa/callback`
-- `PESAPAL_CALLBACK_URL` → Should be `https://landee.kejalink.co.ke/api/payments/pesapal/ipn`
-- `PAYMENT_SUCCESS_URL` → Should be `https://landee.kejalink.co.ke/dashboard?payment=success`
-
-### 📲 SMS VARIABLES (Infobip Live Testing)
-
-Set these before testing phone verification from user profiles:
+### SMS VARIABLES (Infobip Live Testing)
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
@@ -39,34 +35,26 @@ Set these before testing phone verification from user profiles:
 | `INFOBIP_API_KEY` | Your active Infobip API key | API authentication |
 | `INFOBIP_SENDER_ID` | Your registered sender, such as `Landee` | Sender used for Kenyan SMS traffic |
 
-Keep the Africa's Talking variables only if you want a quick rollback path; they are ignored while `SMS_PROVIDER=infobip`.
-
-Signup no longer requires SMS OTP. Users verify email first, then verify their phone number later from their profile.
+Keep the Africa's Talking variables only if you want a rollback path; they are ignored while `SMS_PROVIDER=infobip`.
 
 ## How to Update in Vercel
 
-1. Go to: https://vercel.com/your-project/settings/environment-variables
-2. For each variable to update:
-   - Click the variable name
-   - Click `...` menu → Edit
-   - Update the value
-   - Click Save
-3. **Redeploy** the project (or it will auto-redeploy on next push)
+1. Open the project environment-variable settings.
+2. Edit only the intended variable and environment assignments.
+3. Redeploy, or allow the next deployment to pick up the change.
 
 ## Verify Changes
 
-After updating and redeploying:
-
-1. Check email reset links point to new domain
-2. Test OAuth login (redirects should use new domain)
-3. Test payments (callbacks should use new domain)
+1. Check email reset links point to the intended domain.
+2. Test OAuth login redirects.
+3. Test payment callbacks in a non-Production environment first.
 
 ## Local Development
 
-For local `.env.production` (already done):
-- ✅ DATABASE_URL has @ encoded as %40
-- ✅ FRONTEND_URL set to https://landee.kejalink.co.ke
+- Keep `.env*` files out of source control.
+- Confirm `DATABASE_URL` is URL-encoded without recording its value in documentation.
+- Set `FRONTEND_URL` to `https://landee.kejalink.co.ke` only for Production.
 
 ---
 
-**Last Updated:** February 25, 2026
+**Last Updated:** August 16, 2026

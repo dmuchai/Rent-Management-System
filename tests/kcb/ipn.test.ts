@@ -14,6 +14,7 @@ import {
   readAndVerifyKcbPayload,
   resolveKcbAcknowledgementId,
   verifyRsaSha256,
+  verifyRsaSha256WithKeys,
 } from "../../api/webhooks/banks/_lib/handleBankWebhook.js";
 import { buildKcbValidationResponse } from "../../api/webhooks/banks/_lib/kcbValidation.js";
 
@@ -149,6 +150,57 @@ test("verifies SHA256withRSA signatures and rejects altered payloads", () => {
   );
 });
 
+test("accepts either the current or previous public key during rotation", () => {
+  const current = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const previous = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const payload = JSON.stringify(sampleIpn);
+  const signature = sign("RSA-SHA256", Buffer.from(payload), previous.privateKey).toString("base64");
+  const keys = [current.publicKey, previous.publicKey].map((key) =>
+    key.export({ type: "spki", format: "pem" }).toString()
+  );
+
+  assert.equal(verifyRsaSha256WithKeys(payload, signature, keys), true);
+  assert.equal(verifyRsaSha256WithKeys(`${payload}\n`, signature, keys), false);
+});
+
+test("verifies requests with only the authorized previous-key environment value", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  const previousKey = process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+  delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS = publicKey
+    .export({ type: "spki", format: "pem" })
+    .toString();
+
+  try {
+    const parsed = await readAndVerifyKcbPayload(createSignedRequest(sampleIpn, privateKey));
+    assert.deepEqual(parsed, sampleIpn);
+  } finally {
+    if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
+    if (previousKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS = previousKey;
+  }
+});
+
+test("rejects a missing signature before parsing the payload", async () => {
+  const previousKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  process.env.KCB_WEBHOOK_PUBLIC_KEY = "not-used-without-a-signature";
+  const request = Readable.from([Buffer.from(JSON.stringify(sampleIpn))]) as unknown as VercelRequest;
+  request.headers = {};
+  request.method = "POST";
+
+  try {
+    await assert.rejects(
+      () => readAndVerifyKcbPayload(request),
+      (error: unknown) => error instanceof KcbRequestError && error.statusCode === 403
+    );
+  } finally {
+    if (previousKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY = previousKey;
+  }
+});
+
 test("verifies the exact raw request bytes before parsing JSON", async () => {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const rawBody = JSON.stringify(sampleIpn, null, 2);
@@ -253,6 +305,36 @@ test("keeps Till and Account routes contract-specific after valid signature veri
     } else {
       process.env.KCB_WEBHOOK_PUBLIC_KEY = previousKey;
     }
+  }
+});
+
+test("returns 405 for non-POST KCB routes", async () => {
+  for (const handler of [tillHandler, accountHandler, validationHandler]) {
+    const request = Readable.from([]) as unknown as VercelRequest;
+    request.headers = {};
+    request.method = "GET";
+    const mock = createMockResponse();
+    await handler(request, mock.response);
+    assert.equal(mock.state.statusCode, 405);
+  }
+});
+
+test("returns 403 for unsigned KCB POST routes", async () => {
+  const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  process.env.KCB_WEBHOOK_PUBLIC_KEY = "configured-but-not-read-without-signature";
+
+  try {
+    for (const handler of [tillHandler, accountHandler, validationHandler]) {
+      const request = Readable.from([Buffer.from(JSON.stringify(sampleIpn))]) as unknown as VercelRequest;
+      request.headers = {};
+      request.method = "POST";
+      const mock = createMockResponse();
+      await handler(request, mock.response);
+      assert.equal(mock.state.statusCode, 403);
+    }
+  } finally {
+    if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
   }
 });
 
