@@ -125,24 +125,27 @@ export async function readKcbRawBody(req: VercelRequest): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export async function readAndVerifyKcbPayload(
-  req: VercelRequest
+async function readKcbPayload(
+  req: VercelRequest,
+  verifySignature: boolean
 ): Promise<Record<string, unknown>> {
-  const configuredKeys = getConfiguredKcbPublicKeys();
-  if (configuredKeys.length === 0 && process.env.NODE_ENV === 'production') {
-    throw new KcbRequestError(500, 'KCB webhook public key is not configured');
-  }
-
   const rawBody = await readKcbRawBody(req);
-  const signature = getKcbSignature(req);
+  if (verifySignature) {
+    const configuredKeys = getConfiguredKcbPublicKeys();
+    if (configuredKeys.length === 0 && process.env.NODE_ENV === 'production') {
+      throw new KcbRequestError(500, 'KCB webhook public key is not configured');
+    }
 
-  if (!signature) {
-    logKcbWebhook('warn', 'signature_missing');
-    throw new KcbRequestError(403, 'Invalid signature');
-  }
+    const signature = getKcbSignature(req);
+    if (!signature) {
+      logKcbWebhook('warn', 'signature_missing');
+      throw new KcbRequestError(403, 'Invalid signature');
+    }
 
-  if (configuredKeys.length > 0) {
-    if (!verifyRsaSha256WithKeys(rawBody, signature, configuredKeys)) {
+    if (
+      configuredKeys.length > 0 &&
+      !verifyRsaSha256WithKeys(rawBody, signature, configuredKeys)
+    ) {
       logKcbWebhook('warn', 'signature_invalid');
       throw new KcbRequestError(403, 'Invalid signature');
     }
@@ -157,6 +160,12 @@ export async function readAndVerifyKcbPayload(
   } catch {
     throw new KcbRequestError(400, 'Invalid JSON payload');
   }
+}
+
+export async function readAndVerifyKcbPayload(
+  req: VercelRequest
+): Promise<Record<string, unknown>> {
+  return readKcbPayload(req, true);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -268,7 +277,10 @@ export async function handleBankWebhook(
   req: VercelRequest,
   res: VercelResponse,
   provider: BankProvider,
-  options: { kcbNotificationKind?: KcbNotificationKind } = {}
+  options: {
+    kcbNotificationKind?: KcbNotificationKind;
+    verifyKcbSignature?: boolean;
+  } = {}
 ) {
   const startedAt = Date.now();
   if (req.method !== 'POST') {
@@ -276,11 +288,12 @@ export async function handleBankWebhook(
   }
 
   const kcbKind = options.kcbNotificationKind || 'auto';
+  const verifyKcbSignature = options.verifyKcbSignature !== false;
   let payload: unknown;
 
   if (provider === 'kcb') {
     try {
-      payload = await readAndVerifyKcbPayload(req);
+      payload = await readKcbPayload(req, verifyKcbSignature);
     } catch (error) {
       if (error instanceof KcbRequestError) {
         return res.status(error.statusCode).json({ error: error.message });
@@ -372,7 +385,7 @@ export async function handleBankWebhook(
         ${normalized.transactionTime.toISOString()},
         ${JSON.stringify(normalized.rawPayload)},
         'unmatched',
-        ${provider === 'kcb' && getConfiguredKcbPublicKeys().length > 0}
+        ${provider === 'kcb' && verifyKcbSignature && getConfiguredKcbPublicKeys().length > 0}
       )
       ON CONFLICT (provider, external_transaction_id) DO NOTHING
       RETURNING id

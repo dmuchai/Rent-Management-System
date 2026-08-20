@@ -319,12 +319,35 @@ test("returns 405 for non-POST KCB routes", async () => {
   }
 });
 
-test("returns 403 for unsigned KCB POST routes", async () => {
+test("temporarily accepts unsigned Account IPN requests for KCB UAT", async () => {
+  const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  process.env.KCB_WEBHOOK_PUBLIC_KEY = "configured-but-not-used-for-account-uat";
+
+  try {
+    const request = Readable.from([
+      Buffer.from(JSON.stringify(documentedTillIpn)),
+    ]) as unknown as VercelRequest;
+    request.headers = {};
+    request.method = "POST";
+    const mock = createMockResponse();
+
+    await accountHandler(request, mock.response);
+
+    assert.equal(mock.state.statusCode, 200);
+    assert.equal(mock.state.body.statusCode, "1");
+    assert.equal(mock.state.body.statusMessage, "Invalid account notification payload");
+  } finally {
+    if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
+  }
+});
+
+test("continues to reject unsigned KCB Till and validation requests", async () => {
   const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
   process.env.KCB_WEBHOOK_PUBLIC_KEY = "configured-but-not-read-without-signature";
 
   try {
-    for (const handler of [tillHandler, accountHandler, validationHandler]) {
+    for (const handler of [tillHandler, validationHandler]) {
       const request = Readable.from([Buffer.from(JSON.stringify(sampleIpn))]) as unknown as VercelRequest;
       request.headers = {};
       request.method = "POST";
