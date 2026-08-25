@@ -28,8 +28,6 @@ import NotFound from "@/pages/not-found";
 import { SubscriptionProvider } from "@/hooks/useSubscription";
 
 const PUBLIC_ROUTES = new Set([
-  '/',
-  '/login',
   '/home',
   '/register',
   '/verify-email',
