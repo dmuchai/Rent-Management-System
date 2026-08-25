@@ -22,9 +22,26 @@ import ResetPassword from "@/pages/reset-password";
 import SelectRole from "@/pages/select-role";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfService from "@/pages/terms-of-service";
+import AccountDeletion from "@/pages/account-deletion";
 import SubscriptionPage from "@/pages/subscription";
 import NotFound from "@/pages/not-found";
 import { SubscriptionProvider } from "@/hooks/useSubscription";
+
+const PUBLIC_ROUTES = new Set([
+  '/',
+  '/login',
+  '/home',
+  '/register',
+  '/verify-email',
+  '/check-email',
+  '/accept-invitation',
+  '/forgot-password',
+  '/reset-password',
+  '/auth-callback',
+  '/privacy-policy',
+  '/terms-of-service',
+  '/account-deletion',
+]);
 
 function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -37,7 +54,7 @@ function Router() {
     if (!isLoading) {
       if (isAuthenticated) {
         // If user has no role, redirect to role selection
-        if (user && !user.role && location !== '/select-role') {
+        if (user && !user.role && location === '/dashboard') {
           console.log('[Router] User has no role, redirecting to /select-role. Role value:', user.role);
           setLocation('/select-role');
           return;
@@ -58,7 +75,7 @@ function Router() {
     }
   }, [isAuthenticated, isLoading, location, setLocation, user]);
 
-  if (isLoading) {
+  if (isLoading && !PUBLIC_ROUTES.has(location)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
@@ -80,6 +97,7 @@ function Router() {
       <Route path="/auth-callback" component={AuthCallback} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
+      <Route path="/account-deletion" component={AccountDeletion} />
       <Route path="/subscription" component={SubscriptionPage} />
       <Route path="/select-role" component={SelectRole} />
       <Route path="/dashboard" component={() => {

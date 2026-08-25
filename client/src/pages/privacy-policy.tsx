@@ -12,7 +12,7 @@ export default function PrivacyPolicy() {
           <div>
             <p className="text-sm text-muted-foreground">Landee Legal</p>
             <h1 className="text-3xl font-bold text-foreground">Privacy Policy</h1>
-            <p className="text-sm text-muted-foreground mt-2">Effective date: Feb 12, 2026</p>
+            <p className="text-sm text-muted-foreground mt-2">Effective date: Aug 25, 2026</p>
           </div>
           <Button asChild variant="outline">
             <Link href="/home">Back to home</Link>
@@ -71,6 +71,25 @@ export default function PrivacyPolicy() {
         </section>
 
         <section className="space-y-3">
+          <h2 className="text-xl font-semibold">Account and data deletion</h2>
+          <p className="text-muted-foreground">
+            You may request deletion of your Landee account and associated personal data, or request
+            deletion of specific personal data while keeping your account open. Requests must be
+            verified through the email address supplied with the request before review begins.
+          </p>
+          <p className="text-muted-foreground">
+            Some information may be retained when required for legal, tax, accounting,
+            fraud-prevention, security, dispute, or contractual obligations. Records involving other
+            landlords, tenants, or property managers may need to be transferred, anonymised, or
+            reviewed before deletion. Access to retained information is restricted and it is removed
+            when the applicable retention period ends.
+          </p>
+          <Button asChild variant="outline">
+            <Link href="/account-deletion">Submit a deletion request</Link>
+          </Button>
+        </section>
+
+        <section className="space-y-3">
           <h2 className="text-xl font-semibold">Security</h2>
           <p className="text-muted-foreground">
             We use administrative, technical, and physical safeguards to protect your information.
@@ -82,9 +101,9 @@ export default function PrivacyPolicy() {
         <section className="space-y-3">
           <h2 className="text-xl font-semibold">Your choices</h2>
           <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
-            <li>Access, update, or delete your account information in your profile.</li>
+            <li>Access or update account information available in your profile.</li>
             <li>Opt out of non-essential communications by following unsubscribe links.</li>
-            <li>Contact us to request data access or deletion where applicable.</li>
+            <li>Use our public deletion-request page to request account or personal-data deletion.</li>
           </ul>
         </section>
 

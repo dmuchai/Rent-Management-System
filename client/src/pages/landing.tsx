@@ -110,7 +110,7 @@ export default function Landing() {
   };
 
   const handleAccountDeletionRequest = () => {
-    window.location.href = 'mailto:landeemoony@kejalink.co.ke?subject=Account%20Deletion%20Request';
+    setLocation('/account-deletion');
   };
 
   return (

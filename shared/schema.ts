@@ -11,6 +11,7 @@ import {
   integer,
   pgEnum,
   unique,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -96,6 +97,26 @@ export const users = pgTable("users", {
   phoneVerified: boolean("phone_verified").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Publicly submitted, email-verified account and personal-data deletion requests.
+// Direct client access is denied by the migration; server-side APIs own this workflow.
+export const accountDeletionRequests = pgTable("account_deletion_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  email: varchar("email").notNull(),
+  emailHash: varchar("email_hash").notNull(),
+  requestType: varchar("request_type").notNull(),
+  details: text("details"),
+  status: varchar("status").notNull().default("pending_verification"),
+  verificationTokenHash: varchar("verification_token_hash"),
+  verificationExpiresAt: timestamp("verification_expires_at", { withTimezone: true }),
+  sourceIpHash: varchar("source_ip_hash").notNull(),
+  userAgent: varchar("user_agent"),
+  requestedAt: timestamp("requested_at", { withTimezone: true }).defaultNow().notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // Properties table
@@ -688,6 +709,7 @@ export const insertExternalPaymentEventSchema = createInsertSchema(externalPayme
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+export type AccountDeletionRequest = typeof accountDeletionRequests.$inferSelect;
 export type Property = typeof properties.$inferSelect;
 export type InsertProperty = z.infer<typeof insertPropertySchema>;
 export type Unit = typeof units.$inferSelect;

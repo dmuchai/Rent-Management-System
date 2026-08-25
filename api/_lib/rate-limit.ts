@@ -38,6 +38,8 @@ export const RATE_LIMITS = {
   'forgot-password': { limit: 10, window: 60 }, // 10 requests per minute
   'change-password': { limit: 10, window: 60 }, // 10 changes per minute
   'profile-update': { limit: 20, window: 60 }, // 20 updates per minute
+  'account-deletion-request': { limit: 5, window: 60 * 60 }, // 5 requests per IP per hour
+  'account-deletion-verify': { limit: 20, window: 60 * 60 }, // 20 verification attempts per IP per hour
 } as const;
 
 /**
