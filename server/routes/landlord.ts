@@ -3,14 +3,16 @@ import { isAuthenticated, supabase } from "../supabaseAuth";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { normalizeMpesaPhoneNumber } from "../../shared/mpesa";
 
 const router = Router();
 
 const channelSchema = z
   .object({
-    channelType: z.enum(["mpesa_paybill", "mpesa_till", "mpesa_to_bank", "bank_account"]),
+    channelType: z.enum(["mpesa_paybill", "mpesa_till", "mpesa_send_money", "mpesa_to_bank", "bank_account"]),
     paybillNumber: z.string().optional().or(z.literal("")),
     tillNumber: z.string().optional().or(z.literal("")),
+    recipientPhoneNumber: z.string().optional().or(z.literal("")),
     bankPaybillNumber: z.string().optional().or(z.literal("")),
     bankAccountNumber: z.string().optional().or(z.literal("")),
     bankName: z.string().optional().or(z.literal("")),
@@ -34,6 +36,13 @@ const channelSchema = z
       } else if (!/^\d{6,7}$/.test(data.tillNumber)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Till number must be 6-7 digits", path: ["tillNumber"] });
       }
+    }
+    if (data.channelType === "mpesa_send_money" && !normalizeMpesaPhoneNumber(data.recipientPhoneNumber || "")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter a valid Safaricom number, for example 0712345678",
+        path: ["recipientPhoneNumber"],
+      });
     }
     if (data.channelType === "mpesa_to_bank") {
       if (!data.bankPaybillNumber?.trim()) {
@@ -63,6 +72,7 @@ function formatChannel(ch: any, full = false) {
     channelType: ch.channel_type,
     paybillNumber: ch.paybill_number,
     tillNumber: ch.till_number,
+    recipientPhoneNumber: ch.recipient_phone_number,
     bankPaybillNumber: ch.bank_paybill_number,
     bankAccountNumber: ch.bank_account_number,
     bankName: ch.bank_name,
@@ -83,7 +93,7 @@ router.get("/payment-channels", async (req: any, res: any, next: any) => {
     try {
       const { data, error } = await supabase
         .from("landlord_payment_channels")
-        .select("id, channel_type, paybill_number, till_number, bank_paybill_number, bank_account_number, bank_name, account_number, account_name, is_primary, display_name")
+        .select("id, channel_type, paybill_number, till_number, recipient_phone_number, bank_paybill_number, bank_account_number, bank_name, account_number, account_name, is_primary, display_name")
         .eq("landlord_id", landlordId)
         .eq("is_active", true)
         .order("is_primary", { ascending: false })
@@ -108,7 +118,7 @@ router.get("/payment-channels", async (req: any, res: any, next: any) => {
 
     const { data, error } = await supabase
       .from("landlord_payment_channels")
-      .select("id, channel_type, paybill_number, till_number, bank_paybill_number, bank_account_number, bank_name, account_number, account_name, is_primary, is_active, display_name, notes, created_at, updated_at")
+      .select("id, channel_type, paybill_number, till_number, recipient_phone_number, bank_paybill_number, bank_account_number, bank_name, account_number, account_name, is_primary, is_active, display_name, notes, created_at, updated_at")
       .eq("landlord_id", userId)
       .order("is_primary", { ascending: false })
       .order("created_at", { ascending: false });
@@ -131,11 +141,15 @@ router.post("/payment-channels", isAuthenticated, async (req: any, res: any) => 
     }
 
     const channelData = channelSchema.parse(req.body);
+    const recipientPhoneNumber = channelData.recipientPhoneNumber
+      ? normalizeMpesaPhoneNumber(channelData.recipientPhoneNumber)
+      : null;
 
     // Duplicate checks
     for (const [field, colName] of [
       [channelData.paybillNumber, "paybill_number"],
       [channelData.tillNumber, "till_number"],
+      [recipientPhoneNumber || undefined, "recipient_phone_number"],
       [channelData.bankAccountNumber, "bank_account_number"],
     ] as [string | undefined, string][]) {
       if (field) {
@@ -161,12 +175,12 @@ router.post("/payment-channels", isAuthenticated, async (req: any, res: any) => 
           AND ${channelData.isPrimary ?? false}
       )
       INSERT INTO public.landlord_payment_channels (
-        landlord_id, channel_type, paybill_number, till_number,
+        landlord_id, channel_type, paybill_number, till_number, recipient_phone_number,
         bank_paybill_number, bank_account_number, bank_name,
         account_number, account_name, display_name, is_primary, notes
       ) VALUES (
         ${userId}, ${channelData.channelType},
-        ${channelData.paybillNumber || null}, ${channelData.tillNumber || null},
+        ${channelData.paybillNumber || null}, ${channelData.tillNumber || null}, ${recipientPhoneNumber},
         ${channelData.bankPaybillNumber || null}, ${channelData.bankAccountNumber || null},
         ${channelData.bankName || null}, ${channelData.accountNumber || null},
         ${channelData.accountName || null}, ${channelData.displayName},

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
 import { validateBankAccount } from '../../shared/bankPaybills.js';
+import { normalizeMpesaPhoneNumber } from '../../shared/mpesa.js';
 import { z } from 'zod';
 
 // GET /api/landlord/payment-channels - List landlord's payment channels (auth required)
@@ -24,6 +25,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
           channel_type,
           paybill_number,
           till_number,
+          recipient_phone_number,
           bank_paybill_number,
           bank_account_number,
           bank_name,
@@ -42,6 +44,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         channelType: ch.channel_type,
         paybillNumber: ch.paybill_number,
         tillNumber: ch.till_number,
+        recipientPhoneNumber: ch.recipient_phone_number,
         bankPaybillNumber: ch.bank_paybill_number,
         bankAccountNumber: ch.bank_account_number,
         bankName: ch.bank_name,
@@ -78,6 +81,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
           channel_type,
           paybill_number,
           till_number,
+          recipient_phone_number,
           bank_paybill_number,
           bank_account_number,
           bank_name,
@@ -99,6 +103,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         channelType: ch.channel_type,
         paybillNumber: ch.paybill_number,
         tillNumber: ch.till_number,
+        recipientPhoneNumber: ch.recipient_phone_number,
         bankPaybillNumber: ch.bank_paybill_number,
         bankAccountNumber: ch.bank_account_number,
         bankName: ch.bank_name,
@@ -117,9 +122,10 @@ export default async (req: VercelRequest, res: VercelResponse) => {
 
     if (req.method === 'POST') {
       const channelSchema = z.object({
-        channelType: z.enum(['mpesa_paybill', 'mpesa_till', 'mpesa_to_bank', 'bank_account']),
+        channelType: z.enum(['mpesa_paybill', 'mpesa_till', 'mpesa_send_money', 'mpesa_to_bank', 'bank_account']),
         paybillNumber: z.string().optional().or(z.literal('')),
         tillNumber: z.string().optional().or(z.literal('')),
+        recipientPhoneNumber: z.string().optional().or(z.literal('')),
         bankPaybillNumber: z.string().optional().or(z.literal('')),
         bankAccountNumber: z.string().optional().or(z.literal('')),
         bankName: z.string().optional().or(z.literal('')),
@@ -161,6 +167,13 @@ export default async (req: VercelRequest, res: VercelResponse) => {
               path: ['tillNumber']
             }]);
           }
+        }
+        if (data.channelType === 'mpesa_send_money' && !normalizeMpesaPhoneNumber(data.recipientPhoneNumber || '')) {
+          throw new z.ZodError([{
+            code: 'custom',
+            message: 'Enter a valid Safaricom number, for example 0712345678',
+            path: ['recipientPhoneNumber']
+          }]);
         }
         if (data.channelType === 'mpesa_to_bank') {
           if (!data.bankPaybillNumber || data.bankPaybillNumber.trim() === '') {
@@ -224,6 +237,9 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       });
 
       const channelData = channelSchema.parse(req.body);
+      const recipientPhoneNumber = channelData.recipientPhoneNumber
+        ? normalizeMpesaPhoneNumber(channelData.recipientPhoneNumber)
+        : null;
 
       // Check for duplicate paybill/till number
       if (channelData.paybillNumber) {
@@ -250,6 +266,20 @@ export default async (req: VercelRequest, res: VercelResponse) => {
           return res.status(400).json({ 
             error: 'This Till number is already registered',
             details: 'You cannot register the same Till number twice'
+          });
+        }
+      }
+
+      if (recipientPhoneNumber) {
+        const [existingRecipient] = await sql`
+          SELECT id FROM public.landlord_payment_channels
+          WHERE recipient_phone_number = ${recipientPhoneNumber}
+            AND landlord_id = ${auth.userId}
+        `;
+        if (existingRecipient) {
+          return res.status(400).json({
+            error: 'This M-PESA recipient number is already registered',
+            details: 'You cannot register the same Send Money number twice'
           });
         }
       }
@@ -284,6 +314,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
           channel_type,
           paybill_number,
           till_number,
+          recipient_phone_number,
           bank_paybill_number,
           bank_account_number,
           bank_name,
@@ -297,6 +328,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
           ${channelData.channelType},
           ${channelData.paybillNumber || null},
           ${channelData.tillNumber || null},
+          ${recipientPhoneNumber},
           ${channelData.bankPaybillNumber || null},
           ${channelData.bankAccountNumber || null},
           ${channelData.bankName || null},
@@ -314,6 +346,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         channelType: channel.channel_type,
         paybillNumber: channel.paybill_number,
         tillNumber: channel.till_number,
+        recipientPhoneNumber: channel.recipient_phone_number,
         bankPaybillNumber: channel.bank_paybill_number,
         bankAccountNumber: channel.bank_account_number,
         bankName: channel.bank_name,
@@ -418,6 +451,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         channelType: updated.channel_type,
         paybillNumber: updated.paybill_number,
         tillNumber: updated.till_number,
+        recipientPhoneNumber: updated.recipient_phone_number,
         bankPaybillNumber: updated.bank_paybill_number,
         bankAccountNumber: updated.bank_account_number,
         bankName: updated.bank_name,

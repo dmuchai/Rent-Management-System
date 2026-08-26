@@ -329,11 +329,12 @@ export const otpCodes = pgTable("otp_codes", {
 export const landlordPaymentChannels = pgTable("landlord_payment_channels", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   landlordId: varchar("landlord_id").notNull().references(() => users.id),
-  channelType: varchar("channel_type").notNull(), // 'mpesa_paybill', 'mpesa_till', 'mpesa_to_bank', 'bank_account'
+  channelType: varchar("channel_type").notNull(), // 'mpesa_paybill', 'mpesa_till', 'mpesa_send_money', 'mpesa_to_bank', 'bank_account'
   
   // M-Pesa specific
   paybillNumber: varchar("paybill_number"), // e.g., "4012345" (landlord's own paybill)
   tillNumber: varchar("till_number"),       // e.g., "5123456"
+  recipientPhoneNumber: varchar("recipient_phone_number"), // e.g., "254712345678" (M-PESA Send Money)
   
   // M-Pesa to Bank specific (NEW)
   bankPaybillNumber: varchar("bank_paybill_number"), // e.g., "222111" (bank's paybill)

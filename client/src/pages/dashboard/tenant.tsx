@@ -639,6 +639,7 @@ export default function TenantDashboard() {
                             <PaymentInstructions
                               landlordId={landlordId}
                               invoiceReferenceCode={activeLease.id}
+                              amount={parseFloat(activeLease.monthlyRent)}
                             />
                           ) : (
                             <div className="text-center py-8">
@@ -919,6 +920,7 @@ export default function TenantDashboard() {
                             <PaymentInstructions
                               landlordId={landlordId}
                               invoiceReferenceCode={activeLease.id}
+                              amount={parseFloat(activeLease.monthlyRent)}
                             />
                           ) : (
                             <div className="text-center py-8">

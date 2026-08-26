@@ -31,14 +31,23 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, Building2, CreditCard, Plus, Settings } from "lucide-react";
+import { AlertCircle, Building2, CreditCard, Plus, Settings, Smartphone } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { normalizeMpesaPhoneNumber } from "@shared/mpesa";
+
+type PaymentChannelType =
+  | "mpesa_paybill"
+  | "mpesa_till"
+  | "mpesa_send_money"
+  | "mpesa_to_bank"
+  | "bank_account";
 
 interface PaymentChannel {
   id: string;
-  channelType: "mpesa_paybill" | "mpesa_till" | "mpesa_to_bank" | "bank_account";
+  channelType: PaymentChannelType;
   paybillNumber?: string;
   tillNumber?: string;
+  recipientPhoneNumber?: string;
   bankPaybillNumber?: string;
   bankAccountNumber?: string;
   bankName?: string;
@@ -52,9 +61,10 @@ interface PaymentChannel {
 }
 
 const paymentChannelBaseSchema = z.object({
-  channelType: z.enum(["mpesa_paybill", "mpesa_till", "mpesa_to_bank", "bank_account"]),
+  channelType: z.enum(["mpesa_paybill", "mpesa_till", "mpesa_send_money", "mpesa_to_bank", "bank_account"]),
   paybillNumber: z.string().trim(),
   tillNumber: z.string().trim(),
+  recipientPhoneNumber: z.string().trim(),
   bankPaybillNumber: z.string().trim(),
   bankAccountNumber: z.string().trim(),
   bankName: z.string().trim(),
@@ -72,6 +82,13 @@ const paymentChannelFormSchema = paymentChannelBaseSchema
     }
     if (data.channelType === "mpesa_till" && !/^\d{6,7}$/.test(data.tillNumber)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["tillNumber"], message: "Till number must be 6 to 7 digits" });
+    }
+    if (data.channelType === "mpesa_send_money" && !normalizeMpesaPhoneNumber(data.recipientPhoneNumber)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["recipientPhoneNumber"],
+        message: "Enter a valid Safaricom number, for example 0712345678",
+      });
     }
     if (data.channelType === "mpesa_to_bank") {
       if (!data.bankPaybillNumber) {
@@ -142,9 +159,10 @@ export default function PaymentChannelsManager() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState<{
-    channelType: "mpesa_paybill" | "mpesa_till" | "mpesa_to_bank" | "bank_account";
+    channelType: PaymentChannelType;
     paybillNumber: string;
     tillNumber: string;
+    recipientPhoneNumber: string;
     bankPaybillNumber: string;
     bankAccountNumber: string;
     bankName: string;
@@ -157,6 +175,7 @@ export default function PaymentChannelsManager() {
     channelType: "mpesa_paybill",
     paybillNumber: "",
     tillNumber: "",
+    recipientPhoneNumber: "",
     bankPaybillNumber: "",
     bankAccountNumber: "",
     bankName: "",
@@ -256,6 +275,7 @@ export default function PaymentChannelsManager() {
       channelType: "mpesa_paybill",
       paybillNumber: "",
       tillNumber: "",
+      recipientPhoneNumber: "",
       bankPaybillNumber: "",
       bankAccountNumber: "",
       bankName: "",
@@ -339,9 +359,10 @@ export default function PaymentChannelsManager() {
   const handleEditChannel = (channel: PaymentChannel) => {
     setEditingChannel(channel);
     setFormData({
-      channelType: channel.channelType as any,
+      channelType: channel.channelType,
       paybillNumber: channel.paybillNumber || "",
       tillNumber: channel.tillNumber || "",
+      recipientPhoneNumber: channel.recipientPhoneNumber || "",
       bankPaybillNumber: channel.bankPaybillNumber || "",
       bankAccountNumber: channel.bankAccountNumber || "",
       bankName: channel.bankName || "",
@@ -381,6 +402,8 @@ export default function PaymentChannelsManager() {
       case "mpesa_paybill":
       case "mpesa_till":
         return <CreditCard className="h-5 w-5" />;
+      case "mpesa_send_money":
+        return <Smartphone className="h-5 w-5" />;
       case "bank_account":
         return <Building2 className="h-5 w-5" />;
       default:
@@ -394,6 +417,9 @@ export default function PaymentChannelsManager() {
     }
     if (channel.channelType === "mpesa_till") {
       return `Till: ${channel.tillNumber}`;
+    }
+    if (channel.channelType === "mpesa_send_money") {
+      return `Send Money: ${channel.recipientPhoneNumber || "-"}`;
     }
     if (channel.channelType === "mpesa_to_bank") {
       return `Bank Paybill: ${channel.bankPaybillNumber || "-"}`;
@@ -410,6 +436,9 @@ export default function PaymentChannelsManager() {
     }
     if (channel.channelType === "mpesa_till") {
       return `Till: ${channel.tillNumber || "-"}`;
+    }
+    if (channel.channelType === "mpesa_send_money") {
+      return `Recipient: ${channel.recipientPhoneNumber || "-"}`;
     }
     if (channel.channelType === "mpesa_to_bank") {
       return `Bank Paybill: ${channel.bankPaybillNumber || "-"} • Account: ${channel.bankAccountNumber || "-"}`;
@@ -485,8 +514,8 @@ export default function PaymentChannelsManager() {
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            No payment channels configured yet. Add your M-Pesa Paybill or bank account
-            to receive rent payments directly from tenants.
+            No payment channels configured yet. Add M-PESA or bank details to receive
+            rent payments directly from tenants.
           </AlertDescription>
         </Alert>
       ) : (
@@ -598,6 +627,12 @@ export default function PaymentChannelsManager() {
                   <p className="text-sm font-medium">{selectedChannel.tillNumber || "-"}</p>
                 </div>
               )}
+              {selectedChannel.channelType === "mpesa_send_money" && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Recipient Phone Number</p>
+                  <p className="text-sm font-medium">{selectedChannel.recipientPhoneNumber || "-"}</p>
+                </div>
+              )}
               {selectedChannel.channelType === "mpesa_to_bank" && (
                 <>
                   <div>
@@ -686,8 +721,8 @@ export default function PaymentChannelsManager() {
                 <Label htmlFor="channelType">Channel Type</Label>
                 <Select
                   value={formData.channelType}
-                  onValueChange={(value: any) => {
-                    setField("channelType", value);
+                  onValueChange={(value) => {
+                    setField("channelType", value as PaymentChannelType);
                     setErrors({});
                   }}
                 >
@@ -697,6 +732,7 @@ export default function PaymentChannelsManager() {
                   <SelectContent>
                     <SelectItem value="mpesa_paybill">M-Pesa Paybill (Own)</SelectItem>
                     <SelectItem value="mpesa_till">M-Pesa Till Number</SelectItem>
+                    <SelectItem value="mpesa_send_money">M-Pesa Send Money</SelectItem>
                     <SelectItem value="mpesa_to_bank">M-Pesa to Bank Account</SelectItem>
                     <SelectItem value="bank_account">Bank Account (Direct)</SelectItem>
                   </SelectContent>
@@ -735,6 +771,37 @@ export default function PaymentChannelsManager() {
                 />
                 <p className="text-xs text-gray-500 mt-1">6-7 digit Till number</p>
                 {errors.tillNumber && <p className="mt-1 text-sm text-destructive">{errors.tillNumber}</p>}
+              </div>
+            )}
+
+            {!editingChannel && formData.channelType === "mpesa_send_money" && (
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="recipientPhoneNumber">M-PESA Recipient Number</Label>
+                  <Input
+                    id="recipientPhoneNumber"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    placeholder="e.g., 0712345678"
+                    value={formData.recipientPhoneNumber}
+                    onChange={(e) => setField("recipientPhoneNumber", e.target.value)}
+                    className={errors.recipientPhoneNumber ? "border-destructive" : ""}
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    The Safaricom number tenants should select under M-PESA Send Money.
+                  </p>
+                  {errors.recipientPhoneNumber && (
+                    <p className="mt-1 text-sm text-destructive">{errors.recipientPhoneNumber}</p>
+                  )}
+                </div>
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Send Money payments are not confirmed automatically by Daraja. Verify them from your M-PESA statement or reconciliation screen before marking rent as paid.
+                  </AlertDescription>
+                </Alert>
               </div>
             )}
 

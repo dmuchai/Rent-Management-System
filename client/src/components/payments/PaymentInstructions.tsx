@@ -8,12 +8,14 @@ import { Copy, Check, Info, Building, CreditCard, Phone } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { getBankByPaybill } from "@shared/bankPaybills";
+import { formatMpesaPhoneNumber } from "@shared/mpesa";
 
 interface PaymentChannel {
   id: string;
-  channelType: 'mpesa_paybill' | 'mpesa_till' | 'mpesa_to_bank' | 'bank_account';
+  channelType: 'mpesa_paybill' | 'mpesa_till' | 'mpesa_send_money' | 'mpesa_to_bank' | 'bank_account';
   paybillNumber?: string;
   tillNumber?: string;
+  recipientPhoneNumber?: string;
   bankPaybillNumber?: string;
   bankAccountNumber?: string;
   bankName?: string;
@@ -135,6 +137,7 @@ export default function PaymentInstructions({
 
   // Note: API already filters to only active channels, so no need to filter again
   const primaryChannel = channels.find(ch => ch.isPrimary) || channels[0];
+  const hasSendMoneyChannel = channels.some(ch => ch.channelType === 'mpesa_send_money');
 
   if (channels.length === 0) {
     return (
@@ -212,9 +215,13 @@ export default function PaymentInstructions({
           <AlertDescription>
             <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
               {invoiceReferenceCode && (
-                <li>Always use the provided reference code for automatic payment matching</li>
+                <li>For Paybill or bank payments, use the provided reference code for automatic matching</li>
               )}
-              <li>Payments are typically processed within 5-10 minutes</li>
+              <li>
+                {hasSendMoneyChannel
+                  ? 'Send Money payments require landlord verification and may take up to 24 hours to reflect'
+                  : 'Payments are typically processed within 5-10 minutes'}
+              </li>
               <li>Keep your M-PESA/bank confirmation message for your records</li>
               <li>Contact your landlord if payment is not reflected within 24 hours</li>
             </ul>
@@ -228,6 +235,7 @@ export default function PaymentInstructions({
     switch (channelType) {
       case 'mpesa_paybill':
       case 'mpesa_till':
+      case 'mpesa_send_money':
         return <Phone className="h-6 w-6 text-green-600" />;
       case 'mpesa_to_bank':
         return <Building className="h-6 w-6 text-blue-600" />;
@@ -312,6 +320,41 @@ export default function PaymentInstructions({
             </div>
           </div>
         );
+
+      case 'mpesa_send_money': {
+        if (!channel.recipientPhoneNumber) {
+          return <p className="text-sm text-muted-foreground">Recipient number not configured</p>;
+        }
+        const displayPhoneNumber = formatMpesaPhoneNumber(channel.recipientPhoneNumber);
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between rounded border bg-white p-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Send Money Number</p>
+                <p className="font-mono text-lg font-bold">{displayPhoneNumber}</p>
+              </div>
+              <CopyButton text={displayPhoneNumber} fieldName="M-PESA number" />
+            </div>
+
+            <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm">
+              <p className="mb-2 font-medium text-amber-950">Steps to Pay with M-PESA Send Money:</p>
+              <ol className="list-decimal space-y-1 pl-4 text-amber-900">
+                <li>Go to the M-PESA menu on your phone</li>
+                <li>Select "Send Money"</li>
+                <li>Enter phone number: <strong>{displayPhoneNumber}</strong></li>
+                <li>Enter amount: <strong>{amount ? `KES ${amount.toLocaleString()}` : 'Your amount'}</strong></li>
+                <li>Enter your M-PESA PIN and confirm the recipient details</li>
+                <li>Keep the confirmation message and notify your landlord</li>
+              </ol>
+              {invoiceReferenceCode ? (
+                <p className="mt-3 text-xs text-amber-800">
+                  Send Money has no account-reference field. Share invoice reference <strong>{invoiceReferenceCode}</strong> with your landlord after paying.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        );
+      }
 
       case 'mpesa_to_bank':
         if (!channel.bankPaybillNumber || !channel.bankAccountNumber) {
