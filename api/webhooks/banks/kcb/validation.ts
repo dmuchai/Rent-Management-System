@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { createDbConnection } from '../../../_lib/db.js';
 import {
   KcbRequestError,
-  readAndVerifyKcbPayload,
+  readKcbPayload,
 } from '../_lib/handleBankWebhook.js';
 import { buildKcbValidationResponse } from '../_lib/kcbValidation.js';
 
@@ -31,7 +31,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let payload: Record<string, unknown>;
 
   try {
-    payload = await readAndVerifyKcbPayload(req);
+    // Temporary KCB UAT exception. Re-enable after KCB completes the validation review.
+    payload = await readKcbPayload(req, false);
   } catch (error) {
     if (error instanceof KcbRequestError) {
       return res.status(error.statusCode).json({ error: error.message });

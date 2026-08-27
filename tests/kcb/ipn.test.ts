@@ -342,19 +342,44 @@ test("temporarily accepts unsigned Account IPN requests for KCB UAT", async () =
   }
 });
 
-test("continues to reject unsigned KCB Till and validation requests", async () => {
+test("temporarily accepts unsigned validation requests for KCB UAT", async () => {
+  const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  process.env.KCB_WEBHOOK_PUBLIC_KEY = "configured-but-not-used-for-validation-uat";
+
+  try {
+    const request = Readable.from([
+      Buffer.from(JSON.stringify(sampleIpn)),
+    ]) as unknown as VercelRequest;
+    request.headers = {};
+    request.method = "POST";
+    const mock = createMockResponse();
+
+    await validationHandler(request, mock.response);
+
+    assert.equal(mock.state.statusCode, 200);
+    assert.equal(mock.state.body.statusCode, "1");
+    assert.equal(mock.state.body.statusMessage, "Invalid validation request");
+  } finally {
+    if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
+  }
+});
+
+test("continues to reject unsigned KCB Till requests", async () => {
   const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
   process.env.KCB_WEBHOOK_PUBLIC_KEY = "configured-but-not-read-without-signature";
 
   try {
-    for (const handler of [tillHandler, validationHandler]) {
-      const request = Readable.from([Buffer.from(JSON.stringify(sampleIpn))]) as unknown as VercelRequest;
-      request.headers = {};
-      request.method = "POST";
-      const mock = createMockResponse();
-      await handler(request, mock.response);
-      assert.equal(mock.state.statusCode, 403);
-    }
+    const request = Readable.from([
+      Buffer.from(JSON.stringify(sampleIpn)),
+    ]) as unknown as VercelRequest;
+    request.headers = {};
+    request.method = "POST";
+    const mock = createMockResponse();
+
+    await tillHandler(request, mock.response);
+
+    assert.equal(mock.state.statusCode, 403);
   } finally {
     if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
     else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;

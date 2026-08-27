@@ -125,7 +125,7 @@ export async function readKcbRawBody(req: VercelRequest): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-async function readKcbPayload(
+export async function readKcbPayload(
   req: VercelRequest,
   verifySignature: boolean
 ): Promise<Record<string, unknown>> {
