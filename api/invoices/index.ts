@@ -28,9 +28,53 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
   const limit = Math.min(Math.max(Number.parseInt(String(req.query.limit || '100'), 10) || 100, 1), 200);
   const propertyId = typeof req.query.propertyId === 'string' ? req.query.propertyId : undefined;
+  const rawCursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
   const sql = createDbConnection();
 
+  const decodeCursor = (cursor: string | undefined) => {
+    if (!cursor) return null;
+
+    try {
+      const parsed = JSON.parse(Buffer.from(cursor, 'base64').toString('utf8')) as {
+        statusRank?: number;
+        dueDate?: string | null;
+        createdAt?: string | null;
+        id?: string;
+      };
+
+      if (!parsed || typeof parsed !== 'object') {
+        return null;
+      }
+
+      return {
+        statusRank: typeof parsed.statusRank === 'number' ? parsed.statusRank : 0,
+        dueDate: typeof parsed.dueDate === 'string' ? parsed.dueDate : null,
+        createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : null,
+        id: typeof parsed.id === 'string' ? parsed.id : null,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const encodeCursor = (row: { statusRank: number; dueDate: string | null; createdAt: string | null; id: string }) => {
+    return Buffer.from(JSON.stringify({
+      statusRank: row.statusRank,
+      dueDate: row.dueDate,
+      createdAt: row.createdAt,
+      id: row.id,
+    })).toString('base64');
+  };
+
   try {
+    const cursor = decodeCursor(rawCursor);
+    const [orderRank, dueDate, createdAt, id] = [
+      cursor?.statusRank ?? 0,
+      cursor?.dueDate ? new Date(cursor.dueDate) : null,
+      cursor?.createdAt ? new Date(cursor.createdAt) : null,
+      cursor?.id ?? null,
+    ];
+
     const rows = await sql`
       SELECT
         i.id,
@@ -71,15 +115,28 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
             ? sql`AND i.status = ${requestedStatus}`
             : sql``}
         ${propertyId ? sql`AND p.id = ${propertyId}` : sql``}
+        ${cursor && id
+          ? sql`AND (
+              CASE WHEN i.status IN ('pending', 'partially_paid', 'overdue') THEN 0 ELSE 1 END,
+              i.due_date,
+              i.created_at,
+              i.id
+            ) > (${orderRank}, ${dueDate}, ${createdAt}, ${id})`
+          : sql``}
       ORDER BY
         CASE WHEN i.status IN ('pending', 'partially_paid', 'overdue') THEN 0 ELSE 1 END,
         i.due_date ASC,
-        i.created_at DESC
-      LIMIT ${limit}
+        i.created_at DESC,
+        i.id ASC
+      LIMIT ${limit + 1}
     `;
 
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const lastRow = pageRows[pageRows.length - 1];
+
     return res.status(200).json({
-      data: rows.map((row: any) => ({
+      data: pageRows.map((row: any) => ({
         id: row.id,
         referenceCode: row.reference_code,
         amount: Number(row.amount),
@@ -110,7 +167,17 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           ? { id: row.property_id, name: row.property_name }
           : null,
       })),
-      pagination: { limit, nextCursor: null },
+      pagination: {
+        limit,
+        nextCursor: hasMore && lastRow
+          ? encodeCursor({
+              statusRank: lastRow.status_rank ?? (lastRow.status && ['pending', 'partially_paid', 'overdue'].includes(lastRow.status) ? 0 : 1),
+              dueDate: lastRow.due_date ?? null,
+              createdAt: lastRow.created_at ?? null,
+              id: lastRow.id,
+            })
+          : null,
+      },
     });
   } catch (error) {
     console.error('[Invoices] Failed to list invoices:', error);

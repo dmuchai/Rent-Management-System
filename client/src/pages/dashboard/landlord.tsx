@@ -340,9 +340,23 @@ export default function LandlordDashboard() {
       const propertyQuery = selectedPropertyId !== "all"
         ? `&propertyId=${encodeURIComponent(selectedPropertyId)}`
         : "";
-      const response = await apiRequest("GET", `/api/invoices?status=outstanding${propertyQuery}`);
-      const result = await response.json();
-      return Array.isArray(result?.data) ? result.data : [];
+
+      let nextCursor: string | null = null;
+      const mergedInvoices: InvoiceListItem[] = [];
+
+      do {
+        const response = await apiRequest(
+          "GET",
+          `/api/invoices?status=outstanding&limit=100${propertyQuery}${nextCursor ? `&cursor=${encodeURIComponent(nextCursor)}` : ""}`
+        );
+        const result = await response.json();
+        const pageInvoices = Array.isArray(result?.data) ? result.data : [];
+
+        mergedInvoices.push(...pageInvoices);
+        nextCursor = result?.pagination?.nextCursor ?? null;
+      } while (nextCursor);
+
+      return mergedInvoices;
     },
     retry: false,
   });
