@@ -16,6 +16,7 @@ import { kenyaPhoneSchema } from "@/../../shared/schema";
 
 const paymentFormSchema = z.object({
   leaseId: z.string().min(1, "Please select a lease"),
+  invoiceId: z.string().optional(),
   amount: z.coerce.number().min(1, "Amount must be greater than 0"),
   description: z.string().min(1, "Description is required"),
   paymentMethod: z.string().optional(),
@@ -52,6 +53,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
     mode: "onBlur",
     defaultValues: {
       leaseId: activeLease?.id || "",
+      invoiceId: "",
       amount: activeLease ? parseFloat(activeLease.monthlyRent) : 0,
       description: activeLease ? "Rent" : "",
       paymentMethod: "mpesa",
@@ -63,11 +65,30 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
     enabled: tenantView,
   });
 
+  const { data: outstandingInvoices = [] } = useQuery<any[]>({
+    queryKey: ["/api/invoices", "outstanding", activeLease?.id],
+    queryFn: async () => {
+      const params = new URLSearchParams({ status: "outstanding", leaseId: activeLease.id });
+      const response = await apiRequest("GET", `/api/invoices?${params.toString()}`);
+      const result = await response.json();
+      return result.data || [];
+    },
+    enabled: tenantView && Boolean(activeLease?.id),
+  });
+
   useEffect(() => {
     if (tenantProfile?.phone) {
       form.setValue("phoneNumber", tenantProfile.phone);
     }
   }, [tenantProfile, form.setValue]);
+
+  useEffect(() => {
+    if (!tenantView || outstandingInvoices.length === 0) return;
+    const selected = outstandingInvoices.find((invoice: any) => invoice.id === form.getValues("invoiceId"))
+      || outstandingInvoices[0];
+    form.setValue("invoiceId", selected.id);
+    form.setValue("amount", Number(selected.amountOutstanding));
+  }, [tenantView, outstandingInvoices, form]);
 
   const paymentMutation = useMutation({
     mutationFn: async (data: PaymentFormData & { phoneNumber?: string }) => {
@@ -111,6 +132,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
         }
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
         queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
         toast({
           title: "Success",
@@ -149,6 +171,35 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
       <div className="space-y-4">
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div>
+            <Label htmlFor="invoiceId">Rent invoice</Label>
+            {outstandingInvoices.length > 0 ? (
+              <Select
+                value={form.watch("invoiceId")}
+                onValueChange={(value) => {
+                  const invoice = outstandingInvoices.find((item: any) => item.id === value);
+                  form.setValue("invoiceId", value);
+                  if (invoice) form.setValue("amount", Number(invoice.amountOutstanding));
+                }}
+              >
+                <SelectTrigger id="invoiceId" data-testid="select-payment-invoice">
+                  <SelectValue placeholder="Select an outstanding invoice" />
+                </SelectTrigger>
+                <SelectContent>
+                  {outstandingInvoices.map((invoice: any) => (
+                    <SelectItem key={invoice.id} value={invoice.id}>
+                      {invoice.referenceCode} — KES {Number(invoice.amountOutstanding).toLocaleString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No outstanding rent invoice is available for this lease.
+              </p>
+            )}
+          </div>
+
+          <div>
             <Label htmlFor="amount">Amount (KES)</Label>
             <Input
               id="amount"
@@ -157,6 +208,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
               onChange={(e) => (form.setValue as any)("amount", e.target.value)}
               className={form.formState.errors.amount ? "border-destructive" : ""}
               data-testid="input-payment-amount"
+              disabled={outstandingInvoices.length === 0}
             />
             {form.formState.errors.amount && (
               <p className="mt-1 text-sm text-destructive">{form.formState.errors.amount.message}</p>
@@ -270,7 +322,7 @@ export default function PaymentForm({ tenantView = false, activeLease }: Payment
               type="submit"
               className="w-full"
               size="lg"
-              disabled={paymentMutation.isPending}
+              disabled={paymentMutation.isPending || outstandingInvoices.length === 0}
               data-testid="button-pay-now"
             >
               {paymentMutation.isPending ? "Processing..." :

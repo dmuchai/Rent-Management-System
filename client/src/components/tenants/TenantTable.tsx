@@ -102,6 +102,27 @@ export default function TenantTable({
     enabled: allowAssign,
   });
 
+  const { data: invoices = [] } = useQuery<any[]>({
+    queryKey: ["/api/invoices", "all"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/invoices?limit=200");
+      const result = await response.json();
+      return result.data || [];
+    },
+    enabled: !readOnly,
+  });
+
+  const invoicesByLease = useMemo(() => {
+    const grouped = new Map<string, any[]>();
+    invoices.forEach((invoice) => {
+      if (!invoice.leaseId) return;
+      const leaseInvoices = grouped.get(invoice.leaseId) || [];
+      leaseInvoices.push(invoice);
+      grouped.set(invoice.leaseId, leaseInvoices);
+    });
+    return grouped;
+  }, [invoices]);
+
   const { data: properties = [], isLoading: propertiesLoading } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
     queryFn: async () => {
@@ -568,7 +589,8 @@ export default function TenantTable({
                           return leases.some(l => l.tenantId === tenant.id && l.id === p.leaseId);
                         });
 
-                        const ledger = calculateLedger(tenantLease, tenantPayments);
+                        const tenantInvoices = tenantLease ? (invoicesByLease.get(tenantLease.id) || []) : [];
+                        const ledger = calculateLedger(tenantLease, tenantInvoices, tenantPayments);
                         const balance = ledger.currentBalance;
 
                         return (

@@ -237,10 +237,12 @@ export const paymentTypeEnum = pgEnum("payment_type", [
 export const payments = pgTable("payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   leaseId: varchar("lease_id").notNull().references(() => leases.id),
+  invoiceId: varchar("invoice_id").references((): any => invoices.id),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   dueDate: timestamp("due_date").notNull(),
   paidDate: timestamp("paid_date"),
   paymentMethod: varchar("payment_method"), // mpesa, card, bank_transfer
+  paymentSource: varchar("payment_source"), // manual, mpesa_stk, pesapal, imported, reconciliation
   paymentType: paymentTypeEnum("payment_type").default("rent"),
   pesapalTransactionId: varchar("pesapal_transaction_id"),
   pesapalOrderTrackingId: varchar("pesapal_order_tracking_id"),
@@ -496,12 +498,17 @@ export const leasesRelations = relations(leases, ({ one, many }) => ({
     references: [units.id],
   }),
   payments: many(payments),
+  invoices: many(invoices),
 }));
 
 export const paymentsRelations = relations(payments, ({ one }) => ({
   lease: one(leases, {
     fields: [payments.leaseId],
     references: [leases.id],
+  }),
+  invoice: one(invoices, {
+    fields: [payments.invoiceId],
+    references: [invoices.id],
   }),
 }));
 

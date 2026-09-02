@@ -9,6 +9,7 @@ import unitsRouter from "./units";
 import tenantsRouter from "./tenants";
 import caretakersRouter from "./caretakers";
 import paymentsRouter from "./payments";
+import invoicesRouter from "./invoices";
 import reportsRouter from "./reports";
 import leasesRouter from "./leases";
 import maintenanceRouter from "./maintenance";
@@ -54,6 +55,7 @@ export async function registerRoutes(app: Express): Promise<void> {
 
   // Payments
   app.use("/api/payments", paymentsRouter);
+  app.use("/api/invoices", invoicesRouter);
 
   // Reports
   app.use("/api/reports", reportsRouter);

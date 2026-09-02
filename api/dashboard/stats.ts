@@ -92,6 +92,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           ) AS overdue_count
         FROM public.invoices i
         WHERE i.landlord_id = ${auth.userId}
+        AND i.invoice_type <> 'uat_validation'
         ${propertyId ? sql`
           AND i.lease_id IN (
             SELECT l.id

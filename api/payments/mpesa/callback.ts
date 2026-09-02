@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createDbConnection } from '../../_lib/db.js';
 import { emailService } from '../../_lib/emailService.js';
 import { smsService } from '../../_lib/smsService.js';
+import { InvoicePaymentError, transitionPaymentStatus } from '../../_lib/invoicePayments.js';
 
 export default async (req: VercelRequest, res: VercelResponse) => {
     if (req.method !== 'POST') {
@@ -17,37 +18,24 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         const resultCode = callbackData.ResultCode;
         const resultDesc = callbackData.ResultDesc;
 
-        // Find the payment record
-        const [payment] = await sql`
-      SELECT * FROM public.payments 
-      WHERE pesapal_order_tracking_id = ${checkoutRequestId}
-    `;
-
-        if (!payment) {
-            console.error(`[M-PESA Callback] Payment not found for CheckoutRequestID: ${checkoutRequestId}`);
-            return res.status(404).json({ message: 'Payment not found' });
-        }
-
         if (resultCode === 0) {
-            // Success
-            console.log(`[M-PESA Callback] Success for Payment ID: ${payment.id}`);
-
             // Extract transaction metadata
             const items = callbackData.CallbackMetadata.Item;
             const mpesaReceiptNumber = items.find((i: any) => i.Name === 'MpesaReceiptNumber')?.Value;
+            const transition = await transitionPaymentStatus(
+                sql,
+                { trackingId: checkoutRequestId },
+                'completed',
+                { transactionId: mpesaReceiptNumber, paymentMethod: 'mpesa', paidDate: new Date() },
+            );
+            const payment = transition.payment;
 
-            await sql`
-        UPDATE public.payments
-        SET status = 'completed', 
-            pesapal_transaction_id = ${mpesaReceiptNumber},
-            paid_date = NOW(),
-            updated_at = NOW()
-        WHERE id = ${payment.id}
-      `;
+            console.log(`[M-PESA Callback] Success for Payment ID: ${payment.id}`);
 
             // Trigger standard notifications (reusing Pesapal notification logic if possible)
             // Since this is a standalone API, we'll manually trigger the enqueuing logic here.
-            try {
+            if (transition.completedNow) {
+              try {
                 const [details] = await sql`
           SELECT 
             p.*, 
@@ -120,26 +108,26 @@ export default async (req: VercelRequest, res: VercelResponse) => {
               (${details.landlord_phone || details.landlord_email}, ${landlordMessage}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: payment.id, recipient: 'landlord' })})
           `;
                 }
-            } catch (notifyErr) {
+              } catch (notifyErr) {
                 console.error('[M-PESA Callback] Notification error:', notifyErr);
+              }
             }
 
         } else {
             // Failure
             console.warn(`[M-PESA Callback] Failed. Code: ${resultCode}, Desc: ${resultDesc}`);
-            await sql`
-        UPDATE public.payments
-        SET status = 'failed', 
-            description = ${`M-PESA Failed: ${resultDesc}`},
-            updated_at = NOW()
-        WHERE id = ${payment.id}
-      `;
+            await transitionPaymentStatus(sql, { trackingId: checkoutRequestId }, 'failed', {
+                description: `M-PESA Failed: ${resultDesc}`,
+            });
         }
 
         return res.status(200).json({ ResultCode: 0, ResultDesc: "Success" });
 
     } catch (error: any) {
         console.error('M-PESA Callback error:', error);
+        if (error instanceof InvoicePaymentError && error.code === 'PAYMENT_NOT_FOUND') {
+            return res.status(404).json({ ResultCode: 1, ResultDesc: 'Payment not found' });
+        }
         return res.status(500).json({ ResultCode: 1, ResultDesc: "Internal Server Error" });
     } finally {
         await sql.end();

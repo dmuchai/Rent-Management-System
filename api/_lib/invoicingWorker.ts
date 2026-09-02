@@ -1,28 +1,42 @@
 import { createDbConnection } from './db.js';
+import { canonicalRentInvoiceReference } from './invoicePayments.js';
 import { ownerHasSubscriptionFeature } from './subscription.js';
 
+type InvoicingOptions = {
+    billingDate?: Date;
+};
+
 /**
- * Iterates through all active leases and generates "Pending" rent payments
- * for the current month if they don't already exist.
- * This is designed for Vercel Serverless Functions using raw SQL.
+ * Creates one canonical rent invoice per active lease and billing month.
+ * Payment rows are deliberately not created here: they represent actual
+ * payment attempts or receipts, not scheduled obligations.
  */
-export async function runAutomatedInvoicing() {
+export async function runAutomatedInvoicing(options: InvoicingOptions = {}) {
     const logPrefix = `[Invoicing Worker]`;
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
+    const billingDate = options.billingDate || new Date();
+    const currentMonth = billingDate.getUTCMonth();
+    const currentYear = billingDate.getUTCFullYear();
+    const periodStart = new Date(Date.UTC(currentYear, currentMonth, 1));
+    const periodEnd = new Date(Date.UTC(currentYear, currentMonth + 1, 1) - 1);
+    const dueDate = periodStart;
+    const monthLabel = new Intl.DateTimeFormat('en', {
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+    }).format(periodStart);
     const sql = createDbConnection();
 
     try {
-        console.log(`${logPrefix} Starting automated invoicing for ${currentMonth}/${currentYear}...`);
+        console.log(`${logPrefix} Starting automated invoicing for ${monthLabel}...`);
 
-        // 1. Get all active leases
         const activeLeases = await sql`
             SELECT l.id, l.tenant_id, l.unit_id, l.monthly_rent, p.owner_id AS landlord_id
             FROM public.leases l
             JOIN public.units u ON u.id = l.unit_id
             JOIN public.properties p ON p.id = u.property_id
             WHERE l.is_active = true
+              AND l.start_date <= ${periodEnd}
+              AND l.end_date >= ${periodStart}
               AND u.archived_at IS NULL
               AND p.archived_at IS NULL
         `;
@@ -45,41 +59,36 @@ export async function runAutomatedInvoicing() {
                     skippedCount++;
                     continue;
                 }
-                // 2. Check if a rent payment for this period already exists
-                const [existingPayment] = await sql`
-                    SELECT id FROM public.payments
-                    WHERE lease_id = ${lease.id}
-                      AND payment_type = 'rent'
-                      AND EXTRACT(MONTH FROM due_date) = ${currentMonth}
-                      AND EXTRACT(YEAR FROM due_date) = ${currentYear}
+
+                const description = `Rent for ${monthLabel}`;
+                const referenceCode = canonicalRentInvoiceReference(lease.id, periodStart);
+                const inserted = await sql`
+                    INSERT INTO public.invoices (
+                        lease_id, landlord_id, tenant_id, amount, amount_paid, currency,
+                        billing_period_start, billing_period_end, due_date, reference_code,
+                        invoice_type, description, status, issued_at, created_at, updated_at
+                    )
+                    VALUES (
+                        ${lease.id}, ${lease.landlord_id}, ${lease.tenant_id}, ${lease.monthly_rent}, 0, 'KES',
+                        ${periodStart}, ${periodEnd}, ${dueDate}, ${referenceCode},
+                        'rent', ${description}, 'pending', NOW(), NOW(), NOW()
+                    )
+                    ON CONFLICT (lease_id, (date_trunc('month', billing_period_start)))
+                      WHERE invoice_type = 'rent' AND lease_id IS NOT NULL
+                    DO NOTHING
+                    RETURNING id, reference_code
                 `;
 
-                if (existingPayment) {
+                const invoice = inserted[0];
+                if (!invoice) {
                     skippedCount++;
                     continue;
                 }
 
-                // 3. Generate the due date (usually 1st of the month)
-                const dueDate = new Date(currentYear, currentMonth - 1, 1);
-                const description = `Rent for ${now.toLocaleString('default', { month: 'long' })} ${currentYear}`;
-
-                // 4. Create the pending payment record
-                const [payment] = await sql`
-                    INSERT INTO public.payments (
-                        lease_id, amount, due_date, payment_type, status, description, created_at, updated_at
-                    )
-                    VALUES (
-                        ${lease.id}, ${lease.monthly_rent}, ${dueDate}, 'rent', 'pending', ${description}, NOW(), NOW()
-                    )
-                    RETURNING id
-                `;
-
-                // 5. Fetch details for notification
                 const [details] = await sql`
-                    SELECT 
-                        t.email as tenant_email, t.first_name as tenant_name, t.phone as tenant_phone,
-                        u.unit_number,
-                        prop.name as property_name
+                    SELECT
+                        t.email AS tenant_email, t.first_name AS tenant_name, t.phone AS tenant_phone,
+                        u.unit_number, prop.name AS property_name
                     FROM public.tenants t
                     JOIN public.leases l ON l.tenant_id = t.id
                     JOIN public.units u ON l.unit_id = u.id
@@ -88,22 +97,26 @@ export async function runAutomatedInvoicing() {
                 `;
 
                 if (details) {
-                    // 6. Enqueue notification
                     const htmlContent = `
                         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                             <h2 style="color: #3B82F6;">New Rent Invoice Generated</h2>
                             <p>Dear ${details.tenant_name},</p>
-                            <p>Your rent invoice for ${now.toLocaleString('default', { month: 'long' })} ${currentYear} has been generated.</p>
+                            <p>Your rent invoice for ${monthLabel} has been generated.</p>
                             <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                                <p><strong>Invoice:</strong> ${invoice.reference_code}</p>
                                 <p><strong>Property:</strong> ${details.property_name}</p>
                                 <p><strong>Unit:</strong> ${details.unit_number}</p>
                                 <p><strong>Amount Due:</strong> KES ${lease.monthly_rent}</p>
-                                <p><strong>Due Date:</strong> ${dueDate.toLocaleDateString()}</p>
+                                <p><strong>Due Date:</strong> ${dueDate.toLocaleDateString('en-KE', { timeZone: 'UTC' })}</p>
                             </div>
                             <p>Please log in to your dashboard to make a payment.</p>
                         </div>
                     `;
-                    const textContent = `Dear ${details.tenant_name}, your rent invoice for ${now.toLocaleString('default', { month: 'long' })} ${currentYear} has been generated. Amount Due: KES ${lease.monthly_rent}. Due Date: ${dueDate.toLocaleDateString()}.`;
+                    const textContent = `Dear ${details.tenant_name}, your rent invoice ${invoice.reference_code} for ${monthLabel} has been generated. Amount Due: KES ${lease.monthly_rent}. Due Date: ${dueDate.toLocaleDateString('en-KE', { timeZone: 'UTC' })}.`;
+                    const metadata = JSON.stringify({
+                        type: 'new_invoice', landlordId: lease.landlord_id, leaseId: lease.id,
+                        invoiceId: invoice.id, invoiceReference: invoice.reference_code,
+                    });
 
                     if (await hasFeature(lease.landlord_id, 'scheduled_reminders')) {
                         await sql`
@@ -111,38 +124,29 @@ export async function runAutomatedInvoicing() {
                             VALUES (
                                 ${details.tenant_email},
                                 ${`New Rent Invoice - ${details.property_name} Unit ${details.unit_number}`},
-                                ${htmlContent},
-                                ${textContent},
-                                ${JSON.stringify({ type: 'new_invoice', landlordId: lease.landlord_id, leaseId: lease.id, paymentId: payment.id })},
-                                NOW(),
-                                NOW()
+                                ${htmlContent}, ${textContent}, ${metadata}, NOW(), NOW()
                             )
                         `;
                     }
 
-                    // 7. Enqueue SMS notification
                     if (details.tenant_phone && await hasFeature(lease.landlord_id, 'sms_messaging')) {
                         const { smsService } = await import('./smsService.js');
                         const smsMsg = smsService.composeRentReminder(
                             details.tenant_name,
                             parseFloat(lease.monthly_rent),
-                            dueDate.toLocaleDateString(),
+                            dueDate.toLocaleDateString('en-KE', { timeZone: 'UTC' }),
                             details.property_name
                         );
 
                         await sql`
                             INSERT INTO public.sms_queue ("to", message, metadata)
-                            VALUES (${details.tenant_phone}, ${smsMsg}, ${JSON.stringify({ type: 'new_invoice', landlordId: lease.landlord_id, paymentId: payment.id })})
+                            VALUES (${details.tenant_phone}, ${smsMsg}, ${metadata})
                         `;
                     }
-
-                    console.log(`${logPrefix} Generated Pending payment ${payment.id} and enqueued email for lease ${lease.id}`);
-                    generatedCount++;
-                } else {
-                    console.log(`${logPrefix} Generated Pending payment ${payment.id} but skipped email (details missing) for lease ${lease.id}`);
-                    generatedCount++;
                 }
 
+                console.log(`${logPrefix} Generated invoice ${invoice.id} for lease ${lease.id}`);
+                generatedCount++;
             } catch (leaseErr: any) {
                 errorCount++;
                 console.error(`${logPrefix} Error processing lease ${lease.id}:`, leaseErr.message);
@@ -153,9 +157,8 @@ export async function runAutomatedInvoicing() {
             processed: activeLeases.length,
             generated: generatedCount,
             skipped: skippedCount,
-            errors: errorCount
+            errors: errorCount,
         };
-
     } catch (error) {
         console.error(`${logPrefix} FATAL INVOICING ERROR:`, error);
         throw error;

@@ -2,6 +2,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
+import {
+  createPaymentRecord,
+  InvoicePaymentError,
+  invoicePaymentHttpStatus,
+} from '../_lib/invoicePayments.js';
 import { z } from 'zod';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
@@ -22,11 +27,13 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         payments = await sql`
           SELECT 
             pm.*,
+            i.reference_code as invoice_reference,
             t.id as tenant_id, t.first_name, t.last_name, t.email as tenant_email,
             u.id as unit_id, u.unit_number,
             p.id as property_id, p.name as property_name
           FROM public.payments pm
           INNER JOIN public.leases l ON pm.lease_id = l.id
+          LEFT JOIN public.invoices i ON pm.invoice_id = i.id
           INNER JOIN public.tenants t ON l.tenant_id = t.id
           INNER JOIN public.units u ON l.unit_id = u.id
           INNER JOIN public.properties p ON u.property_id = p.id
@@ -41,11 +48,13 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         payments = await sql`
           SELECT 
             pm.*,
+            i.reference_code as invoice_reference,
             t.id as tenant_id, t.first_name, t.last_name, t.email as tenant_email,
             u.id as unit_id, u.unit_number,
             p.id as property_id, p.name as property_name
           FROM public.payments pm
           INNER JOIN public.leases l ON pm.lease_id = l.id
+          LEFT JOIN public.invoices i ON pm.invoice_id = i.id
           INNER JOIN public.tenants t ON l.tenant_id = t.id
           INNER JOIN public.units u ON l.unit_id = u.id
           INNER JOIN public.properties p ON u.property_id = p.id
@@ -62,10 +71,13 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       const formattedPayments = payments.map((payment: any) => ({
         id: payment.id,
         leaseId: payment.lease_id,
+        invoiceId: payment.invoice_id,
+        invoiceReference: payment.invoice_reference,
         amount: payment.amount,
         dueDate: payment.due_date,
         paidDate: payment.paid_date,
         paymentMethod: payment.payment_method,
+        paymentSource: payment.payment_source,
         paymentType: payment.payment_type,
         status: payment.status,
         description: payment.description,
@@ -97,9 +109,14 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     }
 
     if (req.method === 'POST') {
+      if (auth.role !== 'landlord') {
+        return res.status(403).json({ error: 'Only landlords can record manual payments', details: null });
+      }
+
       const paymentCreateSchema = z.object({
         leaseId: z.string().min(1, 'Lease is required'),
-        amount: z.string().min(1, 'Amount is required'),
+        invoiceId: z.string().min(1).optional(),
+        amount: z.coerce.number().positive('Amount must be greater than zero'),
         dueDate: z.string().or(z.date()),
         paymentMethod: z.enum(['cash', 'bank_transfer', 'mobile_money', 'check']).default('cash'),
         paymentType: z.enum(['rent', 'deposit', 'utility', 'maintenance', 'late_fee', 'other']).default('rent'),
@@ -110,34 +127,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
       const paymentData = paymentCreateSchema.parse(req.body);
 
-      // Verify lease belongs to landlord's property
-      const leases = await sql`
-        SELECT l.*, u.property_id, p.owner_id
-        FROM public.leases l
-        INNER JOIN public.units u ON l.unit_id = u.id
-        INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE l.id = ${paymentData.leaseId}
-      `;
-      if (leases.length === 0) {
-        return res.status(404).json({ error: 'Lease not found', details: null });
-      } else if (leases[0].owner_id !== auth.userId) {
-        return res.status(403).json({ error: 'Access denied', details: null });
-      }
-
-      const [payment] = await sql`
-        INSERT INTO public.payments (lease_id, amount, due_date, paid_date, payment_method, payment_type, status, description)
-        VALUES (
-          ${paymentData.leaseId},
-          ${paymentData.amount},
-          ${new Date(paymentData.dueDate)},
-          ${paymentData.paidDate ? new Date(paymentData.paidDate) : null},
-          ${paymentData.paymentMethod},
-          ${paymentData.paymentType},
-          ${paymentData.status},
-          ${paymentData.description || null}
-        )
-        RETURNING *
-      `;
+      const payment = await createPaymentRecord(sql, {
+        leaseId: paymentData.leaseId,
+        invoiceId: paymentData.invoiceId,
+        amount: paymentData.amount,
+        dueDate: new Date(paymentData.dueDate),
+        paidDate: paymentData.paidDate ? new Date(paymentData.paidDate) : null,
+        paymentMethod: paymentData.paymentMethod,
+        paymentType: paymentData.paymentType,
+        paymentSource: 'manual',
+        status: paymentData.status,
+        description: paymentData.description,
+        actor: { userId: auth.userId, role: auth.role },
+      });
 
       return res.status(201).json(payment);
     }
@@ -205,6 +207,10 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         error: 'Cannot delete completed payment',
         details: 'Completed payments cannot be deleted for audit purposes'
       });
+    }
+
+    if (error instanceof InvoicePaymentError) {
+      return res.status(invoicePaymentHttpStatus(error)).json({ error: error.message, code: error.code });
     }
 
     if (error instanceof z.ZodError) {

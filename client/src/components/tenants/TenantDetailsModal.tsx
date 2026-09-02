@@ -62,6 +62,16 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
     enabled: open && !!tenant,
   });
 
+  const { data: invoices = [] } = useQuery<any[]>({
+    queryKey: ["/api/invoices", "all"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/invoices?limit=200");
+      const result = await response.json();
+      return result.data || [];
+    },
+    enabled: open && !!tenant,
+  });
+
   // Fetch all properties and units to show property/unit names
   const { data: properties = [] } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -91,7 +101,8 @@ export default function TenantDetailsModal({ open, onOpenChange, tenant }: Tenan
   const activeLease = leases.find(l => l.isActive);
 
   // Calculate ledger for the active lease
-  const ledgerData = calculateLedger(activeLease, payments);
+  const leaseInvoices = activeLease ? invoices.filter((invoice) => invoice.leaseId === activeLease.id) : [];
+  const ledgerData = calculateLedger(activeLease, leaseInvoices, payments);
 
   // Get status badge
   const getStatusBadge = () => {

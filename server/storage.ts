@@ -458,17 +458,17 @@ export class SupabaseStorage {
     })) as Lease[];
   }
 
-  async hasRentPaymentForPeriod(leaseId: string, month: number, year: number): Promise<boolean> {
+  async hasRentInvoiceForPeriod(leaseId: string, month: number, year: number): Promise<boolean> {
     const startDate = new Date(year, month - 1, 1).toISOString();
     const endDate = new Date(year, month, 0, 23, 59, 59, 999).toISOString();
 
     const { data, error } = await supabase
-      .from("payments")
+      .from("invoices")
       .select("id")
       .eq("lease_id", leaseId)
-      .eq("payment_type", "rent")
-      .gte("due_date", startDate)
-      .lte("due_date", endDate);
+      .eq("invoice_type", "rent")
+      .gte("billing_period_start", startDate)
+      .lte("billing_period_start", endDate);
 
     if (error) throw error;
     return (data?.length || 0) > 0;
@@ -841,10 +841,12 @@ export class SupabaseStorage {
         return {
           id: payment.id,
           leaseId: payment.lease_id,
+          invoiceId: payment.invoice_id,
           amount: payment.amount,
           dueDate: payment.due_date,
           paidDate: payment.paid_date,
           paymentMethod: payment.payment_method,
+          paymentSource: payment.payment_source,
           paymentType: payment.payment_type || 'rent',
           pesapalTransactionId: payment.pesapal_transaction_id,
           pesapalOrderTrackingId: payment.pesapal_order_tracking_id,
@@ -881,10 +883,12 @@ export class SupabaseStorage {
     const payment: Payment = {
       id: data.id,
       leaseId: data.lease_id,
+      invoiceId: data.invoice_id,
       amount: data.amount,
       dueDate: data.due_date,
       paidDate: data.paid_date,
       paymentMethod: data.payment_method,
+      paymentSource: data.payment_source,
       paymentType: data.payment_type || 'rent',
       pesapalTransactionId: data.pesapal_transaction_id,
       pesapalOrderTrackingId: data.pesapal_order_tracking_id,
@@ -896,66 +900,6 @@ export class SupabaseStorage {
     };
 
     return payment;
-  }
-
-  async createPayment(payment: InsertPayment): Promise<Payment> {
-    // Map camelCase to snake_case for Supabase
-    const paymentData = {
-      lease_id: payment.leaseId,
-      amount: payment.amount,
-      due_date: payment.dueDate,
-      paid_date: payment.paidDate,
-      payment_method: payment.paymentMethod,
-      pesapal_transaction_id: payment.pesapalTransactionId,
-      pesapal_order_tracking_id: payment.pesapalOrderTrackingId,
-      status: payment.status,
-      description: payment.description,
-      receipt_url: payment.receiptUrl,
-    };
-
-    console.log('Creating payment with data:', paymentData);
-    const { data, error } = await supabase
-      .from("payments")
-      .insert([paymentData])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Payment creation error:', error);
-      throw error;
-    }
-
-    console.log('Payment created:', data);
-
-    // Convert snake_case to camelCase for frontend
-    const createdPayment = {
-      id: data.id,
-      leaseId: data.lease_id,
-      amount: data.amount,
-      dueDate: data.due_date,
-      paidDate: data.paid_date,
-      paymentMethod: data.payment_method,
-      pesapalTransactionId: data.pesapal_transaction_id,
-      pesapalOrderTrackingId: data.pesapal_order_tracking_id,
-      status: data.status,
-      description: data.description,
-      receiptUrl: data.receipt_url,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    };
-
-    return createdPayment as Payment;
-  }
-
-  async updatePayment(id: string, payment: Partial<InsertPayment>): Promise<Payment> {
-    const { data, error } = await supabase
-      .from("payments")
-      .update({ ...payment, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .select()
-      .single();
-    if (error) throw error;
-    return data as Payment;
   }
 
   async deletePayment(id: string): Promise<void> {
@@ -1259,6 +1203,7 @@ import {
   tenants,
   leases,
   payments,
+  invoices,
   maintenanceRequests,
   documents,
   type User,
@@ -1272,7 +1217,6 @@ import {
   type Lease,
   type InsertLease,
   type Payment,
-  type InsertPayment,
   type MaintenanceRequest,
   type InsertMaintenanceRequest,
   type Document,
@@ -1326,15 +1270,6 @@ export interface IStorage {
   getPaymentsByLeaseId(leaseId: string): Promise<Payment[]>;
   getPaymentById(id: string): Promise<Payment | undefined>;
   getPaymentByPesapalId(pesapalId: string): Promise<Payment | undefined>;
-  createPayment(payment: InsertPayment): Promise<Payment>;
-  updatePayment(id: string, payment: Partial<InsertPayment>): Promise<Payment>;
-  getOverduePayments(ownerId: string): Promise<Payment[]>;
-  getPaymentStats(ownerId: string, startDate: Date, endDate: Date): Promise<{
-    totalExpected: number;
-    totalCollected: number;
-    totalOverdue: number;
-    collectionRate: number;
-  }>;
 
   // Maintenance request operations
   getMaintenanceRequestsByOwnerId(ownerId: string): Promise<MaintenanceRequest[]>;
@@ -1358,7 +1293,7 @@ export interface IStorage {
 
   // Invoicing operations
   getAllActiveLeases(): Promise<Lease[]>;
-  hasRentPaymentForPeriod(leaseId: string, month: number, year: number): Promise<boolean>;
+  hasRentInvoiceForPeriod(leaseId: string, month: number, year: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1592,22 +1527,22 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(leases).where(eq(leases.isActive, true));
   }
 
-  async hasRentPaymentForPeriod(leaseId: string, month: number, year: number): Promise<boolean> {
+  async hasRentInvoiceForPeriod(leaseId: string, month: number, year: number): Promise<boolean> {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
-    const existingPayments = await db
+    const existingInvoices = await db
       .select()
-      .from(payments)
+      .from(invoices)
       .where(
         and(
-          eq(payments.leaseId, leaseId),
-          eq(payments.paymentType, "rent"),
-          between(payments.dueDate, startDate, endDate)
+          eq(invoices.leaseId, leaseId),
+          eq(invoices.invoiceType, "rent"),
+          between(invoices.billingPeriodStart, startDate, endDate)
         )
       );
 
-    return existingPayments.length > 0;
+    return existingInvoices.length > 0;
   }
 
   // Payment operations
@@ -1616,10 +1551,12 @@ export class DatabaseStorage implements IStorage {
       .select({
         id: payments.id,
         leaseId: payments.leaseId,
+        invoiceId: payments.invoiceId,
         amount: payments.amount,
         dueDate: payments.dueDate,
         paidDate: payments.paidDate,
         paymentMethod: payments.paymentMethod,
+        paymentSource: payments.paymentSource,
         paymentType: payments.paymentType,
         pesapalTransactionId: payments.pesapalTransactionId,
         pesapalOrderTrackingId: payments.pesapalOrderTrackingId,
@@ -1652,89 +1589,6 @@ export class DatabaseStorage implements IStorage {
       .from(payments)
       .where(eq(payments.pesapalOrderTrackingId, pesapalId));
     return payment;
-  }
-
-  async createPayment(payment: InsertPayment): Promise<Payment> {
-    const [newPayment] = await db.insert(payments).values(payment).returning();
-    return newPayment;
-  }
-
-  async updatePayment(id: string, payment: Partial<InsertPayment>): Promise<Payment> {
-    const [updatedPayment] = await db
-      .update(payments)
-      .set({ ...payment, updatedAt: new Date() })
-      .where(eq(payments.id, id))
-      .returning();
-    return updatedPayment;
-  }
-
-  async getOverduePayments(ownerId: string): Promise<Payment[]> {
-    const today = new Date();
-    return await db
-      .select({
-        id: payments.id,
-        leaseId: payments.leaseId,
-        amount: payments.amount,
-        dueDate: payments.dueDate,
-        paidDate: payments.paidDate,
-        paymentMethod: payments.paymentMethod,
-        paymentType: payments.paymentType,
-        pesapalTransactionId: payments.pesapalTransactionId,
-        pesapalOrderTrackingId: payments.pesapalOrderTrackingId,
-        status: payments.status,
-        description: payments.description,
-        receiptUrl: payments.receiptUrl,
-        createdAt: payments.createdAt,
-        updatedAt: payments.updatedAt,
-      })
-      .from(payments)
-      .innerJoin(leases, eq(payments.leaseId, leases.id))
-      .innerJoin(units, eq(leases.unitId, units.id))
-      .innerJoin(properties, eq(units.propertyId, properties.id))
-      .where(
-        and(
-          eq(properties.ownerId, ownerId),
-          eq(payments.status, "pending"),
-          sql`${payments.dueDate} < ${today}`
-        )
-      );
-  }
-
-  async getPaymentStats(ownerId: string, startDate: Date, endDate: Date): Promise<{
-    totalExpected: number;
-    totalCollected: number;
-    totalOverdue: number;
-    collectionRate: number;
-  }> {
-    const results = await db
-      .select({
-        totalExpected: sql<number>`SUM(${payments.amount})`,
-        totalCollected: sql<number>`SUM(CASE WHEN ${payments.status} = 'completed' THEN ${payments.amount} ELSE 0 END)`,
-        totalOverdue: sql<number>`SUM(CASE WHEN ${payments.status} = 'pending' AND ${payments.dueDate} < NOW() THEN ${payments.amount} ELSE 0 END)`,
-      })
-      .from(payments)
-      .innerJoin(leases, eq(payments.leaseId, leases.id))
-      .innerJoin(units, eq(leases.unitId, units.id))
-      .innerJoin(properties, eq(units.propertyId, properties.id))
-      .where(
-        and(
-          eq(properties.ownerId, ownerId),
-          between(payments.dueDate, startDate, endDate)
-        )
-      );
-
-    const stats = results[0];
-    const totalExpected = Number(stats.totalExpected) || 0;
-    const totalCollected = Number(stats.totalCollected) || 0;
-    const totalOverdue = Number(stats.totalOverdue) || 0;
-    const collectionRate = totalExpected > 0 ? (totalCollected / totalExpected) * 100 : 0;
-
-    return {
-      totalExpected,
-      totalCollected,
-      totalOverdue,
-      collectionRate,
-    };
   }
 
   // Maintenance request operations

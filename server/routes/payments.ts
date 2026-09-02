@@ -1,14 +1,17 @@
 import { Router } from "express";
 import { isAuthenticated, supabase } from "../supabaseAuth";
 import { supabaseStorage } from "../storageInstance";
-import { getCaretakerUnitIds } from "../utils/caretakerHelpers";
 import { emailService } from "../services/emailService";
 import { pesapalService } from "../services/pesapalService";
 import { mpesaService } from "../services/mpesaService";
-import { db } from "../db";
-import { payments } from "../../shared/schema";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { createDbConnection } from "../../api/_lib/db.js";
+import {
+  createPaymentRecord,
+  InvoicePaymentError,
+  invoicePaymentHttpStatus,
+  transitionPaymentStatus,
+} from "../../api/_lib/invoicePayments.js";
 
 const router = Router();
 
@@ -28,8 +31,10 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
           const { data } = await supabase
             .from("payments").select("*").in("lease_id", leaseIds).order("due_date", { ascending: false });
           paymentsData = (data || []).map((p: any) => ({
-            id: p.id, leaseId: p.lease_id, amount: p.amount, dueDate: p.due_date, paidDate: p.paid_date,
-            paymentMethod: p.payment_method, status: p.status, description: p.description, createdAt: p.created_at,
+            id: p.id, leaseId: p.lease_id, invoiceId: p.invoice_id, amount: p.amount,
+            dueDate: p.due_date, paidDate: p.paid_date, paymentMethod: p.payment_method,
+            paymentSource: p.payment_source, paymentType: p.payment_type, status: p.status,
+            description: p.description, createdAt: p.created_at,
           }));
         }
       }
@@ -47,6 +52,7 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
 
 // POST /api/payments
 router.post("/", isAuthenticated, async (req: any, res: any) => {
+  let sql: ReturnType<typeof createDbConnection> | null = null;
   try {
     const userId = req.user.sub;
     const role = req.user.appRole;
@@ -56,57 +62,64 @@ router.post("/", isAuthenticated, async (req: any, res: any) => {
     }
 
     const paymentCreateSchema = z.object({
-      tenantId: z.string().min(1),
-      amount: z.number().positive(),
+      leaseId: z.string().min(1).optional(),
+      tenantId: z.string().min(1).optional(),
+      invoiceId: z.string().min(1).optional(),
+      amount: z.coerce.number().positive(),
       description: z.string().optional(),
       paymentMethod: z.enum(["cash", "bank_transfer", "mobile_money", "check"]).default("cash"),
+      paymentType: z.enum(["rent", "deposit", "utility", "maintenance", "late_fee", "other"]).default("rent"),
       status: z.enum(["pending", "completed", "failed", "cancelled"]).default("completed"),
       paidDate: z.string().optional(),
+    }).refine((data) => Boolean(data.leaseId || data.tenantId), {
+      message: "Lease is required",
+      path: ["leaseId"],
     });
 
     const paymentData = paymentCreateSchema.parse(req.body);
-    const tenant = await supabaseStorage.getTenantById(paymentData.tenantId);
-    if (!tenant) return res.status(404).json({ message: "Tenant not found" });
-
-    const landlordTenants = await supabaseStorage.getTenantsByOwnerId(userId);
-    if (!landlordTenants.some((t) => t.id === tenant.id)) {
-      return res.status(403).json({ message: "Unauthorized: Tenant does not belong to you" });
-    }
-
-    const leases = await supabaseStorage.getLeasesByTenantId(paymentData.tenantId);
-    const activeLease = leases.find((l) => l.isActive);
+    const leases = paymentData.tenantId
+      ? await supabaseStorage.getLeasesByTenantId(paymentData.tenantId)
+      : [];
+    const activeLease = paymentData.leaseId
+      ? { id: paymentData.leaseId }
+      : leases.find((lease) => lease.isActive);
     if (!activeLease) return res.status(400).json({ message: "No active lease found for this tenant" });
 
-    const leaseUnit = await supabaseStorage.getUnitById(activeLease.unitId);
-    const leaseProperty = leaseUnit ? await supabaseStorage.getPropertyById(leaseUnit.propertyId) : null;
-    const leaseOwnerId = leaseProperty?.ownerId ?? (leaseProperty as any)?.owner_id;
-    if (leaseOwnerId && leaseOwnerId !== userId) {
-      return res.status(403).json({ message: "Unauthorized: Lease does not belong to you" });
-    }
-
     const paidDate = paymentData.paidDate ? new Date(paymentData.paidDate) : new Date();
-    const payment = await supabaseStorage.createPayment({
+    sql = createDbConnection();
+    const payment = await createPaymentRecord(sql, {
       leaseId: activeLease.id,
-      amount: paymentData.amount.toString(),
+      invoiceId: paymentData.invoiceId,
+      amount: paymentData.amount,
       dueDate: paidDate,
       paymentMethod: paymentData.paymentMethod,
+      paymentType: paymentData.paymentType,
+      paymentSource: "manual",
       status: paymentData.status,
-      description: paymentData.description || `Rent payment for ${tenant.firstName} ${tenant.lastName}`,
+      description: paymentData.description || "Rent payment",
       paidDate,
+      actor: { userId, role },
     });
-
     res.status(201).json(payment);
   } catch (error) {
+    if (error instanceof InvoicePaymentError) {
+      return res.status(invoicePaymentHttpStatus(error)).json({ message: error.message, code: error.code });
+    }
     if (error instanceof z.ZodError) return res.status(400).json({ message: "Invalid input", errors: error.errors });
     res.status(500).json({ message: "Failed to create payment" });
+  } finally {
+    if (sql) await sql.end();
   }
 });
 
 // POST /api/payments/pesapal/initiate
 router.post("/pesapal/initiate", isAuthenticated, async (req: any, res: any) => {
+  const sql = createDbConnection();
+  let paymentId: string | null = null;
   try {
     const userId = req.user.sub;
-    const { leaseId, amount, description, paymentMethod } = req.body;
+    const role = req.user.appRole;
+    const { leaseId, invoiceId, amount, description, paymentMethod } = req.body;
 
     if (!pesapalService.isConfigured()) {
       return res.status(503).json({ message: "Payment service not configured" });
@@ -115,10 +128,12 @@ router.post("/pesapal/initiate", isAuthenticated, async (req: any, res: any) => 
     const { data: userData } = await supabase.from("users").select("*").eq("id", userId).single();
     if (!userData) return res.status(404).json({ message: "User not found" });
 
-    const payment = await supabaseStorage.createPayment({
-      leaseId, amount: amount.toString(), description: description || "Rent Payment",
-      paymentMethod: paymentMethod || "mpesa", status: "pending", dueDate: new Date(), paidDate: null,
+    const payment = await createPaymentRecord(sql, {
+      leaseId, invoiceId, amount, description: description || "Rent Payment",
+      paymentMethod: paymentMethod || "mpesa", paymentType: "rent", paymentSource: "pesapal",
+      status: "pending", actor: { userId, role },
     });
+    paymentId = payment.id;
 
     const frontendUrl = process.env.FRONTEND_URL || "https://property-manager-ke.vercel.app";
     const callbackUrl = `${frontendUrl}/dashboard?payment=success`;
@@ -139,16 +154,23 @@ router.post("/pesapal/initiate", isAuthenticated, async (req: any, res: any) => 
     } catch {}
 
     const response = await pesapalService.submitOrderRequest(paymentRequest);
-    await supabaseStorage.updatePayment(payment.id, { pesapalOrderTrackingId: response.order_tracking_id });
+    await sql`UPDATE public.payments SET pesapal_order_tracking_id = ${response.order_tracking_id}, updated_at = NOW() WHERE id = ${payment.id}`;
 
-    res.json({ redirectUrl: response.redirect_url, trackingId: response.order_tracking_id });
-  } catch {
+    res.json({ redirectUrl: response.redirect_url, trackingId: response.order_tracking_id, paymentId: payment.id, invoiceId: payment.invoice_id });
+  } catch (error) {
+    if (paymentId) await transitionPaymentStatus(sql, { paymentId }, "failed").catch(() => undefined);
+    if (error instanceof InvoicePaymentError) {
+      return res.status(invoicePaymentHttpStatus(error)).json({ message: error.message, code: error.code });
+    }
     res.status(500).json({ message: "Failed to initiate payment" });
+  } finally {
+    await sql.end();
   }
 });
 
 // GET /api/payments/pesapal/ipn  — IPN webhook (GET)
 router.get("/pesapal/ipn", async (req: any, res: any) => {
+  const sql = createDbConnection();
   try {
     const { OrderTrackingId, OrderNotificationType, OrderMerchantReference } = req.query;
     if (!OrderTrackingId) return res.status(400).json({ message: "Missing tracking ID" });
@@ -160,14 +182,13 @@ router.get("/pesapal/ipn", async (req: any, res: any) => {
     else if (statusResponse.payment_status_description === "Failed") dbStatus = "failed";
 
     if (OrderMerchantReference) {
-      await supabaseStorage.updatePayment(OrderMerchantReference, {
-        status: dbStatus as any,
-        pesapalTransactionId: statusResponse.confirmation_code,
+      const transition = await transitionPaymentStatus(sql, { paymentId: OrderMerchantReference, trackingId: OrderTrackingId }, dbStatus as any, {
+        transactionId: statusResponse.confirmation_code,
         paymentMethod: statusResponse.payment_method || "mpesa",
-        paidDate: dbStatus === "completed" ? new Date() : undefined,
+        paidDate: dbStatus === "completed" ? new Date() : null,
       });
 
-      if (dbStatus === "completed") {
+      if (transition.completedNow) {
         try {
           const payment = await supabaseStorage.getPaymentById(OrderMerchantReference as string);
           if (payment) {
@@ -201,6 +222,8 @@ router.get("/pesapal/ipn", async (req: any, res: any) => {
     res.json({ orderNotificationType: OrderNotificationType, orderTrackingId: OrderTrackingId, orderMerchantReference: OrderMerchantReference, status: statusResponse.status_code });
   } catch {
     res.status(500).json({ message: "Failed to process IPN" });
+  } finally {
+    await sql.end();
   }
 });
 
@@ -211,37 +234,49 @@ router.post("/pesapal/ipn", async (_req: any, res: any) => {
 
 // POST /api/payments/mpesa/push
 router.post("/mpesa/push", isAuthenticated, async (req: any, res: any) => {
+  const sql = createDbConnection();
+  let paymentId: string | null = null;
   try {
     const mpesaInitiateSchema = z.object({
       leaseId: z.string().min(1),
+      invoiceId: z.string().min(1).optional(),
       amount: z.number().positive(),
       phoneNumber: z.string().min(10),
       description: z.string().optional(),
     });
 
-    const { leaseId, amount, phoneNumber, description } = mpesaInitiateSchema.parse(req.body);
+    const { leaseId, invoiceId, amount, phoneNumber, description } = mpesaInitiateSchema.parse(req.body);
 
     if (!mpesaService.isConfigured()) return res.status(503).json({ message: "M-PESA service not configured" });
 
-    const payment = await supabaseStorage.createPayment({
-      leaseId, amount: amount.toString(), description: description || "Rent Payment via M-PESA",
-      paymentMethod: "mpesa", status: "pending", dueDate: new Date(), paymentType: "rent",
+    const payment = await createPaymentRecord(sql, {
+      leaseId, invoiceId, amount, description: description || "Rent Payment via M-PESA",
+      paymentMethod: "mpesa", paymentType: "rent", paymentSource: "mpesa_stk", status: "pending",
+      actor: { userId: req.user.sub, role: req.user.appRole },
     });
+    paymentId = payment.id;
 
     const response = await mpesaService.initiateStkPush(
       phoneNumber, amount, `LEASE-${leaseId.slice(0, 8)}`, description || "Rent Payment"
     );
 
-    await supabaseStorage.updatePayment(payment.id, { pesapalOrderTrackingId: response.CheckoutRequestID });
+    await sql`UPDATE public.payments SET pesapal_order_tracking_id = ${response.CheckoutRequestID}, updated_at = NOW() WHERE id = ${payment.id}`;
 
-    res.json({ message: "STK Push initiated successfully", checkoutRequestId: response.CheckoutRequestID, customerMessage: response.CustomerMessage });
+    res.json({ message: "STK Push initiated successfully", checkoutRequestId: response.CheckoutRequestID, paymentId: payment.id, invoiceId: payment.invoice_id, customerMessage: response.CustomerMessage });
   } catch (error: any) {
+    if (paymentId) await transitionPaymentStatus(sql, { paymentId }, "failed").catch(() => undefined);
+    if (error instanceof InvoicePaymentError) {
+      return res.status(invoicePaymentHttpStatus(error)).json({ message: error.message, code: error.code });
+    }
     res.status(500).json({ message: "Failed to initiate M-PESA payment" });
+  } finally {
+    await sql.end();
   }
 });
 
 // POST /api/payments/mpesa/callback
 router.post("/mpesa/callback", async (req: any, res: any) => {
+  const sql = createDbConnection();
   try {
     const callbackData = req.body.Body.stkCallback;
     const checkoutRequestId = callbackData.CheckoutRequestID;
@@ -249,21 +284,21 @@ router.post("/mpesa/callback", async (req: any, res: any) => {
 
     console.log(`[M-PESA Callback] Received for ${checkoutRequestId}, status: ${resultCode}`);
 
-    const [payment] = await db.select().from(payments).where(eq(payments.pesapalOrderTrackingId, checkoutRequestId));
-
-    if (payment) {
-      if (resultCode === 0) {
-        const items = callbackData.CallbackMetadata.Item;
-        const mpesaReceiptNumber = items.find((i: any) => i.Name === "MpesaReceiptNumber")?.Value;
-        await supabaseStorage.updatePayment(payment.id, { status: "completed", pesapalTransactionId: mpesaReceiptNumber, paidDate: new Date() });
-      } else {
-        await supabaseStorage.updatePayment(payment.id, { status: "failed" });
-      }
+    if (resultCode === 0) {
+      const items = callbackData.CallbackMetadata.Item;
+      const mpesaReceiptNumber = items.find((i: any) => i.Name === "MpesaReceiptNumber")?.Value;
+      await transitionPaymentStatus(sql, { trackingId: checkoutRequestId }, "completed", {
+        transactionId: mpesaReceiptNumber, paymentMethod: "mpesa", paidDate: new Date(),
+      });
+    } else {
+      await transitionPaymentStatus(sql, { trackingId: checkoutRequestId }, "failed");
     }
 
     res.json({ ResultCode: 0, ResultDesc: "Success" });
   } catch {
     res.status(500).json({ ResultCode: 1, ResultDesc: "Error" });
+  } finally {
+    await sql.end();
   }
 });
 

@@ -3,6 +3,12 @@ import { requireAuth } from '../../_lib/auth.js';
 import { createDbConnection } from '../../_lib/db.js';
 import { pesapalService } from '../../_lib/pesapalService.js';
 import { emailService } from '../../_lib/emailService.js';
+import {
+    createPaymentRecord,
+    InvoicePaymentError,
+    invoicePaymentHttpStatus,
+    transitionPaymentStatus,
+} from '../../_lib/invoicePayments.js';
 import { z } from 'zod';
 
 // This handler combines Initiate (POST), IPN (GET/POST), and Register (GET)
@@ -91,15 +97,17 @@ export default async (req: VercelRequest, res: VercelResponse) => {
 
 async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any) {
     const sql = createDbConnection();
+    let paymentId: string | null = null;
     try {
         const paymentInitiateSchema = z.object({
             leaseId: z.string().min(1, 'Lease ID is required'),
+            invoiceId: z.string().min(1, 'Invoice ID is required').optional(),
             amount: z.number().positive('Amount must be positive'),
             description: z.string().optional(),
             paymentMethod: z.string().default('mpesa'),
         });
 
-        const { leaseId, amount, description, paymentMethod } = paymentInitiateSchema.parse(req.body);
+        const { leaseId, invoiceId, amount, description, paymentMethod } = paymentInitiateSchema.parse(req.body);
 
         if (!pesapalService.isConfigured()) {
             return res.status(503).json({ message: "Payment service not configured" });
@@ -130,18 +138,18 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
             lastName: tenant?.last_name || user.last_name || "User",
         };
 
-        // Create a pending payment record
-        const [payment] = await sql`
-      INSERT INTO public.payments (
-        lease_id, amount, description, payment_method, 
-        status, due_date, payment_type
-      )
-      VALUES (
-        ${leaseId}, ${amount.toString()}, ${description || "Rent Payment"}, ${paymentMethod || 'mpesa'},
-        'pending', NOW(), 'rent'
-      )
-      RETURNING id
-    `;
+        const payment = await createPaymentRecord(sql, {
+            leaseId,
+            invoiceId,
+            amount,
+            paymentMethod: paymentMethod || 'mpesa',
+            paymentType: 'rent',
+            paymentSource: 'pesapal',
+            status: 'pending',
+            description: description || 'Rent Payment',
+            actor: { userId: auth.userId, role: auth.role },
+        });
+        paymentId = payment.id;
 
         // Construct callback URL using resolved base URL
         const baseUrl = resolveBaseUrl();
@@ -181,13 +189,23 @@ async function handleInitiate(req: VercelRequest, res: VercelResponse, auth: any
 
         return res.json({
             redirectUrl: response.redirect_url,
-            trackingId: response.order_tracking_id
+            trackingId: response.order_tracking_id,
+            paymentId: payment.id,
+            invoiceId: payment.invoice_id,
         });
 
     } catch (error: any) {
         console.error('Pesapal initiation error:', error);
+        if (paymentId) {
+            await transitionPaymentStatus(sql, { paymentId }, 'failed', {
+                description: `Pesapal initiation failed: ${error.message || String(error)}`,
+            }).catch((transitionError) => console.error('Failed to mark Pesapal attempt as failed:', transitionError));
+        }
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: 'Invalid input', details: error.errors });
+        }
+        if (error instanceof InvoicePaymentError) {
+            return res.status(invoicePaymentHttpStatus(error)).json({ error: error.message, code: error.code });
         }
         return res.status(500).json({ message: "Failed to initiate payment", error: error.message || String(error) });
     } finally {
@@ -274,24 +292,23 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
         // Update payment record
         // We try to match by merchant_reference (our internal ID) 
         // OR by the tracking ID we saved during initiation as a backup
-        const updateResult = await sql`
-      UPDATE public.payments
-      SET 
-        status = ${dbStatus},
-        pesapal_transaction_id = ${statusResponse.confirmation_code || null},
-        payment_method = ${statusResponse.payment_method || "mpesa"},
-        paid_date = ${dbStatus === "completed" ? new Date() : null},
-        updated_at = NOW()
-      WHERE id = ${merchantRefStr || ''} 
-         OR pesapal_order_tracking_id = ${trackingIdStr}
-      RETURNING id
-    `;
+        const transition = await transitionPaymentStatus(
+            sql,
+            { paymentId: merchantRefStr || null, trackingId: trackingIdStr || null },
+            dbStatus as 'pending' | 'completed' | 'failed',
+            {
+                transactionId: statusResponse.confirmation_code || null,
+                paymentMethod: statusResponse.payment_method || 'mpesa',
+                paidDate: dbStatus === 'completed' ? new Date() : null,
+            },
+        );
+        const updateResult = transition.payment ? [transition.payment] : [];
 
         console.log(`[Pesapal IPN] Database update result: ${updateResult.length} rows affected. IDs: ${JSON.stringify(updateResult.map(r => r.id))}`);
 
         if (updateResult.length === 0) {
             console.error(`[Pesapal IPN] CRITICAL: No payment record found to update for MerchantRef: ${merchantRefStr} or TrackingID: ${trackingIdStr}`);
-        } else if (dbStatus === 'completed') {
+        } else if (transition.completedNow) {
             // Notification logic after successful payment update
             try {
                 // Fetch full details for email notifications with joins
@@ -368,6 +385,9 @@ async function handleIPN(req: VercelRequest, res: VercelResponse) {
 
     } catch (error: any) {
         console.error('[Pesapal IPN] Error processing notification:', error);
+        if (error instanceof InvoicePaymentError && error.code === 'PAYMENT_NOT_FOUND') {
+            return res.status(404).json({ message: 'Payment not found' });
+        }
         return res.status(500).json({ message: "Failed to process IPN", error: error.message || String(error) });
     } finally {
         await sql.end();

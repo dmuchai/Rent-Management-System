@@ -147,6 +147,7 @@ export default function TenantDashboard() {
           // Refresh dashboard data
           queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
           queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
 
           toast({
             title: "Status Updated",
@@ -311,6 +312,17 @@ export default function TenantDashboard() {
     retry: false,
   });
 
+  const { data: invoices = [], isLoading: invoicesLoading } = useQuery<any[]>({
+    queryKey: ["/api/invoices", activeLease?.id],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/invoices?leaseId=${encodeURIComponent(activeLease.id)}&limit=200`);
+      const result = await response.json();
+      return result.data || [];
+    },
+    enabled: Boolean(activeLease?.id),
+    retry: false,
+  });
+
   const { data: maintenanceRequests = [], isLoading: maintenanceLoading } = useQuery({
     queryKey: ["/api/maintenance-requests"],
     queryFn: async () => {
@@ -376,8 +388,13 @@ export default function TenantDashboard() {
     );
   }
 
-  const nextDueDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
-  const daysUntilDue = Math.ceil((nextDueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+  const currentRentInvoice = invoices.find((invoice: any) =>
+    invoice.invoiceType === "rent" && ["pending", "partially_paid", "overdue"].includes(invoice.status)
+  );
+  const nextDueDate = currentRentInvoice ? new Date(currentRentInvoice.dueDate) : null;
+  const daysUntilDue = nextDueDate
+    ? Math.ceil((nextDueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    : null;
 
   const leaseProgress = activeLease ? (() => {
     const start = new Date(activeLease.startDate).getTime();
@@ -392,7 +409,7 @@ export default function TenantDashboard() {
     ? Math.max(0, Math.ceil((new Date(activeLease.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
 
-  const ledgerData = calculateLedger(activeLease, payments);
+  const ledgerData = calculateLedger(activeLease, invoices, payments);
 
   const sectionTitles: Record<string, string> = {
     overview: "Overview",
@@ -630,22 +647,22 @@ export default function TenantDashboard() {
                       </CardHeader>
                       <CardContent>
                         {activeLease ? (
-                          paymentLandlordLoading ? (
+                          paymentLandlordLoading || invoicesLoading ? (
                             <div className="text-center py-8">
                               <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                               <p className="text-muted-foreground">Loading payment details...</p>
                             </div>
-                          ) : landlordId ? (
+                          ) : landlordId && currentRentInvoice ? (
                             <PaymentInstructions
                               landlordId={landlordId}
-                              invoiceReferenceCode={activeLease.id}
-                              amount={parseFloat(activeLease.monthlyRent)}
+                              invoiceReferenceCode={currentRentInvoice.referenceCode}
+                              amount={Number(currentRentInvoice.amountOutstanding)}
                             />
                           ) : (
                             <div className="text-center py-8">
                               <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                              <p className="text-muted-foreground">Payment instructions unavailable.</p>
-                              <p className="text-xs text-muted-foreground mt-2">Please contact your landlord.</p>
+                              <p className="text-muted-foreground">No outstanding rent invoice is available.</p>
+                              <p className="text-xs text-muted-foreground mt-2">Please contact your landlord if you expected an invoice.</p>
                             </div>
                           )
                         ) : (
@@ -883,21 +900,21 @@ export default function TenantDashboard() {
                   className="space-y-6"
                 >
                   <div className="rounded-lg border border-border bg-muted/40 p-4">
-                    {activeLease ? (
+                    {activeLease && currentRentInvoice && nextDueDate ? (
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-sm font-medium">Next rent due</p>
                           <p className="text-xs text-muted-foreground">
-                            {nextDueDate.toLocaleDateString()} • {daysUntilDue} days remaining
+                            {nextDueDate.toLocaleDateString()} • {daysUntilDue !== null && daysUntilDue >= 0 ? `${daysUntilDue} days remaining` : "Overdue"}
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm text-muted-foreground">Amount</p>
-                          <p className="text-lg font-semibold">KES {parseFloat(activeLease.monthlyRent).toLocaleString()}</p>
+                          <p className="text-lg font-semibold">KES {Number(currentRentInvoice.amountOutstanding).toLocaleString()}</p>
                         </div>
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">No active lease on file.</p>
+                      <p className="text-sm text-muted-foreground">No outstanding rent invoice on file.</p>
                     )}
                   </div>
                   <div className="grid gap-6 lg:grid-cols-2">
@@ -911,22 +928,22 @@ export default function TenantDashboard() {
                       </CardHeader>
                       <CardContent>
                         {activeLease ? (
-                          paymentLandlordLoading ? (
+                          paymentLandlordLoading || invoicesLoading ? (
                             <div className="text-center py-8">
                               <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                               <p className="text-muted-foreground">Loading payment details...</p>
                             </div>
-                          ) : landlordId ? (
+                          ) : landlordId && currentRentInvoice ? (
                             <PaymentInstructions
                               landlordId={landlordId}
-                              invoiceReferenceCode={activeLease.id}
-                              amount={parseFloat(activeLease.monthlyRent)}
+                              invoiceReferenceCode={currentRentInvoice.referenceCode}
+                              amount={Number(currentRentInvoice.amountOutstanding)}
                             />
                           ) : (
                             <div className="text-center py-8">
                               <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                              <p className="text-muted-foreground">Payment instructions unavailable.</p>
-                              <p className="text-xs text-muted-foreground mt-2">Please contact your landlord.</p>
+                              <p className="text-muted-foreground">No outstanding rent invoice is available.</p>
+                              <p className="text-xs text-muted-foreground mt-2">Please contact your landlord if you expected an invoice.</p>
                             </div>
                           )
                         ) : (

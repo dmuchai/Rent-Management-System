@@ -4,11 +4,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export type InvoiceListItem = {
   id: string;
+  leaseId?: string;
   referenceCode: string;
   amount: number;
   amountPaid: number;
   amountOutstanding: number;
   currency: string;
+  billingPeriodStart?: string;
   dueDate: string;
   invoiceType: string | null;
   description: string | null;

@@ -94,6 +94,17 @@ router.get("/stats", isAuthenticated, async (req: any, res: any) => {
     const totalPayments = await supabaseStorage.getPaymentsByOwnerId(userId);
     const completedPayments = totalPayments.filter((p: any) => p.status === "completed" || p.status === "paid");
     const totalRevenue = completedPayments.reduce((sum: number, p: any) => sum + parseFloat(String(p.amount || "0")), 0);
+    const { data: invoiceRows } = await supabase
+      .from("invoices")
+      .select("status, due_date")
+      .eq("landlord_id", userId)
+      .neq("invoice_type", "uat_validation")
+      .in("status", ["pending", "partially_paid", "overdue"]);
+    const outstandingInvoices = invoiceRows || [];
+    const now = Date.now();
+    const overdueInvoices = outstandingInvoices.filter((invoice: any) =>
+      invoice.status === "overdue" || new Date(invoice.due_date).getTime() < now
+    ).length;
 
     const { data: maintenanceData } = await supabase
       .from("maintenance_requests")
@@ -107,6 +118,8 @@ router.get("/stats", isAuthenticated, async (req: any, res: any) => {
       units: { total: totalUnits, occupied: occupiedUnits, vacant: totalUnits - occupiedUnits, occupancyRate: totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0 },
       tenants: { total: tenants.length, active: tenants.filter((t: any) => t.status === "active").length, pending: tenants.filter((t: any) => t.status === "pending").length },
       payments: { total: totalPayments.length, completed: completedPayments.length, totalRevenue },
+      pendingInvoices: outstandingInvoices.length,
+      overdueInvoices,
       maintenanceRequests: {
         total: maintenanceRequests.length,
         open: maintenanceRequests.filter((r: any) => r.status === "open").length,

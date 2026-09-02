@@ -104,12 +104,21 @@ const passwordFormSchema = z
 
 const manualPaymentFormSchema = z.object({
   tenantId: z.string().min(1, "Please select a lease"),
+  invoiceId: z.string().optional(),
   amount: z.string().trim().refine((value) => Number.isFinite(Number(value)) && Number(value) > 0, "Payment amount must be greater than 0"),
   paymentDate: z.string().min(1, "Payment date is required"),
   paymentMethod: z.string().min(1, "Payment method is required"),
   paymentType: z.string().min(1, "Payment type is required"),
   reference: z.string().trim().max(80, "Reference is too long"),
   notes: z.string().trim().max(500, "Notes are too long"),
+}).superRefine((data, ctx) => {
+  if (data.paymentType === "rent" && !data.invoiceId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["invoiceId"],
+      message: "Please select the rent invoice being paid",
+    });
+  }
 });
 
 const caretakerInviteSchema = z.object({
@@ -209,11 +218,12 @@ export default function LandlordDashboard() {
 
   const [paymentForm, setPaymentForm] = useState({
     tenantId: "",
+    invoiceId: "",
     propertyId: "",
     amount: "",
     paymentDate: new Date().toISOString().split("T")[0],
     paymentMethod: "",
-    paymentType: "",
+    paymentType: "rent",
     reference: "",
     notes: "",
   });
@@ -535,6 +545,7 @@ export default function LandlordDashboard() {
   useRealtimeSubscription("tenants", ["/api/tenants", "/api/dashboard/stats"]);
   useRealtimeSubscription("leases", ["/api/leases", "/api/dashboard/stats"]);
   useRealtimeSubscription("payments", ["/api/payments", "/api/dashboard/stats"]);
+  useRealtimeSubscription("invoices", ["/api/invoices", "/api/dashboard/stats"]);
   useRealtimeSubscription("units", ["/api/units", "/api/dashboard/stats"]);
 
   const profileUpdateMutation = useMutation({
@@ -629,6 +640,7 @@ export default function LandlordDashboard() {
   const recordPaymentMutation = useMutation({
     mutationFn: async (data: {
       leaseId: string;
+      invoiceId?: string;
       amount: string;
       dueDate: string;
       paidDate?: string;
@@ -643,6 +655,7 @@ export default function LandlordDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       toast({
         title: "Payment Recorded",
         description: "Payment has been successfully recorded!",
@@ -650,11 +663,12 @@ export default function LandlordDashboard() {
       setIsPaymentFormOpen(false);
       setPaymentForm({
         tenantId: "",
+        invoiceId: "",
         propertyId: "",
         amount: "",
         paymentDate: new Date().toISOString().split("T")[0],
         paymentMethod: "",
-        paymentType: "",
+        paymentType: "rent",
         reference: "",
         notes: "",
       });
@@ -702,6 +716,7 @@ export default function LandlordDashboard() {
 
     recordPaymentMutation.mutate({
       leaseId: selectedLease.id,
+      invoiceId: paymentForm.invoiceId || undefined,
       amount: paymentForm.amount,
       dueDate: paymentForm.paymentDate,
       paidDate: paymentForm.paymentDate,
@@ -2295,21 +2310,16 @@ export default function LandlordDashboard() {
           }, 0);
           const pendingPaymentCount = filteredPayments.filter((payment: any) => payment?.status === "pending").length;
           const failedPaymentCount = filteredPayments.filter((payment: any) => payment?.status === "failed").length;
-          const overdueTotals = filteredPayments.reduce(
-            (acc: { count: number; amount: number }, payment: any) => {
-              const dueDateValue = payment?.dueDate ? new Date(payment.dueDate) : null;
-              const isOverdue =
-                (payment?.status === "pending" || payment?.status === "failed") &&
-                dueDateValue instanceof Date &&
-                !Number.isNaN(dueDateValue.getTime()) &&
-                dueDateValue.getTime() < Date.now();
-              if (isOverdue) {
-                const amountValue = parseFloat(String(payment?.amount ?? 0));
-                acc.count += 1;
-                acc.amount += Number.isFinite(amountValue) ? amountValue : 0;
-              }
-              return acc;
-            },
+          const filteredInvoices = outstandingInvoices.filter((invoice) => {
+            if (collectionsRange === "all") return true;
+            const dateValue = invoice.billingPeriodStart || invoice.dueDate;
+            const parsed = new Date(dateValue);
+            return Number.isFinite(parsed.getTime()) && isSameMonth(parsed);
+          });
+          const overdueTotals = filteredInvoices.reduce(
+            (acc, invoice) => invoice.isOverdue
+              ? { count: acc.count + 1, amount: acc.amount + Number(invoice.amountOutstanding || 0) }
+              : acc,
             { count: 0, amount: 0 }
           );
           const expiringLeases = Array.isArray(dashboardStats?.expiringLeases)
@@ -2328,23 +2338,24 @@ export default function LandlordDashboard() {
                 if (!acc[name]) {
                   acc[name] = { name, total: 0, count: 0, pending: 0, overdueAmount: 0, overdueCount: 0 };
                 }
-                acc[name].total += safeAmount;
-                acc[name].count += 1;
+                if (payment?.status === "completed") {
+                  acc[name].total += safeAmount;
+                  acc[name].count += 1;
+                }
                 if (payment?.status === "pending") {
                   acc[name].pending += 1;
                 }
-                const dueDateValue = payment?.dueDate ? new Date(payment.dueDate) : null;
-                const isOverdue =
-                  (payment?.status === "pending" || payment?.status === "failed") &&
-                  dueDateValue instanceof Date &&
-                  !Number.isNaN(dueDateValue.getTime()) &&
-                  dueDateValue.getTime() < Date.now();
-                if (isOverdue) {
-                  acc[name].overdueAmount += safeAmount;
-                  acc[name].overdueCount += 1;
-                }
                 return acc;
               }, {});
+          filteredInvoices.forEach((invoice) => {
+            if (!invoice.isOverdue) return;
+            const name = invoice.property?.name || "Unassigned";
+            if (!propertyTotals[name]) {
+              propertyTotals[name] = { name, total: 0, count: 0, pending: 0, overdueAmount: 0, overdueCount: 0 };
+            }
+            propertyTotals[name].overdueAmount += Number(invoice.amountOutstanding || 0);
+            propertyTotals[name].overdueCount += 1;
+          });
           const propertyBreakdown = Object.values(propertyTotals)
             .sort((a, b) => b.total - a.total)
             .slice(0, 6);
@@ -3238,13 +3249,15 @@ export default function LandlordDashboard() {
                 onValueChange={(value) => {
                   const selectedLease = leases.find((l: any) => l.id === value);
                   if (selectedLease) {
+                    const selectedInvoice = outstandingInvoices.find((invoice) => invoice.leaseId === value);
                     setPaymentForm(prev => ({
                       ...prev,
                       tenantId: value,
-                      amount: selectedLease.monthlyRent || prev.amount,
+                      invoiceId: selectedInvoice?.id || "",
+                      amount: selectedInvoice ? String(selectedInvoice.amountOutstanding) : (selectedLease.monthlyRent || prev.amount),
                       propertyId: selectedLease.unitId || prev.propertyId
                     }));
-                    setPaymentErrors((prev) => ({ ...prev, tenantId: "", amount: "" }));
+                    setPaymentErrors((prev) => ({ ...prev, tenantId: "", invoiceId: "", amount: "" }));
                   }
                 }}
               >
@@ -3274,6 +3287,36 @@ export default function LandlordDashboard() {
               </p>
               {paymentErrors.tenantId && <p className="mt-1 text-sm text-destructive">{paymentErrors.tenantId}</p>}
             </div>
+
+            {paymentForm.paymentType === "rent" && paymentForm.tenantId ? (
+              <div>
+                <Label htmlFor="manualInvoice">Rent Invoice *</Label>
+                <Select
+                  value={paymentForm.invoiceId}
+                  onValueChange={(value) => {
+                    const invoice = outstandingInvoices.find((item) => item.id === value);
+                    setPaymentForm((prev) => ({
+                      ...prev,
+                      invoiceId: value,
+                      amount: invoice ? String(invoice.amountOutstanding) : prev.amount,
+                    }));
+                    setPaymentErrors((prev) => ({ ...prev, invoiceId: "", amount: "" }));
+                  }}
+                >
+                  <SelectTrigger id="manualInvoice" className={paymentErrors.invoiceId ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select an outstanding invoice" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {outstandingInvoices.filter((invoice) => invoice.leaseId === paymentForm.tenantId).map((invoice) => (
+                      <SelectItem key={invoice.id} value={invoice.id}>
+                        {invoice.referenceCode} — KES {Number(invoice.amountOutstanding).toLocaleString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {paymentErrors.invoiceId && <p className="mt-1 text-sm text-destructive">{paymentErrors.invoiceId}</p>}
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -3336,8 +3379,16 @@ export default function LandlordDashboard() {
                 <Select
                   value={paymentForm.paymentType}
                   onValueChange={(value) => {
-                    setPaymentForm(prev => ({ ...prev, paymentType: value }));
-                    setPaymentErrors((prev) => ({ ...prev, paymentType: "" }));
+                    const firstInvoice = value === "rent"
+                      ? outstandingInvoices.find((invoice) => invoice.leaseId === paymentForm.tenantId)
+                      : undefined;
+                    setPaymentForm(prev => ({
+                      ...prev,
+                      paymentType: value,
+                      invoiceId: firstInvoice?.id || "",
+                      amount: firstInvoice ? String(firstInvoice.amountOutstanding) : prev.amount,
+                    }));
+                    setPaymentErrors((prev) => ({ ...prev, paymentType: "", invoiceId: "" }));
                   }}
                 >
                   <SelectTrigger className={paymentErrors.paymentType ? "border-destructive" : ""}>
@@ -3391,7 +3442,7 @@ export default function LandlordDashboard() {
               <ul className="text-sm text-blue-800 space-y-1">
                 <li>• <strong>Automated (Recommended):</strong> Tenants pay via tenant portal → Pesapal processes → Payment auto-recorded</li>
                 <li>• <strong>Manual (This Form):</strong> For offline payments (cash, bank transfers received outside the system)</li>
-                <li>• <strong>Lease-Based:</strong> Payments linked to lease = automatic tenant/property/unit tracking</li>
+                <li>• <strong>Invoice-Based:</strong> Rent receipts settle the selected monthly invoice while retaining lease and tenant tracking</li>
                 <li>• <strong>Real-Time Updates:</strong> Landlord dashboard updates instantly when payment is recorded</li>
               </ul>
             </div>

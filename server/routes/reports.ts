@@ -29,11 +29,36 @@ router.get("/payments", isAuthenticated, async (req: any, res: any) => {
 
     const payments = await supabaseStorage.getPaymentsByOwnerId(userId);
     const filteredPayments = payments.filter((payment: any) => {
-      const paymentDate = new Date(payment.paidDate || payment.dueDate || payment.createdAt);
+      const paymentDate = new Date(payment.paidDate || payment.createdAt);
       return paymentDate >= startDate && paymentDate <= endDate;
     });
 
-    const stats = await (supabaseStorage as any).getPaymentStats(userId, startDate, endDate);
+    const { data: invoiceRows, error: invoiceError } = await supabase
+      .from("invoices")
+      .select("amount, amount_paid, status, due_date, billing_period_start")
+      .eq("landlord_id", userId)
+      .neq("invoice_type", "uat_validation")
+      .gte("billing_period_start", startDate.toISOString())
+      .lte("billing_period_start", endDate.toISOString());
+    if (invoiceError) throw invoiceError;
+
+    const invoices = invoiceRows || [];
+    const totalExpected = invoices.reduce((sum: number, invoice: any) => sum + Number(invoice.amount || 0), 0);
+    const totalCollected = filteredPayments
+      .filter((payment: any) => payment.status === "completed")
+      .reduce((sum: number, payment: any) => sum + Number(payment.amount || 0), 0);
+    const totalOverdue = invoices.reduce((sum: number, invoice: any) => {
+      const outstanding = Math.max(0, Number(invoice.amount || 0) - Number(invoice.amount_paid || 0));
+      const overdue = ["pending", "partially_paid", "overdue"].includes(invoice.status)
+        && new Date(invoice.due_date).getTime() < Date.now();
+      return sum + (overdue ? outstanding : 0);
+    }, 0);
+    const stats = {
+      totalExpected,
+      totalCollected,
+      totalOverdue,
+      collectionRate: totalExpected > 0 ? (totalCollected / totalExpected) * 100 : 0,
+    };
 
     return res.json({ payments: filteredPayments, stats });
   } catch {

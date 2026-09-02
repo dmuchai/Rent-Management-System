@@ -10,7 +10,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const authHeader = req.headers.authorization;
     const CRON_SECRET = process.env.CRON_SECRET;
 
-    if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+    if (!CRON_SECRET) {
+        console.error('[Cron] CRON_SECRET is not configured');
+        return res.status(500).json({ error: 'Cron authentication is not configured' });
+    }
+
+    if (authHeader !== `Bearer ${CRON_SECRET}`) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 

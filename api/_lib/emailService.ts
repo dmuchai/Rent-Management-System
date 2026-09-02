@@ -693,14 +693,14 @@ Need help? Contact us at support@landeeandmoony.com
           <p style="color: #6B7280; margin-top: 8px;">Property Management System</p>
         </div>
         
-        <h2 style="color: #EF4444;">Overdue Payment Notice</h2>
+        <h2 style="color: #EF4444;">Overdue Rent Invoice</h2>
         
         <p>Dear ${escapedTenantName},</p>
         
-        <p>We notice that your rent payment is now overdue. Please make your payment as soon as possible to avoid any late fees.</p>
+        <p>Your rent invoice is now overdue. Please make your payment as soon as possible to avoid any late fees.</p>
         
         <div style="background-color: #FEF2F2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #EF4444;">
-          <h3 style="margin-top: 0; color: #EF4444;">Overdue Payment Details</h3>
+          <h3 style="margin-top: 0; color: #EF4444;">Overdue Invoice Details</h3>
           <p><strong>Property:</strong> ${escapedPropertyName}</p>
           <p><strong>Unit:</strong> ${escapedUnitNumber}</p>
           <p><strong>Amount Due:</strong> ${formattedAmount}</p>
@@ -732,7 +732,7 @@ Need help? Contact us at support@landeeandmoony.com
       to: tenantEmail,
       subject: `OVERDUE: Rent Payment - ${this.sanitizeSubject(propertyName)} Unit ${this.sanitizeSubject(unitNumber)}`,
       html,
-      text: `Dear ${tenantName}, your rent payment of ${formattedAmount} for ${propertyName} Unit ${unitNumber} was due on ${formattedDate} and is now overdue.`,
+      text: `Dear ${tenantName}, your rent invoice of ${formattedAmount} for ${propertyName} Unit ${unitNumber} was due on ${formattedDate} and is now overdue.`,
     });
   }
 

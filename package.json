@@ -21,6 +21,7 @@
     "test:otp": "tsx --test tests/otp/*.test.ts",
     "test:account-deletion": "tsx --test tests/account-deletion/*.test.ts",
     "test:kcb": "tsx --test tests/kcb/*.test.ts",
+    "test:invoicing": "tsx --test tests/invoicing/*.test.ts",
     "test:kcb-sandbox": "node scripts/check-kcb-sandbox-auth.js",
     "test:tenant-payments": "tsx --test tests/tenant-payments/*.test.ts",
     "mobile:sync": "VITE_API_URL=https://landee.kejalink.co.ke npm run build:frontend && npx cap sync",
