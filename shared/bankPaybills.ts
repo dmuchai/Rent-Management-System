@@ -15,7 +15,7 @@ export const KENYA_BANK_PAYBILLS = {
   KCB_BANK: {
     name: "KCB Bank (Account)",
     paybill: "522522",
-    accountFormat: /^\d{12}$/,  // 12 digit account numbers
+    accountFormat: /^\d{10,12}$/,  // Real KCB account numbers commonly use 10-12 digits
   },
   KCB_VOOMA_TILL: {
     name: "KCB Bank (Lipa na KCB / Vooma Till)",

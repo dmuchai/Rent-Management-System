@@ -6,6 +6,10 @@ test("accepts production-length KCB Account IPN identifiers", () => {
   assert.deepEqual(validateBankAccount("522533", "123456789012"), { valid: true });
 });
 
+test("accepts real 10-digit KCB account numbers for the 522522 account paybill", () => {
+  assert.deepEqual(validateBankAccount("522522", "1235672349"), { valid: true });
+});
+
 test("accepts alphanumeric KCB Vooma references", () => {
   assert.deepEqual(validateBankAccount("522533", "ABC123456"), { valid: true });
 });
