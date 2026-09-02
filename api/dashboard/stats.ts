@@ -26,7 +26,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       tenantsCount,
       revenueStats,
       occupancyStats,
-      overduePaymentsData,
+      invoiceStats,
       expiringLeasesData,
       revenueTrendData,
       recentPaymentsData,
@@ -59,8 +59,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
             AND EXTRACT(YEAR FROM COALESCE(pm.paid_date, pm.created_at)) = ${currentYear}
             THEN CAST(pm.amount AS DECIMAL) 
             ELSE 0 
-          END), 0) as monthly_revenue,
-          COUNT(CASE WHEN pm.status = 'pending' THEN 1 END) as pending_count
+          END), 0) as monthly_revenue
         FROM public.payments pm
         INNER JOIN public.leases l ON pm.lease_id = l.id
         INNER JOIN public.units u ON l.unit_id = u.id
@@ -78,17 +77,29 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         WHERE p.owner_id = ${auth.userId}
         ${propertyIdFilter}
       `,
-      // 5. Get overdue payments count
+      // 5. Get formal invoice statistics. These records are distinct from
+      // payment transactions and are the source used by bill validation.
       sql`
-        SELECT COUNT(*) as overdue_count
-        FROM public.payments pm
-        INNER JOIN public.leases l ON pm.lease_id = l.id
-        INNER JOIN public.units u ON l.unit_id = u.id
-        INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId}
-        ${propertyIdFilter}
-        AND pm.status = 'pending'
-        AND pm.due_date < NOW()
+        SELECT
+          COUNT(*) FILTER (
+            WHERE i.status IN ('pending', 'partially_paid')
+          ) AS pending_count,
+          COUNT(*) FILTER (
+            WHERE (
+              i.status = 'overdue'
+              OR (i.status IN ('pending', 'partially_paid') AND i.due_date < NOW())
+            )
+          ) AS overdue_count
+        FROM public.invoices i
+        WHERE i.landlord_id = ${auth.userId}
+        ${propertyId ? sql`
+          AND i.lease_id IN (
+            SELECT l.id
+            FROM public.leases l
+            INNER JOIN public.units u ON l.unit_id = u.id
+            WHERE u.property_id = ${propertyId as string}
+          )
+        ` : sql``}
       `,
       // 6. Get expiring leases (next 30 days)
       sql`
@@ -161,13 +172,13 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
     const totalRevenue = parseFloat(revenueStats[0]?.total_revenue || '0');
     const monthlyRevenue = parseFloat(revenueStats[0]?.monthly_revenue || '0');
-    const pendingPaymentsCount = parseInt(revenueStats[0]?.pending_count || '0');
+    const pendingInvoices = parseInt(invoiceStats[0]?.pending_count || '0');
 
     const totalUnits = parseInt(occupancyStats[0]?.total_units || '0');
     const occupiedUnits = parseInt(occupancyStats[0]?.occupied_units || '0');
     const occupancyRate = totalUnits > 0 ? ((occupiedUnits / totalUnits) * 100).toFixed(1) : '0';
 
-    const overduePayments = parseInt(overduePaymentsData[0]?.overdue_count || '0');
+    const overdueInvoices = parseInt(invoiceStats[0]?.overdue_count || '0');
 
     const expiringLeases = expiringLeasesData.map((lease: any) => ({
       id: lease.id,
@@ -216,11 +227,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       totalTenants,
       totalRevenue: totalRevenue.toFixed(2),
       monthlyRevenue: monthlyRevenue.toFixed(2),
-      pendingPayments: pendingPaymentsCount,
+      pendingInvoices,
       occupancyRate,
       totalUnits,
       occupiedUnits,
-      overduePayments,
+      overdueInvoices,
       expiringLeases,
       revenueTrend,
       recentPayments,

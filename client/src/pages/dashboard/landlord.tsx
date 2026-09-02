@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -18,6 +18,7 @@ import LeaseForm from "@/components/leases/LeaseForm";
 import LeaseTable from "@/components/leases/LeaseTable";
 import LeaseDetailsModal from "@/components/leases/LeaseDetailsModal";
 import PaymentHistory from "@/components/payments/PaymentHistory";
+import InvoiceList, { type InvoiceListItem } from "@/components/invoices/InvoiceList";
 import PaymentChannelsManager from "@/components/landlord/PaymentChannelsManager";
 import ReconciliationReview from "@/components/landlord/ReconciliationReview";
 import { StatementUpload } from "@/components/reconciliation/StatementUpload";
@@ -127,6 +128,8 @@ export default function LandlordDashboard() {
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("all");
   const [collectionsRange, setCollectionsRange] = useState<"month" | "all">("month");
+  const [scrollToInvoices, setScrollToInvoices] = useState(false);
+  const invoiceListRef = useRef<HTMLDivElement>(null);
 
   // Dynamic page title based on active section
   const sectionTitles: Record<DashboardSection, string> = {
@@ -136,7 +139,7 @@ export default function LandlordDashboard() {
     caretakers: 'Caretakers',
     leases: 'Leases',
     maintenance: 'Maintenance',
-    payments: 'Payments',
+    payments: 'Payments & Invoices',
     'payment-settings': 'Payment Settings',
     subscription: 'Subscription',
     reconciliation: 'Payment Reconciliation',
@@ -145,6 +148,22 @@ export default function LandlordDashboard() {
     profile: 'Profile'
   };
   usePageTitle(sectionTitles[activeSection]);
+
+  useEffect(() => {
+    if (activeSection !== "payments" || !scrollToInvoices) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      invoiceListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setScrollToInvoices(false);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSection, scrollToInvoices]);
+
+  const openInvoiceList = () => {
+    setScrollToInvoices(true);
+    setActiveSection("payments");
+  };
 
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -307,6 +326,23 @@ export default function LandlordDashboard() {
       const response = await apiRequest("GET", "/api/payments");
       const result = await response.json();
       return result.data || result || [];
+    },
+    retry: false,
+  });
+
+  const {
+    data: outstandingInvoices = [],
+    isLoading: invoicesLoading,
+    isError: invoicesError,
+  } = useQuery<InvoiceListItem[]>({
+    queryKey: ["/api/invoices", "outstanding", selectedPropertyId],
+    queryFn: async () => {
+      const propertyQuery = selectedPropertyId !== "all"
+        ? `&propertyId=${encodeURIComponent(selectedPropertyId)}`
+        : "";
+      const response = await apiRequest("GET", `/api/invoices?status=outstanding${propertyQuery}`);
+      const result = await response.json();
+      return Array.isArray(result?.data) ? result.data : [];
     },
     retry: false,
   });
@@ -700,7 +736,7 @@ export default function LandlordDashboard() {
     caretakers: "Caretakers",
     leases: "Lease Management",
     maintenance: "Maintenance",
-    payments: "Payment Management",
+    payments: "Payments & Invoices",
     "payment-settings": "Payment Settings",
     subscription: "Subscription",
     reconciliation: "Payment Reconciliation",
@@ -849,11 +885,11 @@ export default function LandlordDashboard() {
                 data-testid="stat-monthly-collected"
               />
               <StatsCard
-                title="Overdue"
-                value={dashboardStats?.overduePayments || 0}
-                subtitle={dashboardStats?.overduePayments > 0 ? "Needs attention" : "All current"}
+                title="Overdue invoices"
+                value={dashboardStats?.overdueInvoices || 0}
+                subtitle={dashboardStats?.overdueInvoices > 0 ? "Needs attention" : "All current"}
                 icon="fas fa-exclamation-triangle"
-                color={dashboardStats?.overduePayments > 0 ? "destructive" : "chart-4"}
+                color={dashboardStats?.overdueInvoices > 0 ? "destructive" : "chart-4"}
                 loading={statsLoading}
                 data-testid="stat-overdue"
               />
@@ -887,10 +923,10 @@ export default function LandlordDashboard() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3">
                       <div>
-                        <p className="font-medium">Overdue payments</p>
-                        <p className="text-sm text-muted-foreground">{dashboardStats?.overduePayments || 0} accounts need follow-up</p>
+                        <p className="font-medium">Overdue invoices</p>
+                        <p className="text-sm text-muted-foreground">{dashboardStats?.overdueInvoices || 0} invoices need follow-up</p>
                       </div>
-                      <Button size="sm" onClick={() => setActiveSection("payments")}>
+                      <Button size="sm" onClick={openInvoiceList}>
                         Review
                       </Button>
                     </div>
@@ -2243,7 +2279,8 @@ export default function LandlordDashboard() {
             const amountValue = parseFloat(String(payment?.amount ?? 0));
             return sum + (Number.isFinite(amountValue) ? amountValue : 0);
           }, 0);
-          const pendingCount = filteredPayments.filter((payment: any) => payment?.status === "pending" || payment?.status === "failed").length;
+          const pendingPaymentCount = filteredPayments.filter((payment: any) => payment?.status === "pending").length;
+          const failedPaymentCount = filteredPayments.filter((payment: any) => payment?.status === "failed").length;
           const overdueTotals = filteredPayments.reduce(
             (acc: { count: number; amount: number }, payment: any) => {
               const dueDateValue = payment?.dueDate ? new Date(payment.dueDate) : null;
@@ -2279,7 +2316,7 @@ export default function LandlordDashboard() {
                 }
                 acc[name].total += safeAmount;
                 acc[name].count += 1;
-                if (payment?.status === "pending" || payment?.status === "failed") {
+                if (payment?.status === "pending") {
                   acc[name].pending += 1;
                 }
                 const dueDateValue = payment?.dueDate ? new Date(payment.dueDate) : null;
@@ -2354,9 +2391,11 @@ export default function LandlordDashboard() {
                   data-testid="stat-overdue"
                 />
                 <StatsCard
-                  title="Pending"
-                  value={pendingCount.toString()}
-                  subtitle="Outstanding"
+                  title="Pending payments"
+                  value={pendingPaymentCount.toString()}
+                  subtitle={failedPaymentCount > 0
+                    ? `${failedPaymentCount} failed ${failedPaymentCount === 1 ? "payment" : "payments"}`
+                    : "Payment records"}
                   icon="fas fa-clock"
                   color="chart-4"
                   loading={statsLoading}
@@ -2442,17 +2481,17 @@ export default function LandlordDashboard() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3">
                         <div>
-                          <p className="font-medium">Overdue accounts</p>
-                          <p className="text-sm text-muted-foreground">{dashboardStats?.overduePayments || 0} accounts overdue</p>
+                          <p className="font-medium">Overdue invoices</p>
+                          <p className="text-sm text-muted-foreground">{dashboardStats?.overdueInvoices || 0} invoices overdue</p>
                         </div>
-                        <Button size="sm" onClick={() => setActiveSection("tenants")}>Review</Button>
+                        <Button size="sm" onClick={openInvoiceList}>Review</Button>
                       </div>
                       <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3">
                         <div>
                           <p className="font-medium">Pending invoices</p>
-                          <p className="text-sm text-muted-foreground">{dashboardStats?.pendingPayments || 0} invoices outstanding</p>
+                          <p className="text-sm text-muted-foreground">{dashboardStats?.pendingInvoices || 0} invoices outstanding</p>
                         </div>
-                        <Button size="sm" variant="outline" onClick={() => setActiveSection("payments")}>View list</Button>
+                        <Button size="sm" variant="outline" onClick={openInvoiceList}>View list</Button>
                       </div>
                       <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3">
                         <div>
@@ -2494,6 +2533,14 @@ export default function LandlordDashboard() {
                     </div>
                   </CardContent>
                 </Card>
+              </div>
+
+              <div ref={invoiceListRef} className="scroll-mt-6">
+                <InvoiceList
+                  invoices={outstandingInvoices}
+                  loading={invoicesLoading}
+                  error={invoicesError}
+                />
               </div>
 
               <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr),minmax(0,1fr)]">
