@@ -16,8 +16,11 @@ cancels every allocation receipt and reverses each associated invoice balance.
 Legacy reconciliations without payment receipts retain the existing reversal path.
 
 Deploy migration 014 before the application. Migration 013 is a prerequisite.
-Rollback may restore application code while retaining the additive bank_event_id
-column, unique index and existing receipts. Never delete an event to replay it.
+Retain the additive bank_event_id column, unique index and existing receipts on
+rollback. Once split allocations exist, an older application cannot safely reverse
+them. Prefer a forward fix; if reverting other application changes, retain the new
+allocation-aware reversal and receipt handling, or suspend reconciliation writes
+until that handling is restored. Never delete an event to replay it.
 
 The incident recovery script defaults to a read-only dry run. It targets only the
 authorized KES 100 event and records the controlled Production audit evidence
