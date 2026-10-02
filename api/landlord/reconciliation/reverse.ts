@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../../_lib/auth.js';
 import { createDbConnection } from '../../_lib/db.js';
-import { ownerHasSubscriptionFeature } from '../../_lib/subscription.js';
+import { reverseBankAllocations } from '../../_lib/bankAllocation.js';
 
 const reverseSchema = z.object({
   eventId: z.string().min(1, 'eventId is required'),
@@ -20,9 +20,6 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
   if (auth.role !== 'landlord') {
     return res.status(403).json({ error: 'Only landlords can reverse reconciliations' });
-  }
-  if (!(await ownerHasSubscriptionFeature(auth.userId, 'payment_reconciliation'))) {
-    return res.status(403).json({ error: 'Payment reconciliation requires Silver or higher', requiredFeature: 'payment_reconciliation' });
   }
 
   const sql = createDbConnection();
@@ -65,6 +62,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         };
       }
 
+      const reversedAllocations = await reverseBankAllocations(tx, event.id, auth.userId);
+      if (reversedAllocations) {
+        return { status: 200, body: { success: true, eventId: event.id, reversedAllocations } };
+      }
+
       const [invoice] = await tx`
         SELECT
           id,
@@ -105,7 +107,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         UPDATE public.invoices
         SET
           amount_paid = ${newAmountPaid.toFixed(2)},
-          status = ${nextStatus},
+          status = ${nextStatus}::invoice_status,
           paid_at = ${nextPaidAt},
           updated_at = NOW()
         WHERE id = ${invoice.id}

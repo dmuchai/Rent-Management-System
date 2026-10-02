@@ -1,9 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHash, createPublicKey, createVerify, randomUUID } from 'crypto';
 import { createDbConnection } from '../../../_lib/db.js';
-import { reconcilePayment, recordReconciliation } from '../../../_lib/reconciliationEngine.js';
+import { allocateBankEvent } from '../../../_lib/bankAllocation.js';
 import { bankWebhookAdapters, type BankProvider } from './bankAdapter.js';
-import { ownerHasSubscriptionFeature } from '../../../_lib/subscription.js';
 
 const PROVIDER_SECRET_ENV: Record<BankProvider, string> = {
   kcb: 'KCB_WEBHOOK_SECRET',
@@ -176,6 +175,8 @@ export async function readKcbRawBody(req: VercelRequest): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+const verifiedKcbPayloads = new WeakSet<object>();
+
 export async function readKcbPayload(
   req: VercelRequest,
   signatureMode: boolean | KcbSignatureMode
@@ -185,6 +186,7 @@ export async function readKcbPayload(
     typeof signatureMode === 'boolean'
       ? signatureMode ? 'enforce' : 'disabled'
       : signatureMode;
+  let verified = false;
 
   if (resolvedSignatureMode !== 'disabled') {
     const keyConfig = getConfiguredKcbPublicKeys();
@@ -195,6 +197,7 @@ export async function readKcbPayload(
       keyConfig.configurationValid &&
       verifyRsaSha256WithKeys(rawBody, signature, keyConfig.keys)
     );
+    verified = signatureValid;
 
     logKcbWebhook(
       signatureValid ? 'info' : 'warn',
@@ -217,6 +220,7 @@ export async function readKcbPayload(
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('Expected a JSON object');
     }
+    if (verified) verifiedKcbPayloads.add(parsed);
     return parsed as Record<string, unknown>;
   } catch {
     throw new KcbRequestError(400, 'Invalid JSON payload');
@@ -449,40 +453,49 @@ export async function handleBankWebhook(
         ${normalized.transactionTime.toISOString()},
         ${JSON.stringify(normalized.rawPayload)},
         'unmatched',
-        ${provider === 'kcb' && kcbSignatureMode === 'enforce'}
+        ${provider === 'kcb'
+          ? verifiedKcbPayloads.has(payload as object)
+          : Boolean(getExpectedSecret(provider))}
       )
       ON CONFLICT (provider, external_transaction_id) DO NOTHING
       RETURNING id
     `;
 
+    let paymentEvent = inserted[0];
     if (inserted.count === 0) {
       const [existingEvent] = await sql`
-        SELECT id
+        SELECT id, reconciliation_status, is_verified
         FROM public.external_payment_events
         WHERE provider = ${provider}
           AND external_transaction_id = ${normalized.transactionId}
         LIMIT 1
       `;
-      const acknowledgementId = resolveKcbAcknowledgementId(undefined, existingEvent?.id);
+      // A previous database failure may have stored the event without allocating
+      // it. Retry only verified, never-allocated events; reviewed/reversed events
+      // continue to receive the ordinary duplicate acknowledgement.
+      if (existingEvent?.is_verified && existingEvent.reconciliation_status === 'unmatched') {
+        paymentEvent = existingEvent;
+      } else {
+        const acknowledgementId = resolveKcbAcknowledgementId(undefined, existingEvent?.id);
 
-      if (provider === 'kcb') {
-        logKcbWebhook('info', 'replay_acknowledged', {
-          transactionRef,
-          latencyMs: Date.now() - startedAt,
-        });
+        if (provider === 'kcb') {
+          logKcbWebhook('info', 'replay_acknowledged', {
+            transactionRef,
+            latencyMs: Date.now() - startedAt,
+          });
+        }
+
+        return sendProviderResponse(payload, res, provider, {
+          success: true,
+          message: 'Already processed',
+        }, {
+          statusCode: '0',
+          statusMessage: 'Already processed',
+          transactionId: acknowledgementId,
+        }, kcbKind);
       }
-
-      return sendProviderResponse(payload, res, provider, {
-        success: true,
-        message: 'Already processed',
-      }, {
-        statusCode: '0',
-        statusMessage: 'Already processed',
-        transactionId: acknowledgementId,
-      }, kcbKind);
     }
 
-    const [paymentEvent] = inserted;
     const acknowledgementId = resolveKcbAcknowledgementId(paymentEvent.id);
 
     if (!channel) {
@@ -503,46 +516,17 @@ export async function handleBankWebhook(
       }, kcbKind);
     }
 
-    if (!(await ownerHasSubscriptionFeature(channel.landlord_id, 'payment_reconciliation'))) {
-      if (provider === 'kcb') {
-        logKcbWebhook('info', 'reconciliation_not_entitled', {
-          transactionRef,
-          eventId: acknowledgementId,
-          latencyMs: Date.now() - startedAt,
-        });
-      }
-      return sendProviderResponse(payload, res, provider, {
-        success: true,
-        message: 'Payment stored',
-        matched: false,
-        provider,
-      }, {
-        statusCode: '0',
-        statusMessage: 'Payment stored',
-        transactionId: acknowledgementId,
-      }, kcbKind);
-    }
-
-    const reconciliationResult = await reconcilePayment(sql, {
-      id: paymentEvent.id,
-      transactionId: normalized.transactionId,
-      phoneNumber: normalized.payerPhone || '',
-      amount: normalized.amount,
-      timestamp: normalized.transactionTime,
-      bankPaybillNumber: normalized.destinationPaybill || channel.bank_paybill_number || undefined,
-      bankAccountNumber: normalized.destinationAccount || channel.bank_account_number || undefined,
-      referenceCode: normalized.referenceCode,
-      rawData: normalized.rawPayload,
+    const reconciliationResult = await allocateBankEvent(sql, paymentEvent.id, {
+      referenceCode: inserted.count ? normalized.referenceCode : undefined,
     });
-
-    await recordReconciliation(sql, paymentEvent.id, normalized.amount, reconciliationResult);
 
     if (provider === 'kcb') {
       logKcbWebhook('info', 'reconciliation_completed', {
         transactionRef,
         eventId: acknowledgementId,
         matched: reconciliationResult.matched,
-        method: reconciliationResult.method,
+        method: 'oldest_invoice',
+        allocationCount: reconciliationResult.allocationCount,
         latencyMs: Date.now() - startedAt,
       });
     }
@@ -551,8 +535,7 @@ export async function handleBankWebhook(
       success: true,
       message: reconciliationResult.matched ? 'Payment matched' : 'Payment queued for review',
       matched: reconciliationResult.matched,
-      method: reconciliationResult.method,
-      confidence: reconciliationResult.confidence,
+      method: 'oldest_invoice',
       provider,
     }, {
       statusCode: '0',

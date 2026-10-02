@@ -8,6 +8,8 @@ import {
   getMinimumPlanForLimit,
   getEffectivePlanCode,
   hasFeature,
+  FEATURE_KEYS,
+  PLAN_CODES,
 } from '../../shared/subscription/index.js';
 import {
   mapProductIdToPlan,
@@ -25,12 +27,12 @@ test('maps Google Play product IDs to Landee plans', () => {
 
 test('respects plan limits for properties, units, and management users', () => {
   assert.equal(canAddProperty('free', 0), true);
-  assert.equal(canAddProperty('free', 1), false);
+  assert.equal(canAddProperty('free', 1), true);
   assert.equal(canAddUnit('free', 2), true);
   assert.equal(canAddUnit('free', 3), true);
   assert.equal(canAddUnit('free', 4), false);
   assert.equal(canAddManagementUser('bronze', 1), true);
-  assert.equal(canAddManagementUser('bronze', 2), false);
+  assert.equal(canAddManagementUser('bronze', 200), true);
 });
 
 test('resolves the minimum plan needed for a resource', () => {
@@ -50,11 +52,15 @@ test('builds a structured plan limit error', () => {
   });
 });
 
-test('exposes feature access by plan', () => {
-  assert.equal(hasFeature('bronze', 'pdf_statements'), true);
-  assert.equal(hasFeature('free', 'data_export'), true);
-  assert.equal(hasFeature('free', 'pdf_statements'), false);
-  assert.equal(hasFeature('gold', 'priority_support'), true);
+test('every plan includes all features and differs only by unit capacity', () => {
+  for (const plan of PLAN_CODES) {
+    for (const feature of FEATURE_KEYS) assert.equal(hasFeature(plan, feature), true);
+    assert.equal(canAddProperty(plan, 1000), true);
+    assert.equal(canAddManagementUser(plan, 1000), true);
+  }
+  assert.equal(canAddUnit('bronze', 20), false);
+  assert.equal(canAddUnit('silver', 50), false);
+  assert.equal(canAddUnit('gold', 100), false);
 });
 
 test('grants premium access only for paid states', () => {

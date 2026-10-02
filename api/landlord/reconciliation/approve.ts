@@ -2,7 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { requireAuth } from '../../_lib/auth.js';
 import { createDbConnection } from '../../_lib/db.js';
-import { ownerHasSubscriptionFeature } from '../../_lib/subscription.js';
 
 const approveSchema = z.object({
   eventId: z.string().min(1, 'eventId is required'),
@@ -22,9 +21,6 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
   if (auth.role !== 'landlord') {
     return res.status(403).json({ error: 'Only landlords can approve reconciliations' });
   }
-  if (!(await ownerHasSubscriptionFeature(auth.userId, 'payment_reconciliation'))) {
-    return res.status(403).json({ error: 'Payment reconciliation requires Silver or higher', requiredFeature: 'payment_reconciliation' });
-  }
 
   const sql = createDbConnection();
 
@@ -38,6 +34,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           landlord_id,
           amount,
           currency,
+          event_type,
+          transaction_time,
           reconciliation_status,
           matched_invoice_id,
           confidence_score,
@@ -74,6 +72,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         SELECT
           id,
           landlord_id,
+          lease_id,
+          currency,
+          invoice_type,
           amount,
           amount_paid,
           status,
@@ -101,6 +102,34 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       const paymentAmount = Number(event.amount || 0);
       const newAmountPaid = currentPaid + paymentAmount;
 
+      if (event.event_type === 'bank_webhook' && (!invoice.lease_id
+        || invoice.invoice_type !== 'rent' || invoice.currency !== event.currency
+        || newAmountPaid > invoiceAmount + 0.005)) {
+        return { status: 422, body: { error: 'Select a rent invoice with sufficient outstanding balance in the same currency' } };
+      }
+
+      if (event.event_type === 'bank_webhook') {
+        const [existingReceipt] = await tx`
+          SELECT id FROM public.payments
+          WHERE bank_event_id = ${event.id} AND status = 'completed' LIMIT 1
+        `;
+        if (existingReceipt) return { status: 409, body: { error: 'Event already has a completed receipt' } };
+        const receipts = await tx`
+          INSERT INTO public.payments
+            (lease_id, invoice_id, bank_event_id, amount, due_date, paid_date,
+             payment_method, payment_type, payment_source, status, description)
+          VALUES (${invoice.lease_id}, ${invoice.id}, ${event.id}, ${paymentAmount.toFixed(2)},
+                  ${invoice.due_date}, ${event.transaction_time}, 'bank_transfer', 'rent',
+                  'bank_reconciliation', 'completed', 'Bank payment approved by landlord')
+          ON CONFLICT (bank_event_id, invoice_id) WHERE bank_event_id IS NOT NULL
+          DO UPDATE SET amount = EXCLUDED.amount, status = 'completed',
+                        paid_date = EXCLUDED.paid_date, updated_at = NOW()
+          WHERE payments.status = 'cancelled'
+          RETURNING id
+        `;
+        if (receipts.length !== 1) throw new Error('Bank event already has a completed receipt');
+      }
+
       const nextStatus = newAmountPaid >= invoiceAmount - 0.01 ? 'paid' : 'partially_paid';
       const nextPaidAt = nextStatus === 'paid' ? new Date().toISOString() : null;
 
@@ -108,7 +137,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         UPDATE public.invoices
         SET
           amount_paid = ${newAmountPaid.toFixed(2)},
-          status = ${nextStatus},
+          status = ${nextStatus}::invoice_status,
           paid_at = ${nextPaidAt},
           updated_at = NOW()
         WHERE id = ${invoice.id}

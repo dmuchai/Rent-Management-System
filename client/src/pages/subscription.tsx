@@ -201,7 +201,7 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
             <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Subscription</p>
             <h1 className="mt-2 text-3xl font-semibold">Choose the plan for this portfolio</h1>
             <p className="mt-2 max-w-2xl text-muted-foreground">
-              Prices come directly from Google Play. The optional 30-day Silver trial renews automatically unless cancelled before the renewal date.
+              All plans include every feature, unlimited properties and unlimited management users. Choose by unit capacity. Prices come directly from Google Play. The optional 30-day Silver trial renews automatically unless cancelled before the renewal date.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -366,7 +366,7 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
                   {hasCurrentPlan && <Badge>Current</Badge>}
                 </CardTitle>
                 <CardDescription>
-                  {planConfig.maxActiveUnits ?? 'Unlimited'} units and {planConfig.maxManagementUsers ?? 'Unlimited'} management users.
+                  {planConfig.maxActiveUnits ?? 'Unlimited'} units. All features, unlimited properties and management users.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">

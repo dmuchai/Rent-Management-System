@@ -238,6 +238,7 @@ export const payments = pgTable("payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   leaseId: varchar("lease_id").notNull().references(() => leases.id),
   invoiceId: varchar("invoice_id").references((): any => invoices.id),
+  bankEventId: varchar("bank_event_id").references((): any => externalPaymentEvents.id),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   dueDate: timestamp("due_date").notNull(),
   paidDate: timestamp("paid_date"),

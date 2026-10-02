@@ -446,7 +446,7 @@ export default function Landing() {
               <ul className="space-y-4 mb-8">
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>1 active property</span>
+                  <span>Unlimited properties</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
@@ -454,7 +454,7 @@ export default function Landing() {
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>1 management user</span>
+                  <span>Unlimited management users</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
@@ -462,11 +462,11 @@ export default function Landing() {
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Manual rent recording and receipts</span>
+                  <span>Automatic bank reconciliation and receipts</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Basic export when leaving</span>
+                  <span>All features, reports, exports and staff permissions</span>
                 </li>
               </ul>
               <Button
@@ -487,10 +487,10 @@ export default function Landing() {
               <div className="mb-6"><span className="text-4xl font-bold">KES 2,000</span><span className="text-muted-foreground">/month</span></div>
               <ul className="space-y-4 mb-8">
                 <li>✓ Up to 20 active units</li>
-                <li>✓ 2 management users</li>
+                <li>✓ Unlimited properties and management users</li>
                 <li>✓ Scheduled reminders</li>
                 <li>✓ PDF statements and exports</li>
-                <li>✓ Recurring charges and arrears tracking</li>
+                <li>✓ All features, including automatic bank reconciliation</li>
               </ul>
               <Button variant="outline" className="w-full text-base py-6" onClick={redirectToLogin}>Choose Bronze</Button>
             </div>
@@ -520,7 +520,7 @@ export default function Landing() {
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>5 management users</span>
+                  <span>Unlimited properties and management users</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
@@ -540,7 +540,7 @@ export default function Landing() {
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>All Bronze features</span>
+                  <span>All features included on every plan</span>
                 </li>
               </ul>
               <Button
@@ -557,10 +557,10 @@ export default function Landing() {
               <div className="mb-6"><span className="text-4xl font-bold">KES 6,000</span><span className="text-muted-foreground">/month</span></div>
               <ul className="space-y-4 mb-8">
                 <li>✓ Up to 100 active units</li>
-                <li>✓ 15 management users</li>
+                <li>✓ Unlimited properties and management users</li>
                 <li>✓ Owner reporting</li>
                 <li>✓ Staff permissions</li>
-                <li>✓ Priority support and advanced reconciliation</li>
+                <li>✓ All features included on every plan</li>
               </ul>
               <Button variant="outline" className="w-full text-base py-6" onClick={redirectToLogin}>Choose Gold</Button>
             </div>
