@@ -10,8 +10,11 @@ import validationHandler from "../../api/webhooks/banks/kcb/validation.js";
 import {
   buildKcbAccountAck,
   buildKcbTillAck,
+  handleBankWebhook,
   KcbRequestError,
+  normalizePemKey,
   readAndVerifyKcbPayload,
+  readKcbPayload,
   resolveKcbAcknowledgementId,
   verifyRsaSha256,
   verifyRsaSha256WithKeys,
@@ -70,6 +73,13 @@ function createSignedRequest(body: unknown, privateKey: any): VercelRequest {
   const signature = sign("RSA-SHA256", Buffer.from(rawBody), privateKey).toString("base64");
   const request = Readable.from([Buffer.from(rawBody)]) as unknown as VercelRequest;
   request.headers = { signature };
+  request.method = "POST";
+  return request;
+}
+
+function createRawRequest(rawBody: string, signature?: string, headerName = "signature"): VercelRequest {
+  const request = Readable.from([Buffer.from(rawBody)]) as unknown as VercelRequest;
+  request.headers = signature ? { [headerName]: signature } : {};
   request.method = "POST";
   return request;
 }
@@ -184,8 +194,13 @@ test("verifies requests with only the authorized previous-key environment value"
 });
 
 test("rejects a missing signature before parsing the payload", async () => {
+  const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const previousKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
-  process.env.KCB_WEBHOOK_PUBLIC_KEY = "not-used-without-a-signature";
+  const previousRotationKey = process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+  process.env.KCB_WEBHOOK_PUBLIC_KEY = publicKey
+    .export({ type: "spki", format: "pem" })
+    .toString();
+  delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
   const request = Readable.from([Buffer.from(JSON.stringify(sampleIpn))]) as unknown as VercelRequest;
   request.headers = {};
   request.method = "POST";
@@ -193,11 +208,13 @@ test("rejects a missing signature before parsing the payload", async () => {
   try {
     await assert.rejects(
       () => readAndVerifyKcbPayload(request),
-      (error: unknown) => error instanceof KcbRequestError && error.statusCode === 403
+      (error: unknown) => error instanceof KcbRequestError && error.statusCode === 401
     );
   } finally {
     if (previousKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
     else process.env.KCB_WEBHOOK_PUBLIC_KEY = previousKey;
+    if (previousRotationKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS = previousRotationKey;
   }
 });
 
@@ -223,7 +240,7 @@ test("verifies the exact raw request bytes before parsing JSON", async () => {
 
     await assert.rejects(
       () => readAndVerifyKcbPayload(makeRequest(JSON.stringify(sampleIpn))),
-      (error: unknown) => error instanceof KcbRequestError && error.statusCode === 403
+      (error: unknown) => error instanceof KcbRequestError && error.statusCode === 401
     );
   } finally {
     if (previousKey === undefined) {
@@ -319,7 +336,7 @@ test("returns 405 for non-POST KCB routes", async () => {
   }
 });
 
-test("temporarily accepts unsigned Account IPN requests for KCB UAT", async () => {
+test("keeps Account IPN processing in audit mode until Production proof", async () => {
   const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
   process.env.KCB_WEBHOOK_PUBLIC_KEY = "configured-but-not-used-for-account-uat";
 
@@ -342,9 +359,11 @@ test("temporarily accepts unsigned Account IPN requests for KCB UAT", async () =
   }
 });
 
-test("temporarily accepts unsigned validation requests for KCB UAT", async () => {
+test("keeps Bill Validation unsigned when Account verification is enforced", async () => {
   const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  const previousAccountMode = process.env.KCB_ACCOUNT_SIGNATURE_MODE;
   process.env.KCB_WEBHOOK_PUBLIC_KEY = "configured-but-not-used-for-validation-uat";
+  process.env.KCB_ACCOUNT_SIGNATURE_MODE = "enforce";
 
   try {
     const request = Readable.from([
@@ -362,10 +381,12 @@ test("temporarily accepts unsigned validation requests for KCB UAT", async () =>
   } finally {
     if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
     else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
+    if (previousAccountMode === undefined) delete process.env.KCB_ACCOUNT_SIGNATURE_MODE;
+    else process.env.KCB_ACCOUNT_SIGNATURE_MODE = previousAccountMode;
   }
 });
 
-test("continues to reject unsigned KCB Till requests", async () => {
+test("fails closed when the enforced KCB Till public key is malformed", async () => {
   const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
   process.env.KCB_WEBHOOK_PUBLIC_KEY = "configured-but-not-read-without-signature";
 
@@ -379,7 +400,7 @@ test("continues to reject unsigned KCB Till requests", async () => {
 
     await tillHandler(request, mock.response);
 
-    assert.equal(mock.state.statusCode, 403);
+    assert.equal(mock.state.statusCode, 500);
   } finally {
     if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
     else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
@@ -425,4 +446,198 @@ test("rejects incomplete KCB notifications", () => {
     () => kcbAdapter.normalize({ transactionReference: "FT-1" }),
     /Invalid amount/
   );
+});
+
+test("accepts a Production-style RSA signature with escaped PEM newlines and mixed-case header", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
+  const escapedPublicKey = publicKeyPem.replace(/\n/g, "\\n");
+  const rawBody = JSON.stringify(sampleIpn);
+  const signature = sign("RSA-SHA256", Buffer.from(rawBody), privateKey).toString("base64");
+  const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  const previousKey = process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+
+  process.env.KCB_WEBHOOK_PUBLIC_KEY = escapedPublicKey;
+  delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+
+  try {
+    assert.equal(normalizePemKey(escapedPublicKey), publicKeyPem.trim());
+    const parsed = await readAndVerifyKcbPayload(
+      createRawRequest(rawBody, signature, "Signature")
+    );
+    assert.deepEqual(parsed, sampleIpn);
+  } finally {
+    if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
+    if (previousKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS = previousKey;
+  }
+});
+
+test("strict Account verification rejects missing, invalid, and changed-body signatures before DB access", async (t) => {
+  const trusted = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const untrusted = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const publicKeyPem = trusted.publicKey.export({ type: "spki", format: "pem" }).toString();
+  const rawBody = JSON.stringify(sampleIpn);
+  const validSignature = sign("RSA-SHA256", Buffer.from(rawBody), trusted.privateKey).toString("base64");
+  const invalidSignature = sign("RSA-SHA256", Buffer.from(rawBody), untrusted.privateKey).toString("base64");
+  const changedBody = JSON.stringify({ ...sampleIpn, transactionAmount: "1.00" });
+  const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  const previousKey = process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+
+  process.env.KCB_WEBHOOK_PUBLIC_KEY = publicKeyPem;
+  delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+
+  try {
+    const cases = [
+      { name: "missing signature", request: createRawRequest(rawBody) },
+      { name: "invalid signature", request: createRawRequest(rawBody, invalidSignature) },
+      { name: "body changed after signing", request: createRawRequest(changedBody, validSignature) },
+    ];
+
+    for (const scenario of cases) {
+      await t.test(scenario.name, async () => {
+        let dbConnections = 0;
+        const mock = createMockResponse();
+        await handleBankWebhook(scenario.request, mock.response, "kcb", {
+          kcbNotificationKind: "account",
+          kcbSignatureMode: "enforce",
+          createDbConnection: (() => {
+            dbConnections += 1;
+            throw new Error("DB access must not occur");
+          }) as any,
+        });
+
+        assert.equal(mock.state.statusCode, 401);
+        assert.deepEqual(mock.state.body, { error: "Invalid signature" });
+        assert.equal(dbConnections, 0);
+      });
+    }
+  } finally {
+    if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
+    if (previousKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS = previousKey;
+  }
+});
+
+test("returns 400 for malformed JSON carrying a valid Account signature", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const malformedBody = '{"transactionReference":';
+  const signature = sign("RSA-SHA256", Buffer.from(malformedBody), privateKey).toString("base64");
+  const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  const previousKey = process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+  process.env.KCB_WEBHOOK_PUBLIC_KEY = publicKey.export({ type: "spki", format: "pem" }).toString();
+  delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+  let dbConnections = 0;
+
+  try {
+    const mock = createMockResponse();
+    await handleBankWebhook(
+      createRawRequest(malformedBody, signature),
+      mock.response,
+      "kcb",
+      {
+        kcbNotificationKind: "account",
+        kcbSignatureMode: "enforce",
+        createDbConnection: (() => {
+          dbConnections += 1;
+          throw new Error("DB access must not occur");
+        }) as any,
+      }
+    );
+
+    assert.equal(mock.state.statusCode, 400);
+    assert.deepEqual(mock.state.body, { error: "Invalid JSON payload" });
+    assert.equal(dbConnections, 0);
+  } finally {
+    if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
+    if (previousKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS = previousKey;
+  }
+});
+
+test("audit mode logs only signature presence and validity while continuing processing", async () => {
+  const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  const previousKey = process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+  const originalWarn = console.warn;
+  const warningCalls: unknown[][] = [];
+  process.env.KCB_WEBHOOK_PUBLIC_KEY = publicKey.export({ type: "spki", format: "pem" }).toString();
+  delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+  console.warn = (...args: unknown[]) => { warningCalls.push(args); };
+
+  try {
+    const parsed = await readKcbPayload(
+      createRawRequest(JSON.stringify(sampleIpn), "not-valid-base64"),
+      "audit"
+    );
+    assert.deepEqual(parsed, sampleIpn);
+    assert.equal(warningCalls.length, 1);
+    assert.deepEqual(warningCalls[0], [
+      "[KCB Webhook]",
+      JSON.stringify({
+        event: "signature_audit",
+        signaturePresent: true,
+        signatureValid: false,
+      }),
+    ]);
+  } finally {
+    console.warn = originalWarn;
+    if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
+    if (previousKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS = previousKey;
+  }
+});
+
+test("acknowledges a duplicate valid Account callback without downstream mutation", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const primaryKey = process.env.KCB_WEBHOOK_PUBLIC_KEY;
+  const previousKey = process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+  const queries: string[] = [];
+  const duplicateInsert: any[] = [];
+  (duplicateInsert as any).count = 0;
+  let connectionClosed = false;
+
+  const mockSql = (async (strings: TemplateStringsArray) => {
+    const query = strings.join("?").replace(/\s+/g, " ").trim();
+    queries.push(query);
+    if (query.includes("FROM public.landlord_payment_channels")) return [];
+    if (query.includes("INSERT INTO public.external_payment_events")) return duplicateInsert;
+    if (query.includes("FROM public.external_payment_events")) return [{ id: "existing-event-id" }];
+    throw new Error(`Unexpected query in duplicate test: ${query}`);
+  }) as any;
+  mockSql.end = async () => { connectionClosed = true; };
+
+  process.env.KCB_WEBHOOK_PUBLIC_KEY = publicKey.export({ type: "spki", format: "pem" }).toString();
+  delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+
+  try {
+    const mock = createMockResponse();
+    await handleBankWebhook(
+      createSignedRequest(sampleIpn, privateKey),
+      mock.response,
+      "kcb",
+      {
+        kcbNotificationKind: "account",
+        kcbSignatureMode: "enforce",
+        createDbConnection: (() => mockSql) as any,
+      }
+    );
+
+    assert.equal(mock.state.statusCode, 200);
+    assert.equal(mock.state.body.statusCode, "0");
+    assert.equal(mock.state.body.statusMessage, "Already processed");
+    assert.equal(mock.state.body.transactionID, "existing-event-id");
+    assert.equal(queries.filter((query) => query.startsWith("INSERT")).length, 1);
+    assert.equal(queries.some((query) => query.startsWith("UPDATE")), false);
+    assert.equal(connectionClosed, true);
+  } finally {
+    if (primaryKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY = primaryKey;
+    if (previousKey === undefined) delete process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS;
+    else process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS = previousKey;
+  }
 });

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createHash, createVerify, randomUUID } from 'crypto';
+import { createHash, createPublicKey, createVerify, randomUUID } from 'crypto';
 import { createDbConnection } from '../../../_lib/db.js';
 import { reconcilePayment, recordReconciliation } from '../../../_lib/reconciliationEngine.js';
 import { bankWebhookAdapters, type BankProvider } from './bankAdapter.js';
@@ -32,17 +32,41 @@ function hasValidWebhookSecret(req: VercelRequest, provider: BankProvider): bool
   return false;
 }
 
-function normalizePemKey(value: string): string {
+export function normalizePemKey(value: string): string {
   return value.replace(/\\n/g, '\n').trim();
 }
 
-function getConfiguredKcbPublicKeys(): string[] {
-  return [
+function getConfiguredKcbPublicKeys(): {
+  keys: string[];
+  configurationValid: boolean;
+} {
+  const configuredValues = [
     process.env.KCB_WEBHOOK_PUBLIC_KEY,
     process.env.KCB_WEBHOOK_PUBLIC_KEY_PREVIOUS,
   ]
-    .filter((value): value is string => Boolean(value?.trim()))
-    .map(normalizePemKey);
+    .filter((value): value is string => Boolean(value?.trim()));
+
+  const keys: string[] = [];
+  let configurationValid = configuredValues.length > 0;
+
+  for (const value of configuredValues) {
+    const normalized = normalizePemKey(value);
+    try {
+      const key = createPublicKey(normalized);
+      if (key.asymmetricKeyType !== 'rsa') {
+        configurationValid = false;
+        continue;
+      }
+      keys.push(normalized);
+    } catch {
+      configurationValid = false;
+    }
+  }
+
+  return {
+    keys,
+    configurationValid: configurationValid && keys.length === configuredValues.length,
+  };
 }
 
 function transactionFingerprint(transactionId: string): string {
@@ -60,6 +84,7 @@ function logKcbWebhook(
 const MAX_KCB_REQUEST_BYTES = 1024 * 1024;
 
 export type KcbNotificationKind = 'auto' | 'till' | 'account';
+export type KcbSignatureMode = 'disabled' | 'audit' | 'enforce';
 
 export class KcbRequestError extends Error {
   constructor(
@@ -72,22 +97,39 @@ export class KcbRequestError extends Error {
 }
 
 export function verifyRsaSha256(
-  payload: string,
+  payload: string | Buffer,
   signatureBase64: string,
   publicKeyPem: string
 ): boolean {
   try {
+    const normalizedSignature = signatureBase64.trim();
+    if (
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(normalizedSignature) ||
+      normalizedSignature.length % 4 === 1
+    ) {
+      return false;
+    }
+
+    const signature = Buffer.from(normalizedSignature, 'base64');
+    if (
+      signature.length === 0 ||
+      signature.toString('base64').replace(/=+$/, '') !==
+        normalizedSignature.replace(/=+$/, '')
+    ) {
+      return false;
+    }
+
     const verifier = createVerify('RSA-SHA256');
-    verifier.update(payload, 'utf8');
+    verifier.update(payload);
     verifier.end();
-    return verifier.verify(publicKeyPem, signatureBase64, 'base64');
-  } catch (error) {
+    return verifier.verify(publicKeyPem, signature);
+  } catch {
     return false;
   }
 }
 
 export function verifyRsaSha256WithKeys(
-  payload: string,
+  payload: string | Buffer,
   signatureBase64: string,
   publicKeysPem: string[]
 ): boolean {
@@ -98,14 +140,23 @@ export function verifyRsaSha256WithKeys(
 
 function getKcbSignature(req: VercelRequest): string | undefined {
   const headerName = (process.env.KCB_WEBHOOK_SIGNATURE_HEADER || 'signature').toLowerCase();
-  const signatureHeader =
-    req.headers[headerName] ?? req.headers.signature ?? req.headers['x-signature'];
-  return Array.isArray(signatureHeader)
+  const headerEntry = Object.entries(req.headers).find(
+    ([name]) => name.toLowerCase() === headerName
+  );
+  const signatureHeader = headerEntry?.[1];
+  const signature = Array.isArray(signatureHeader)
     ? signatureHeader[0]
     : signatureHeader?.toString();
+  return signature?.trim() || undefined;
 }
 
-export async function readKcbRawBody(req: VercelRequest): Promise<string> {
+export function getKcbAccountSignatureMode(): 'audit' | 'enforce' {
+  return process.env.KCB_ACCOUNT_SIGNATURE_MODE?.trim().toLowerCase() === 'enforce'
+    ? 'enforce'
+    : 'audit';
+}
+
+export async function readKcbRawBody(req: VercelRequest): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let totalBytes = 0;
 
@@ -122,37 +173,47 @@ export async function readKcbRawBody(req: VercelRequest): Promise<string> {
     throw new KcbRequestError(400, 'KCB request body is required');
   }
 
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
 }
 
 export async function readKcbPayload(
   req: VercelRequest,
-  verifySignature: boolean
+  signatureMode: boolean | KcbSignatureMode
 ): Promise<Record<string, unknown>> {
   const rawBody = await readKcbRawBody(req);
-  if (verifySignature) {
-    const configuredKeys = getConfiguredKcbPublicKeys();
-    if (configuredKeys.length === 0 && process.env.NODE_ENV === 'production') {
-      throw new KcbRequestError(500, 'KCB webhook public key is not configured');
-    }
+  const resolvedSignatureMode =
+    typeof signatureMode === 'boolean'
+      ? signatureMode ? 'enforce' : 'disabled'
+      : signatureMode;
 
+  if (resolvedSignatureMode !== 'disabled') {
+    const keyConfig = getConfiguredKcbPublicKeys();
     const signature = getKcbSignature(req);
-    if (!signature) {
-      logKcbWebhook('warn', 'signature_missing');
-      throw new KcbRequestError(403, 'Invalid signature');
-    }
+    const signaturePresent = Boolean(signature);
+    const signatureValid = Boolean(
+      signature &&
+      keyConfig.configurationValid &&
+      verifyRsaSha256WithKeys(rawBody, signature, keyConfig.keys)
+    );
 
-    if (
-      configuredKeys.length > 0 &&
-      !verifyRsaSha256WithKeys(rawBody, signature, configuredKeys)
-    ) {
-      logKcbWebhook('warn', 'signature_invalid');
-      throw new KcbRequestError(403, 'Invalid signature');
+    logKcbWebhook(
+      signatureValid ? 'info' : 'warn',
+      resolvedSignatureMode === 'audit' ? 'signature_audit' : 'signature_verification',
+      { signaturePresent, signatureValid }
+    );
+
+    if (resolvedSignatureMode === 'enforce') {
+      if (!keyConfig.configurationValid) {
+        throw new KcbRequestError(500, 'KCB webhook public key is not configured correctly');
+      }
+      if (!signaturePresent || !signatureValid) {
+        throw new KcbRequestError(401, 'Invalid signature');
+      }
     }
   }
 
   try {
-    const parsed = JSON.parse(rawBody);
+    const parsed = JSON.parse(rawBody.toString('utf8'));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('Expected a JSON object');
     }
@@ -280,6 +341,8 @@ export async function handleBankWebhook(
   options: {
     kcbNotificationKind?: KcbNotificationKind;
     verifyKcbSignature?: boolean;
+    kcbSignatureMode?: KcbSignatureMode;
+    createDbConnection?: typeof createDbConnection;
   } = {}
 ) {
   const startedAt = Date.now();
@@ -288,12 +351,13 @@ export async function handleBankWebhook(
   }
 
   const kcbKind = options.kcbNotificationKind || 'auto';
-  const verifyKcbSignature = options.verifyKcbSignature !== false;
+  const kcbSignatureMode = options.kcbSignatureMode ||
+    (options.verifyKcbSignature === false ? 'disabled' : 'enforce');
   let payload: unknown;
 
   if (provider === 'kcb') {
     try {
-      payload = await readKcbPayload(req, verifyKcbSignature);
+      payload = await readKcbPayload(req, kcbSignatureMode);
     } catch (error) {
       if (error instanceof KcbRequestError) {
         return res.status(error.statusCode).json({ error: error.message });
@@ -317,7 +381,7 @@ export async function handleBankWebhook(
   }
 
   const adapter = bankWebhookAdapters[provider];
-  const sql = createDbConnection();
+  const sql = (options.createDbConnection || createDbConnection)();
 
   try {
     const normalized = adapter.normalize(payload);
@@ -385,7 +449,7 @@ export async function handleBankWebhook(
         ${normalized.transactionTime.toISOString()},
         ${JSON.stringify(normalized.rawPayload)},
         'unmatched',
-        ${provider === 'kcb' && verifyKcbSignature && getConfiguredKcbPublicKeys().length > 0}
+        ${provider === 'kcb' && kcbSignatureMode === 'enforce'}
       )
       ON CONFLICT (provider, external_transaction_id) DO NOTHING
       RETURNING id

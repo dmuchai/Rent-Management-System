@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let payload: Record<string, unknown>;
 
   try {
-    // Temporary KCB UAT exception. Re-enable after KCB completes the validation review.
+    // KCB has confirmed Bill Validation requests do not require signature verification.
     payload = await readKcbPayload(req, false);
   } catch (error) {
     if (error instanceof KcbRequestError) {
