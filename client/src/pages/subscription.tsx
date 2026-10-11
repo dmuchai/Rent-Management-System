@@ -45,15 +45,15 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
   }, [embedded]);
 
   useEffect(() => {
-    if (account?.access.planCode === 'free') {
+    if (['free', 'inactive'].includes(account?.access.planCode || '')) {
       trackEvent('trial_offer_viewed', {
-        plan: 'silver',
+        plan: 'starter',
         source: window.sessionStorage.getItem('landee_trial_source') || 'subscription_page',
       });
     }
   }, [account?.access.planCode, account?.access.subscriptionStatus]);
 
-  const currentPlanCode = (account?.access.planCode || 'free') as PlanCode;
+  const currentPlanCode = (account?.access.planCode || 'inactive') as PlanCode;
   const currentPlanConfig = getPlanConfig(currentPlanCode);
   const trialDaysRemaining = useMemo(() => {
     if (account?.access.subscriptionStatus !== 'trialing' || !account.billingAccount?.trialEndsAt) return null;
@@ -62,7 +62,7 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
 
   useEffect(() => {
     if (trialDaysRemaining !== null && [7, 3, 1].includes(trialDaysRemaining)) {
-      trackEvent('trial_reminder_viewed', { daysRemaining: trialDaysRemaining, plan: 'silver' });
+      trackEvent('trial_reminder_viewed', { daysRemaining: trialDaysRemaining, plan: account?.access.planCode || 'starter' });
     }
   }, [trialDaysRemaining]);
 
@@ -77,7 +77,7 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
     return map;
   }, [offerings]);
 
-  const plansToDisplay = (['bronze', 'silver', 'gold'] as PlanCode[])
+  const plansToDisplay = (['starter', 'bronze', 'silver', 'gold'] as PlanCode[])
     .map((planCode) => {
       const planConfig = getPlanConfig(planCode);
       const planPackages = packagesByPlan.get(planCode) || [];
@@ -96,10 +96,11 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
 
   const handlePurchase = async (subscriptionPackage: SubscriptionPackageSummary) => {
     try {
-      await purchasePackage(subscriptionPackage);
+      const completed = await purchasePackage(subscriptionPackage);
+      if (!completed) return;
       toast({
-        title: 'Purchase complete',
-        description: `${getPlanConfig(subscriptionPackage.planCode).displayName} is now active.`,
+        title: 'Subscription confirmed',
+        description: `Google Play confirmed your subscription. Downgrades take effect at renewal; your current access continues until then.`,
       });
       await refreshSubscription();
     } catch (purchaseError) {
@@ -201,7 +202,7 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
             <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Subscription</p>
             <h1 className="mt-2 text-3xl font-semibold">Choose the plan for this portfolio</h1>
             <p className="mt-2 max-w-2xl text-muted-foreground">
-              All plans include every feature, unlimited properties and unlimited management users. Choose by unit capacity. Prices come directly from Google Play. The optional 30-day Silver trial renews automatically unless cancelled before the renewal date.
+              All plans include every feature, unlimited properties and unlimited management users. Choose by unit capacity. Prices come directly from Google Play. Starter is KES 1,000/month for up to 10 units, with a 30-day trial for eligible new subscribers. Trials renew automatically unless cancelled before the renewal date.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -229,7 +230,7 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
       {trialDaysRemaining !== null && trialDaysRemaining <= 7 && (
         <Card className="border-amber-200 bg-amber-50/70">
           <CardHeader>
-            <CardTitle>{trialDaysRemaining} day{trialDaysRemaining === 1 ? '' : 's'} left in your Silver trial</CardTitle>
+            <CardTitle>{trialDaysRemaining} day{trialDaysRemaining === 1 ? '' : 's'} left in your {currentPlanConfig.displayName} trial</CardTitle>
             <CardDescription>
               Review the localized renewal price below. The subscription renews automatically unless cancelled in Google Play before the renewal date.
             </CardDescription>
@@ -249,6 +250,10 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
         </Card>
       )}
 
+      <div className="rounded-2xl border bg-muted/30 p-4 text-sm">
+        {account?.access.readOnly && <p className="mb-2 font-medium">Portfolio changes are paused. Subscribe, upgrade, or archive excess units to fit your allowance. Viewing and export remain available.</p>}
+        {account?.access.legacyFreeEligible ? "Your existing account keeps Free access for up to four active units after a subscription ends." : "New accounts require a trial or paid subscription. After paid access ends, records remain available to view and export; portfolio changes and scheduled automation pause."}
+      </div>
       <div className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
         <Card>
           <CardHeader>
@@ -318,7 +323,7 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Current product</span>
-              <span className="font-medium">{account?.billingAccount?.productId || 'Free'}</span>
+              <span className="font-medium">{account?.billingAccount?.productId || currentPlanConfig.displayName}</span>
             </div>
             {error && (
               <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-destructive">
@@ -382,12 +387,12 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
                         onClick={() => void handlePurchase(monthly)}
                         disabled={isPurchasing || (hasCurrentPlan && !planIsLower)}
                       >
-                        {hasCurrentPlan && !planIsLower ? 'Active' : planCode === 'silver' ? 'Start trial / choose' : 'Choose'}
+                        {hasCurrentPlan && !planIsLower ? 'Active' : monthly.trialDays ? `Start ${monthly.trialDays}-day trial` : planIsLower ? 'Downgrade at renewal' : 'Choose'}
                       </Button>
                     </div>
-                    {planCode === 'silver' && (
+                    {monthly.trialDays && (
                       <p className="mt-3 text-xs text-muted-foreground">
-                        30-day Silver trial available where eligible. After the trial, it renews at {formatMoney(monthly.priceString)} per month around {new Date(Date.now() + 30 * 86_400_000).toLocaleDateString()} unless cancelled. Google Play confirms the exact charge date before purchase.
+                        {monthly.trialDays}-day trial available. After the trial, it renews at {formatMoney(monthly.priceString)} per month unless cancelled. Google Play confirms eligibility and the exact charge date before purchase.
                       </p>
                     )}
                   </div>

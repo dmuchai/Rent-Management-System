@@ -46,6 +46,7 @@ export default function UnitTable({ propertyId, onEditUnit, readOnly = false }: 
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [`/api/units`, propertyId] });
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
       toast({
         title: "Success",
         description: variables.archived ? "Unit restored successfully" : "Unit archived successfully",
@@ -130,7 +131,7 @@ export default function UnitTable({ propertyId, onEditUnit, readOnly = false }: 
                           <AlertDialogDescription>
                             {unit.archivedAt
                               ? `Restore unit "${unit.unitNumber}" back to the active unit list?`
-                              : `Archive unit "${unit.unitNumber}". It will be hidden from active counts but its data will remain available for recovery.`}
+                              : `Archive unit "${unit.unitNumber}". It will leave active counts and scheduled billing will stop for this unit. Leases and financial history remain available for recovery.`}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>

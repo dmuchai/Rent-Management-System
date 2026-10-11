@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { mapProductIdToPlan, shouldGrantPremiumAccess, type PlanCode, type SubscriptionStatus } from '../../../shared/subscription/index.js';
+import { getPlanConfig, mapProductIdToPlan, shouldGrantPremiumAccess, type PlanCode, type SubscriptionStatus } from '../../../shared/subscription/index.js';
 
 const ANDROID_PACKAGE_NAME = 'com.rentmanagement.app';
 const SUBSCRIPTION_FEATURE_FLAG = import.meta.env.VITE_ENABLE_SUBSCRIPTIONS === 'true';
@@ -21,6 +21,7 @@ export interface SubscriptionPackageSummary extends NativePackageHandle {
   billingPeriod: 'monthly' | 'annual' | 'unknown';
   productId: string;
   basePlanId: string | null;
+  trialDays: number | null;
 }
 
 export interface SubscriptionOfferingSummary {
@@ -82,7 +83,7 @@ function normalizeBillingPeriod(packageType: string, subscriptionPeriod: string)
 
 function normalizeCustomerInfo(customerInfo: Record<string, any> | null | undefined): SubscriptionCustomerSnapshot {
   const activeEntitlements = customerInfo?.entitlements?.active ? Object.values(customerInfo.entitlements.active) : [];
-  const activeEntitlement = activeEntitlements[0] as Record<string, any> | undefined;
+  const activeEntitlement = (customerInfo?.entitlements?.active?.landee_access || activeEntitlements[0]) as Record<string, any> | undefined;
   const activeProductId = toStringValue(activeEntitlement?.productIdentifier || activeEntitlement?.product_id || customerInfo?.activeSubscriptions?.[0] || null) || null;
   const planCode = mapProductIdToPlan(activeProductId);
   const periodType = toStringValue(activeEntitlement?.periodType || activeEntitlement?.period_type || '');
@@ -118,6 +119,10 @@ function normalizePackage(nativePackage: Record<string, any>): SubscriptionPacka
   const title = toStringValue(storeProduct.title || storeProduct.name || nativePackage.identifier || productId || 'Plan');
   const priceAmount = toNumberValue(storeProduct.price ?? nativePackage.price ?? null);
   const billingPeriod = normalizeBillingPeriod(packageType, subscriptionPeriod);
+  const freePhase = storeProduct.defaultOption?.freePhase;
+  const trialPeriod = freePhase?.billingPeriod;
+  const trialDays = freePhase?.price?.amountMicros === 0 && trialPeriod?.unit === 'DAY'
+    ? Number(trialPeriod.value) * (Number(freePhase.billingCycleCount) || 1) : null;
 
   return {
     identifier: toStringValue(nativePackage.identifier || productId || title),
@@ -128,6 +133,7 @@ function normalizePackage(nativePackage: Record<string, any>): SubscriptionPacka
     priceString,
     priceAmount,
     billingPeriod,
+    trialDays,
     productId,
     basePlanId: toStringValue(storeProduct.basePlanId || storeProduct.base_plan_id || nativePackage.basePlanId || null) || null,
   };
@@ -143,7 +149,9 @@ function mapOfferings(offerings: Record<string, any>): SubscriptionOfferingSumma
 
   return {
     identifier: toStringValue(current.identifier || 'default'),
-    packages: availablePackages.map((subscriptionPackage: Record<string, any>) => normalizePackage(subscriptionPackage)),
+    packages: availablePackages.map((subscriptionPackage: Record<string, any>) => normalizePackage(subscriptionPackage))
+      .filter((pkg: SubscriptionPackageSummary) => !['free', 'inactive'].includes(pkg.planCode))
+      .sort((a: SubscriptionPackageSummary, b: SubscriptionPackageSummary) => getPlanConfig(a.planCode).upgradeOrder - getPlanConfig(b.planCode).upgradeOrder),
   };
 }
 
@@ -225,7 +233,18 @@ export function createRevenueCatService(): RevenueCatService {
     }
 
     const packageHandle = packageRegistry.get(subscriptionPackage.identifier) ?? subscriptionPackage;
-    const purchaseResult = await sdk.Purchases.purchasePackage({ aPackage: packageHandle.nativePackage as any });
+    const previous = await getCustomerInfo();
+    const oldProductIdentifier = previous?.entitlementActive ? previous.activeProductId : null;
+    const lowerPlan = previous && getPlanConfig(previous.planCode).upgradeOrder > getPlanConfig(subscriptionPackage.planCode).upgradeOrder;
+    const purchaseResult = await sdk.Purchases.purchasePackage({
+      aPackage: packageHandle.nativePackage as any,
+      ...(oldProductIdentifier && oldProductIdentifier !== subscriptionPackage.productId ? {
+        storeProductChangeInfo: {
+          oldProductIdentifier,
+          replacementMode: lowerPlan ? sdk.STORE_REPLACEMENT_MODE.DEFERRED : sdk.STORE_REPLACEMENT_MODE.CHARGE_PRORATED_PRICE,
+        },
+      } : {}),
+    });
     return normalizeCustomerInfo(purchaseResult.customerInfo as Record<string, any>);
   }
 
@@ -242,7 +261,7 @@ export function createRevenueCatService(): RevenueCatService {
   async function openManageSubscriptions(productId?: string | null): Promise<void> {
     if (!isNativeAndroid()) return;
 
-    const sku = productId || packageRegistry.values().next().value?.productId || '';
+    const sku = (productId || packageRegistry.values().next().value?.productId || '').split(':')[0];
     const url = sku
       ? `https://play.google.com/store/account/subscriptions?sku=${encodeURIComponent(sku)}&package=${encodeURIComponent(ANDROID_PACKAGE_NAME)}`
       : `https://play.google.com/store/account/subscriptions?package=${encodeURIComponent(ANDROID_PACKAGE_NAME)}`;

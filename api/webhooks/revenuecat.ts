@@ -141,6 +141,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return { duplicate: false, stale: true };
       }
 
+      // PRODUCT_CHANGE announces a future replacement. INITIAL_PURCHASE/RENEWAL
+      // activates it; do not shorten access to the current paid plan early.
+      if (normalized.eventType.toUpperCase() === 'PRODUCT_CHANGE') {
+        await tx`UPDATE public.subscription_events SET billing_account_id = ${billingAccount.id}, processed_at = NOW() WHERE id = ${eventRow.id}`;
+        return { duplicate: false };
+      }
       const productId = normalized.productId ?? null;
       const subscriptionStatus = normalized.subscriptionStatus;
 

@@ -38,7 +38,7 @@ test('respects plan limits for properties, units, and management users', () => {
 test('resolves the minimum plan needed for a resource', () => {
   assert.equal(getMinimumPlanForLimit('active_units', 3), 'free');
   assert.equal(getMinimumPlanForLimit('active_units', 4), 'free');
-  assert.equal(getMinimumPlanForLimit('active_units', 5), 'bronze');
+  assert.equal(getMinimumPlanForLimit('active_units', 5), 'starter');
   assert.equal(getMinimumPlanForLimit('active_units', 51), 'gold');
 });
 
@@ -48,12 +48,12 @@ test('builds a structured plan limit error', () => {
     resource: 'active_units',
     current: 4,
     limit: 4,
-    requiredPlan: 'bronze',
+    requiredPlan: 'starter',
   });
 });
 
 test('every plan includes all features and differs only by unit capacity', () => {
-  for (const plan of PLAN_CODES) {
+  for (const plan of PLAN_CODES.filter((plan) => plan !== 'inactive')) {
     for (const feature of FEATURE_KEYS) assert.equal(hasFeature(plan, feature), true);
     assert.equal(canAddProperty(plan, 1000), true);
     assert.equal(canAddManagementUser(plan, 1000), true);
@@ -74,8 +74,8 @@ test('grants premium access only for paid states', () => {
 });
 
 test('falls back to Free after paid access ends and grants temporary transition access', () => {
-  assert.equal(getEffectivePlanCode('silver', 'expired'), 'free');
-  assert.equal(getEffectivePlanCode('gold', 'cancelled'), 'free');
+  assert.equal(getEffectivePlanCode('silver', 'expired', null, new Date(), true), 'free');
+  assert.equal(getEffectivePlanCode('gold', 'cancelled', null, new Date(), true), 'free');
   assert.equal(getEffectivePlanCode('silver', 'active'), 'silver');
   assert.equal(getEffectivePlanCode('free', 'free', new Date(Date.now() + 86_400_000)), 'enterprise');
 });

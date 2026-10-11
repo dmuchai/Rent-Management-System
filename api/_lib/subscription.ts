@@ -3,6 +3,7 @@ import type { Sql } from 'postgres';
 import {
   buildPlanLimitError,
   getEffectivePlanCode,
+  getPlanConfig,
   hasFeature,
   hasRoomForResource,
   normalizePlanCode,
@@ -90,12 +91,12 @@ export async function ensureBillingAccountForOwner(ownerUserId: string) {
       plan_code: 'free',
       subscription_status: 'free',
       transition_ends_at: configuredTransitionEnd(owner.created_at),
-    }, { onConflict: 'owner_user_id', ignoreDuplicates: false })
+    }, { onConflict: 'owner_user_id', ignoreDuplicates: true })
     .select('*')
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
-  return data;
+  return data ?? await getBillingAccountForOwner(ownerUserId);
 }
 
 export interface EffectiveSubscriptionAccess {
@@ -106,6 +107,8 @@ export interface EffectiveSubscriptionAccess {
   premium: boolean;
   transitionActive: boolean;
   transitionEndsAt: string | null;
+  legacyFreeEligible: boolean;
+  readOnly: boolean;
 }
 
 export async function getEffectiveSubscriptionAccess(ownerUserId: string): Promise<EffectiveSubscriptionAccess> {
@@ -118,30 +121,45 @@ export async function getEffectiveSubscriptionAccess(ownerUserId: string): Promi
       premium: true,
       transitionActive: false,
       transitionEndsAt: null,
+      legacyFreeEligible: false,
+      readOnly: false,
     };
   }
 
   const billingAccount = await ensureBillingAccountForOwner(ownerUserId);
+  const { data: owner, error: ownerError } = await getSubscriptionAdmin().from('users')
+    .select('legacy_free_eligible').eq('id', ownerUserId).maybeSingle();
+  if (ownerError) throw ownerError;
+  const legacyFreeEligible = owner?.legacy_free_eligible === true;
   const storedPlanCode = normalizePlanCode(billingAccount?.plan_code);
   const subscriptionStatus = (billingAccount?.subscription_status || 'free') as SubscriptionStatus;
   const transitionEndsAt = billingAccount?.transition_ends_at || null;
   const transitionActive = Boolean(transitionEndsAt && Date.parse(transitionEndsAt) > Date.now());
-  const planCode = getEffectivePlanCode(storedPlanCode, subscriptionStatus, transitionEndsAt);
+  const planCode = getEffectivePlanCode(storedPlanCode, subscriptionStatus, transitionEndsAt,
+    new Date(), legacyFreeEligible, billingAccount?.current_period_ends_at || billingAccount?.trial_ends_at, billingAccount?.grace_period_ends_at);
+  const unitLimit = getPlanConfig(planCode).maxActiveUnits;
+  const usage = unitLimit === null ? null : await getSubscriptionAdmin().from('units')
+    .select('id, properties!inner(owner_id, archived_at)', { count: 'exact', head: true })
+    .eq('properties.owner_id', ownerUserId).is('properties.archived_at', null).is('archived_at', null);
+  if (usage?.error) throw usage.error;
+  const overUnitLimit = unitLimit !== null && Number(usage?.count || 0) > unitLimit;
 
   return {
     billingAccount,
     storedPlanCode,
     planCode,
     subscriptionStatus,
-    premium: planCode !== 'free',
+    premium: planCode !== 'free' && planCode !== 'inactive',
     transitionActive,
     transitionEndsAt,
+    legacyFreeEligible,
+    readOnly: planCode === 'inactive' || overUnitLimit,
   };
 }
 
 export async function ownerHasSubscriptionFeature(ownerUserId: string, feature: SubscriptionFeatureKey): Promise<boolean> {
   const access = await getEffectiveSubscriptionAccess(ownerUserId);
-  return hasFeature(access.planCode, feature);
+  return hasFeature(access.planCode, feature) && (!access.readOnly || !['recurring_charges', 'scheduled_reminders', 'sms_messaging', 'bulk_actions'].includes(feature));
 }
 
 export async function getOwnerUsageSnapshot(sql: Sql, ownerUserId: string) {

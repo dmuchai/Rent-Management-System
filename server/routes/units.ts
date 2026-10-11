@@ -109,6 +109,23 @@ router.put("/:id", isAuthenticated, requireUnitOwnership, async (req: any, res: 
 });
 
 // DELETE /api/units/:id
+router.patch('/:id', isAuthenticated, requireUnitOwnership, async (req: any, res: any) => {
+  try {
+    const ownerId = req.user.sub;
+    const access = await getOwnerSubscriptionAccess(ownerId);
+    const { data: properties, error: propertyError } = await supabase.from('properties').select('id').eq('owner_id', ownerId).is('archived_at', null);
+    if (propertyError) throw propertyError;
+    const ids = (properties || []).map((p: any) => p.id);
+    const usage = ids.length ? await supabase.from('units').select('id', { count: 'exact', head: true }).in('property_id', ids).is('archived_at', null) : { count: 0, error: null };
+    if (usage.error) throw usage.error;
+    if (!canAddUnit(access.planCode, usage.count || 0)) return res.status(403).json(buildPlanLimitError(access.planCode, 'active_units', usage.count || 0));
+    const { error } = await supabase.from('units').update({ archived_at: null, updated_at: new Date().toISOString() }).eq('id', req.params.id).in('property_id', ids);
+    if (error) throw error;
+    return res.json({ message: 'Unit restored successfully' });
+  } catch {
+    return res.status(500).json({ message: 'Failed to restore unit' });
+  }
+});
 router.delete("/:id", isAuthenticated, requireUnitOwnership, async (req: any, res: any) => {
   try {
     const { error } = await supabase

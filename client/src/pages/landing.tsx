@@ -219,7 +219,7 @@ export default function Landing() {
               className="text-base px-8 py-6 shadow-lg hover:shadow-xl transition-all"
             >
               <i className="fas fa-rocket mr-2"></i>
-              Get Started Free
+              Start 30-day Starter Trial
             </Button>
             <Button
               variant="outline"
@@ -426,22 +426,23 @@ export default function Landing() {
               <span className="text-sm font-medium text-primary">Pricing</span>
             </div>
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Simple, Transparent Pricing</h2>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">Start free forever, then upgrade as your active-unit portfolio grows.</p>
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">Start with a 30-day Starter trial, then KES 1,000/month for up to 10 active units. Choose a larger plan as your portfolio grows.</p>
           </div>
 
+          <p className="text-center text-sm text-muted-foreground mb-8">Existing accounts keep their four-unit Free allowance. New registrations require a trial or paid subscription. Trials renew automatically unless cancelled; Google Play confirms eligibility and renewal details.</p>
           <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
-            {/* Free Plan */}
+            {/* Starter Plan */}
             <div className="bg-card border-2 border-border rounded-2xl p-8 hover:shadow-xl transition-all">
               <div className="mb-6">
-                <h3 className="text-2xl font-bold mb-2">Free</h3>
-                <p className="text-muted-foreground">Free forever for small portfolios</p>
+                <h3 className="text-2xl font-bold mb-2">Starter</h3>
+                <p className="text-muted-foreground">For new and small portfolios</p>
               </div>
               <div className="mb-6">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold">KES 0</span>
+                  <span className="text-4xl font-bold">KES 1,000</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">No subscription required</p>
+                <p className="text-sm text-muted-foreground mt-2">30-day trial for eligible new subscribers</p>
               </div>
               <ul className="space-y-4 mb-8">
                 <li className="flex items-start gap-3">
@@ -450,7 +451,7 @@ export default function Landing() {
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Up to 4 active units</span>
+                  <span>Up to 10 active units</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
@@ -474,7 +475,7 @@ export default function Landing() {
                 className="w-full text-base py-6"
                 onClick={redirectToLogin}
               >
-                Get Started Free
+                Start 30-day Starter Trial
               </Button>
             </div>
 
@@ -495,11 +496,11 @@ export default function Landing() {
               <Button variant="outline" className="w-full text-base py-6" onClick={redirectToLogin}>Choose Bronze</Button>
             </div>
 
-            {/* Silver Plan - Most Popular */}
+            {/* Silver Plan - For Growing Portfolios */}
             <div className="bg-card border-2 border-primary rounded-2xl p-8 shadow-xl relative">
               <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                 <span className="bg-primary text-primary-foreground px-4 py-1 rounded-full text-sm font-semibold">
-                  Most Popular
+                  For Growing Portfolios
                 </span>
               </div>
               <div className="mb-6">
@@ -511,7 +512,7 @@ export default function Landing() {
                   <span className="text-4xl font-bold">KES 4,000</span>
                   <span className="text-muted-foreground">/month</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">Optional 30-day trial</p>
+                <p className="text-sm text-muted-foreground mt-2">Trial availability confirmed in Google Play</p>
               </div>
               <ul className="space-y-4 mb-8">
                 <li className="flex items-start gap-3">
@@ -547,7 +548,7 @@ export default function Landing() {
                 className="w-full text-base py-6"
                 onClick={redirectToLogin}
               >
-                Try Silver Free for 30 Days
+                Choose Silver
               </Button>
             </div>
 
@@ -635,7 +636,7 @@ export default function Landing() {
               </div>
               <div className="flex items-center gap-2">
                 <i className="fas fa-calendar text-primary"></i>
-                <span>Optional 30-day Silver trial</span>
+                <span>30-day Starter trial for eligible new subscribers</span>
               </div>
               <div className="flex items-center gap-2">
                 <i className="fas fa-times-circle text-primary"></i>
@@ -763,7 +764,7 @@ export default function Landing() {
                   onClick={redirectToLogin}
                 >
                   <i className="fas fa-user-plus mr-2"></i>
-                  Get Started Free
+                  Start 30-day Starter Trial
                 </Button>
               </div>
             </div>
@@ -784,7 +785,7 @@ export default function Landing() {
               onClick={redirectToLogin}
               className="text-base px-8 py-6 shadow-lg hover:shadow-xl transition-all"
             >
-              Get Started Free
+              Start 30-day Starter Trial
               <i className="fas fa-arrow-right ml-2"></i>
             </Button>
             <Button
