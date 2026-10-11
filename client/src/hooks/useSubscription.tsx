@@ -22,7 +22,7 @@ interface SubscriptionContextValue {
   offerings: SubscriptionOfferingSummary | null;
   customerInfo: SubscriptionCustomerSnapshot | null;
   error: string | null;
-  purchasePackage: (subscriptionPackage: SubscriptionPackageSummary) => Promise<void>;
+  purchasePackage: (subscriptionPackage: SubscriptionPackageSummary) => Promise<boolean>;
   restorePurchases: () => Promise<void>;
   manageSubscription: () => Promise<void>;
   refreshSubscription: () => Promise<void>;
@@ -63,6 +63,8 @@ export interface SubscriptionAccountSnapshot {
     subscriptionStatus: string;
     planCode: string;
     storedPlanCode: string;
+    legacyFreeEligible: boolean;
+    readOnly: boolean;
     transitionActive: boolean;
     transitionEndsAt: string | null;
   };
@@ -226,13 +228,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         });
       }
       await refreshSubscription();
+      return true;
     } catch (purchaseError) {
       if (serviceRef.current.isPurchaseCancelled(purchaseError)) {
         trackEvent('purchase_cancelled', {
           plan: subscriptionPackage.planCode,
           productId: subscriptionPackage.productId,
         });
-        return;
+        return false;
       }
 
       trackEvent('purchase_failed', {

@@ -97,6 +97,13 @@ function inferSubscriptionStatus(eventType: string, details: Pick<NormalizedReve
   const gracePeriodEndsAt = details.gracePeriodEndsAt ? Date.parse(details.gracePeriodEndsAt) : Number.NaN;
   const expirationAt = details.expirationAt ? Date.parse(details.expirationAt) : Number.NaN;
 
+  // Expiration and account hold take precedence over a stale TRIAL period type.
+  if (normalizedEventType.includes('expiration')) return 'expired';
+  if (normalizedEventType.includes('billing_issue') && !(Number.isFinite(gracePeriodEndsAt) && gracePeriodEndsAt > now)) return 'billing_retry';
+  if (Number.isFinite(expirationAt) && expirationAt <= now && !(Number.isFinite(gracePeriodEndsAt) && gracePeriodEndsAt > now)) {
+    return normalizedEventType.includes('subscription_paused') ? 'paused' : details.willRenew ? 'expired' : 'cancelled';
+  }
+
   if (details.periodType?.toLowerCase() === 'trial' || (Number.isFinite(trialEndsAt) && trialEndsAt > now)) {
     return 'trialing';
   }

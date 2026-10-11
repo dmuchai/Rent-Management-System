@@ -11,6 +11,7 @@ dotenv.config();
 
 import { createClient } from '@supabase/supabase-js';
 import type { Express, RequestHandler } from 'express';
+import { requiresManagementSubscription, READ_ONLY_SUBSCRIPTION_ERROR } from '../shared/subscription/write-policy.js';
 
 declare global {
   namespace Express {
@@ -68,7 +69,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     // This avoids every route having to re-query the users table
     const { data: userData, error: roleError } = await supabase
       .from('users')
-      .select('role')
+      .select('role, created_by')
       .eq('id', userId)
       .single();
 
@@ -83,6 +84,18 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
       appRole: userData?.role || (payload as any).user_metadata?.role || 'landlord' // fallback
     };
 
+    if (process.env.ENABLE_SUBSCRIPTIONS === 'true' && requiresManagementSubscription(req.method, req.originalUrl, req.user.appRole)) {
+      try {
+        const { getOwnerSubscriptionAccess } = await import('./utils/subscriptionAccess');
+        const ownerId = req.user.appRole === 'caretaker' || (req.user.appRole === 'property_manager' && userData?.created_by) ? userData?.created_by : userId;
+        if (!ownerId || (await getOwnerSubscriptionAccess(ownerId)).readOnly) {
+          return res.status(403).json(READ_ONLY_SUBSCRIPTION_ERROR);
+        }
+      } catch (error) {
+        console.error('Subscription access lookup failed', error);
+        return res.status(503).json({ error: 'Could not verify subscription access. Please try again.' });
+      }
+    }
     next();
   } catch (err) {
     console.log('Token verification failed:', err instanceof Error ? err.message : 'Unknown error');

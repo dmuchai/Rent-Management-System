@@ -4,7 +4,7 @@ import {
 } from './plans.js';
 import type { SubscriptionLimitError, SubscriptionResourceKey } from './subscription-types.js';
 
-const PLAN_ORDER: readonly PlanCode[] = ['free', 'bronze', 'silver', 'gold', 'enterprise'] as const;
+const PLAN_ORDER: readonly PlanCode[] = ['free', 'starter', 'bronze', 'silver', 'gold', 'enterprise'] as const;
 
 function getPlanLimit(plan: PlanCode, resource: SubscriptionResourceKey): number | null {
   const config = getPlanConfig(plan);
@@ -37,7 +37,7 @@ export function buildPlanLimitError(plan: PlanCode, resource: SubscriptionResour
     resource,
     current,
     limit,
-    requiredPlan: getMinimumPlanForLimit(resource, current + 1),
+    requiredPlan: plan === 'inactive' ? 'starter' : getMinimumPlanForLimit(resource, current + 1),
   };
 }
 

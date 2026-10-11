@@ -7,7 +7,7 @@ import {
 
 export type { PlanCode, PlanConfig, SubscriptionFeatureKey, SubscriptionStatus } from './subscription-types.js';
 
-export const PLAN_CODES: readonly PlanCode[] = ['free', 'bronze', 'silver', 'gold', 'enterprise'] as const;
+export const PLAN_CODES: readonly PlanCode[] = ['inactive', 'free', 'starter', 'bronze', 'silver', 'gold', 'enterprise'] as const;
 
 const LEGACY_PLAN_ALIASES: Record<string, PlanCode> = {
   starter: 'bronze',
@@ -37,6 +37,17 @@ export const FEATURE_KEYS: readonly SubscriptionFeatureKey[] = [
 ] as const;
 
 export const PLAN_CONFIGS = {
+  inactive: {
+    code: 'inactive',
+    displayName: 'Read-only',
+    maxActiveProperties: 0,
+    maxActiveUnits: 0,
+    maxManagementUsers: 0,
+    // Continue recording incoming bank callbacks without losing payment evidence.
+    enabledFeatures: ['data_export', 'pdf_statements', 'advanced_reports', 'audit_history', 'owner_statements', 'payment_reconciliation'],
+    googlePlayProductId: null,
+    upgradeOrder: -1,
+  },
   free: {
     code: 'free',
     displayName: 'Free',
@@ -47,6 +58,17 @@ export const PLAN_CONFIGS = {
     googlePlayProductId: null,
     upgradeOrder: 0,
   },
+  starter: {
+    code: 'starter',
+    displayName: 'Starter',
+    maxActiveProperties: null,
+    maxActiveUnits: 10,
+    maxManagementUsers: null,
+    enabledFeatures: [...FEATURE_KEYS],
+    // Keep the historical landee_starter -> Bronze mapping intact.
+    googlePlayProductId: 'landee_starter_v2',
+    upgradeOrder: 1,
+  },
   bronze: {
     code: 'bronze',
     displayName: 'Bronze',
@@ -55,7 +77,7 @@ export const PLAN_CONFIGS = {
     maxManagementUsers: null,
     enabledFeatures: [...FEATURE_KEYS],
     googlePlayProductId: 'landee_bronze',
-    upgradeOrder: 1,
+    upgradeOrder: 2,
   },
   silver: {
     code: 'silver',
@@ -65,7 +87,7 @@ export const PLAN_CONFIGS = {
     maxManagementUsers: null,
     enabledFeatures: [...FEATURE_KEYS],
     googlePlayProductId: 'landee_silver',
-    upgradeOrder: 2,
+    upgradeOrder: 3,
   },
   gold: {
     code: 'gold',
@@ -75,7 +97,7 @@ export const PLAN_CONFIGS = {
     maxManagementUsers: null,
     enabledFeatures: [...FEATURE_KEYS],
     googlePlayProductId: 'landee_gold',
-    upgradeOrder: 3,
+    upgradeOrder: 4,
   },
   enterprise: {
     code: 'enterprise',
@@ -85,7 +107,7 @@ export const PLAN_CONFIGS = {
     maxManagementUsers: null,
     enabledFeatures: [...FEATURE_KEYS],
     googlePlayProductId: null,
-    upgradeOrder: 4,
+    upgradeOrder: 5,
   },
 } as const satisfies Record<PlanCode, PlanConfig>;
 
@@ -150,6 +172,9 @@ export function getEffectivePlanCode(
   status: SubscriptionStatus,
   transitionEndsAt?: string | Date | null,
   now = new Date(),
+  legacyFreeEligible = false,
+  currentPeriodEndsAt?: string | null,
+  gracePeriodEndsAt?: string | null,
 ): PlanCode {
   if (transitionEndsAt) {
     const transitionEnd = transitionEndsAt instanceof Date ? transitionEndsAt : new Date(transitionEndsAt);
@@ -158,5 +183,8 @@ export function getEffectivePlanCode(
     }
   }
 
-  return shouldGrantPremiumAccess(status) ? storedPlan : 'free';
+  const accessEndsAt = status === 'grace_period' ? gracePeriodEndsAt : currentPeriodEndsAt;
+  const expired = Boolean(accessEndsAt && (!Number.isFinite(Date.parse(accessEndsAt)) || Date.parse(accessEndsAt) <= now.getTime()));
+  if (shouldGrantPremiumAccess(status) && !expired && storedPlan !== 'free' && storedPlan !== 'inactive') return storedPlan;
+  return legacyFreeEligible ? 'free' : 'inactive';
 }

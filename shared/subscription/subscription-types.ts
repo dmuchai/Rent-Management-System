@@ -1,5 +1,7 @@
 export type PlanCode =
+  | 'inactive'
   | 'free'
+  | 'starter'
   | 'bronze'
   | 'silver'
   | 'gold'

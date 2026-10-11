@@ -45,6 +45,8 @@ export default requireAuth(async (_req: VercelRequest, res: VercelResponse, auth
         storedPlanCode: access.storedPlanCode,
         transitionActive: access.transitionActive,
         transitionEndsAt: access.transitionEndsAt,
+        legacyFreeEligible: access.legacyFreeEligible,
+        readOnly: access.readOnly,
       },
       usage,
     });

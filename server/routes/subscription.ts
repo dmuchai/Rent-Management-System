@@ -47,12 +47,14 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
       } : null,
       plan: getPlanConfig(access.planCode),
       access: {
-        premium: access.planCode !== "free",
+        premium: access.planCode !== "free" && access.planCode !== "inactive",
         subscriptionStatus: access.status,
         planCode: access.planCode,
         storedPlanCode: access.storedPlanCode,
         transitionActive: Boolean(access.transitionEndsAt && Date.parse(access.transitionEndsAt) > Date.now()),
         transitionEndsAt: access.transitionEndsAt,
+        legacyFreeEligible: access.legacyFreeEligible,
+        readOnly: access.readOnly,
       },
       usage: {
         activeProperties: Number(activePropertyCount || 0),

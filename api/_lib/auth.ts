@@ -1,6 +1,8 @@
 // Shared authentication utilities for Vercel serverless functions
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, type User } from '@supabase/supabase-js';
+import { getEffectiveSubscriptionAccess, isSubscriptionsEnabled } from './subscription.js';
+import { requiresManagementSubscription, READ_ONLY_SUBSCRIPTION_ERROR } from '../../shared/subscription/write-policy.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -137,6 +139,19 @@ export function requireAuth(
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    if (isSubscriptionsEnabled() && requiresManagementSubscription(req.method, req.url, auth.role)) {
+      try {
+        const { data: profile, error } = await supabaseAdmin.from('users').select('created_by').eq('id', auth.userId).single();
+        if (error) throw error;
+        const ownerId = auth.role === 'caretaker' || (auth.role === 'property_manager' && profile?.created_by) ? profile?.created_by : auth.userId;
+        if (!ownerId || (await getEffectiveSubscriptionAccess(ownerId)).readOnly) {
+          return res.status(403).json(READ_ONLY_SUBSCRIPTION_ERROR);
+        }
+      } catch (error) {
+        console.error('Subscription access lookup failed', error);
+        return res.status(503).json({ error: 'Could not verify subscription access. Please try again.' });
+      }
+    }
     return handler(req, res, auth);
   };
 }

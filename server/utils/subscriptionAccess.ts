@@ -1,6 +1,7 @@
 import { supabase } from "../supabaseAuth";
 import {
   getEffectivePlanCode,
+  getPlanConfig,
   hasFeature,
   normalizePlanCode,
   type PlanCode,
@@ -24,16 +25,24 @@ export async function getOwnerSubscriptionAccess(ownerUserId: string): Promise<{
   storedPlanCode: PlanCode;
   status: SubscriptionStatus;
   transitionEndsAt: string | null;
+  legacyFreeEligible: boolean;
+  readOnly: boolean;
 }> {
   if (!subscriptionsEnabled()) {
-    return { billingAccount: null, planCode: "enterprise", storedPlanCode: "free", status: "free", transitionEndsAt: null };
+    return { billingAccount: null, planCode: "enterprise", storedPlanCode: "free", status: "free", transitionEndsAt: null, legacyFreeEligible: false, readOnly: false };
   }
 
-  let { data: account } = await supabase
+  const { data: ownerFlags, error: flagsError } = await supabase.from('users')
+    .select('legacy_free_eligible').eq('id', ownerUserId).maybeSingle();
+  if (flagsError) throw flagsError;
+  const legacyFreeEligible = ownerFlags?.legacy_free_eligible === true;
+
+  let { data: account, error: accountError } = await supabase
     .from("billing_accounts")
     .select("*")
     .eq("owner_user_id", ownerUserId)
     .maybeSingle();
+  if (accountError) throw accountError;
 
   if (!account) {
     const { data: owner } = await supabase
@@ -51,25 +60,42 @@ export async function getOwnerSubscriptionAccess(ownerUserId: string): Promise<{
           plan_code: "free",
           subscription_status: "free",
           transition_ends_at: transitionEndFor(owner.created_at),
-        }, { onConflict: "owner_user_id" })
+        }, { onConflict: "owner_user_id", ignoreDuplicates: true })
         .select("*")
-        .single();
+        .maybeSingle();
+      if (result.error) throw result.error;
       account = result.data;
+      if (!account) {
+        const existing = await supabase.from('billing_accounts').select('*').eq('owner_user_id', ownerUserId).single();
+        if (existing.error) throw existing.error;
+        account = existing.data;
+      }
     }
   }
 
   const storedPlanCode = normalizePlanCode(account?.plan_code);
   const status = (account?.subscription_status || "free") as SubscriptionStatus;
   const transitionEndsAt = account?.transition_ends_at || null;
+  const planCode = getEffectivePlanCode(storedPlanCode, status, transitionEndsAt, new Date(),
+    legacyFreeEligible, account?.current_period_ends_at || account?.trial_ends_at, account?.grace_period_ends_at);
+  const unitLimit = getPlanConfig(planCode).maxActiveUnits;
+  const usage = unitLimit === null ? null : await supabase.from('units')
+    .select('id, properties!inner(owner_id, archived_at)', { count: 'exact', head: true })
+    .eq('properties.owner_id', ownerUserId).is('properties.archived_at', null).is('archived_at', null);
+  if (usage?.error) throw usage.error;
+  const overUnitLimit = unitLimit !== null && Number(usage?.count || 0) > unitLimit;
   return {
     billingAccount: account,
-    planCode: getEffectivePlanCode(storedPlanCode, status, transitionEndsAt),
+    planCode,
     storedPlanCode,
     status,
     transitionEndsAt,
+    legacyFreeEligible,
+    readOnly: planCode === 'inactive' || overUnitLimit,
   };
 }
 
 export async function ownerHasFeature(ownerUserId: string, feature: SubscriptionFeatureKey): Promise<boolean> {
-  return hasFeature((await getOwnerSubscriptionAccess(ownerUserId)).planCode, feature);
+  const access = await getOwnerSubscriptionAccess(ownerUserId);
+  return hasFeature(access.planCode, feature) && (!access.readOnly || !['recurring_charges', 'scheduled_reminders', 'sms_messaging', 'bulk_actions'].includes(feature));
 }

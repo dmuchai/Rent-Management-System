@@ -792,11 +792,11 @@ export default function LandlordDashboard() {
 
         return (
           <div className="space-y-8">
-            {subscriptionAccount?.access.planCode === 'free' && (properties.length > 0 || units.length > 0) && !trialPromptDismissed && (
+            {['inactive', 'free'].includes(subscriptionAccount?.access.planCode || '') && !trialPromptDismissed && (
               <Card className="border-sky-200 bg-sky-50">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between gap-3">
-                    <span>Try Silver free for 30 days</span>
+                    <span>Start with Starter — 30 days free</span>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -809,14 +809,14 @@ export default function LandlordDashboard() {
                     </Button>
                   </CardTitle>
                   <CardDescription>
-                    You can start a trial after adding your first property or unit. It renews automatically unless cancelled in Google Play.
+                    Starter covers up to 10 active units for KES 1,000/month after an eligible 30-day trial. Google Play confirms the renewal date. Existing accounts retain their four-unit Free allowance.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-3">
                   <Button
                     onClick={() => {
                       trackEvent('upgrade_prompt_viewed', { source: 'dashboard' });
-                      trackEvent('trial_offer_viewed', { source: 'dashboard', plan: 'silver' });
+                      trackEvent('trial_offer_viewed', { source: 'dashboard', plan: 'starter' });
                       window.sessionStorage.setItem('landee_trial_source', 'dashboard');
                       setActiveSection('subscription');
                     }}
@@ -2781,7 +2781,7 @@ export default function LandlordDashboard() {
                       <i className="fas fa-star mr-3 text-amber-600"></i>
                       Subscription
                     </CardTitle>
-                    <CardDescription>Review your plan or start the Silver trial.</CardDescription>
+                    <CardDescription>Review your plan or start the Starter trial.</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <Button onClick={() => setActiveSection("subscription")}>Manage subscription</Button>

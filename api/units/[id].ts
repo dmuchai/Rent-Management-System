@@ -49,19 +49,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       
       const propertyId = unit.property_id;
 
-      // Check for active leases
-      const [activeLease] = await tx`
-        SELECT id FROM public.leases
-        WHERE unit_id = ${unitId} AND is_active = true
-        LIMIT 1
-      `;
-
-      if (activeLease) {
-        throw new Error('ACTIVE_LEASE_EXISTS');
-      }
-
       if (req.method === 'DELETE') {
-        // Archive the unit instead of deleting it so downgrade recovery keeps data intact.
+        // Archive without deleting leases or financial history. Scheduled billing
+        // excludes archived units, allowing owners to select their retained capacity.
         await tx`
           UPDATE public.units
           SET archived_at = NOW(), updated_at = NOW()

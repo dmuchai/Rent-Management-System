@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
+import type { Sql, TransactionSql } from 'postgres';
 import { createDbConnection } from './_lib/db.js';
 import { checkRateLimit, getClientIp } from './_lib/rate-limit.js';
 import {
@@ -87,7 +88,7 @@ function validationResponse(res: VercelResponse, error: z.ZodError): VercelRespo
   });
 }
 
-type SqlClient = ReturnType<typeof createDbConnection>;
+type SqlClient = Sql | TransactionSql;
 
 async function enqueueVerificationEmail(
   sql: SqlClient,
@@ -171,7 +172,7 @@ async function handleSubmission(req: VercelRequest, res: VercelResponse): Promis
           `;
 
           if (updated) {
-            await enqueueVerificationEmail(tx as SqlClient, parsed.data.email, updated.id, token);
+            await enqueueVerificationEmail(tx, parsed.data.email, updated.id, token);
           }
         });
       }
@@ -219,7 +220,7 @@ async function handleSubmission(req: VercelRequest, res: VercelResponse): Promis
         RETURNING id
       `;
 
-      await enqueueVerificationEmail(tx as SqlClient, parsed.data.email, created.id, token);
+      await enqueueVerificationEmail(tx, parsed.data.email, created.id, token);
     });
 
     return res.status(202).json({ message: ACCOUNT_DELETION_PUBLIC_MESSAGE });
