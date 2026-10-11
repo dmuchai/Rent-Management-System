@@ -230,7 +230,7 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
       {trialDaysRemaining !== null && trialDaysRemaining <= 7 && (
         <Card className="border-amber-200 bg-amber-50/70">
           <CardHeader>
-            <CardTitle>{trialDaysRemaining} day{trialDaysRemaining === 1 ? '' : 's'} left in your Silver trial</CardTitle>
+            <CardTitle>{trialDaysRemaining} day{trialDaysRemaining === 1 ? '' : 's'} left in your {currentPlanConfig.displayName} trial</CardTitle>
             <CardDescription>
               Review the localized renewal price below. The subscription renews automatically unless cancelled in Google Play before the renewal date.
             </CardDescription>
