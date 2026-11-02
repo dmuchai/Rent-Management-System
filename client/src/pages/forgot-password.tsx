@@ -58,7 +58,7 @@ export default function ForgotPassword() {
             <img src="/favicon.png" alt="Landee" className="h-12 w-12 mr-3" />
             <h1 className="text-3xl font-bold">Landee</h1>
           </div>
-          <p className="text-muted-foreground">The #1 Property Management System</p>
+          <p className="text-muted-foreground">Property management built for Kenya</p>
         </div>
 
         <Card>

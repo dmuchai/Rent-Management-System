@@ -1,5 +1,7 @@
 import { createDbConnection } from './db.js';
 import { SmsService } from './smsService.js';
+import { randomUUID } from 'node:crypto';
+import { claimSmsJobs } from './queueClaims.js';
 
 const smsService = new SmsService();
 
@@ -11,14 +13,8 @@ export async function processSmsQueue(batchSize = 20) {
     const sql = createDbConnection();
 
     try {
-        // Fetch pending SMS
-        const pendingSms = await sql`
-            SELECT * FROM public.sms_queue
-            WHERE status IN ('pending', 'failed')
-              AND retry_count < 5
-            ORDER BY created_at ASC
-            LIMIT ${batchSize}
-        `;
+        const claimToken = randomUUID();
+        const pendingSms = await claimSmsJobs(sql, batchSize, claimToken);
 
         if (pendingSms.length === 0) {
             console.log(`${logPrefix} No pending SMS to process.`);
@@ -32,13 +28,6 @@ export async function processSmsQueue(batchSize = 20) {
 
         for (const sms of pendingSms) {
             try {
-                // Mark as processing
-                await sql`
-                    UPDATE public.sms_queue
-                    SET status = 'processing', updated_at = NOW()
-                    WHERE id = ${sms.id}
-                `;
-
                 await smsService.sendSms({
                     to: sms.to,
                     message: sms.message,
@@ -48,12 +37,13 @@ export async function processSmsQueue(batchSize = 20) {
                 // Mark as sent
                 await sql`
                     UPDATE public.sms_queue
-                    SET status = 'sent', sent_at = NOW(), updated_at = NOW()
-                    WHERE id = ${sms.id}
+                    SET status = 'sent', sent_at = NOW(), claim_token = NULL,
+                        lease_expires_at = NULL, updated_at = NOW()
+                    WHERE id = ${sms.id} AND claim_token = ${claimToken}
                 `;
 
                 successCount++;
-                console.log(`${logPrefix} SUCCESS: -> ${sms.to}`);
+                console.log(`${logPrefix} SUCCESS: ${sms.id}`);
             } catch (error: any) {
                 failCount++;
                 console.error(`${logPrefix} ERROR for ${sms.id}:`, error.message);
@@ -63,8 +53,9 @@ export async function processSmsQueue(batchSize = 20) {
                     SET status = 'failed', 
                         retry_count = retry_count + 1,
                         last_error = ${error.message || String(error)},
-                        updated_at = NOW()
-                    WHERE id = ${sms.id}
+                        available_at = NOW() + (LEAST(retry_count + 1, 5) * INTERVAL '5 minutes'),
+                        claim_token = NULL, lease_expires_at = NULL, updated_at = NOW()
+                    WHERE id = ${sms.id} AND claim_token = ${claimToken}
                 `;
             }
         }

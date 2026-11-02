@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { enqueuePaymentOutbox } from './paymentOutbox.js';
 
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'cancelled';
 
@@ -43,6 +44,8 @@ type TransitionPatch = {
   description?: string | null;
   paidDate?: Date | null;
   allowCompletionReversal?: boolean;
+  sourceEventId?: string | null;
+  providerReceiptId?: string | null;
 };
 
 export function canonicalRentInvoiceReference(leaseId: string, billingPeriodStart: Date): string {
@@ -213,6 +216,11 @@ export async function createPaymentRecord(sql: any, input: CreatePaymentInput) {
 
     if (status === 'completed' && invoice?.id) {
       await applyInvoiceDelta(tx, invoice.id, Number(input.amount), 1);
+      await tx`INSERT INTO public.payment_audit_history
+        (payment_id, action, amount, actor_id, reason, evidence)
+        VALUES (${payment.id}, 'posted', ${Number(input.amount).toFixed(2)}, ${input.actor.userId},
+          ${input.description || 'Manual payment recorded'}, ${JSON.stringify({ source: input.paymentSource })}::jsonb)`;
+      await enqueuePaymentOutbox(tx, payment.id);
     }
 
     return payment;
@@ -243,6 +251,9 @@ export async function transitionPaymentStatus(
     }
 
     const previousStatus = payment.status as PaymentStatus;
+    if (previousStatus === nextStatus) {
+      return { payment, changed: false, completedNow: false };
+    }
     if (previousStatus === 'completed' && nextStatus !== 'completed' && !patch.allowCompletionReversal) {
       return { payment, changed: false, completedNow: false };
     }
@@ -257,6 +268,8 @@ export async function transitionPaymentStatus(
       SET
         status = ${nextStatus},
         pesapal_transaction_id = COALESCE(${patch.transactionId ?? null}, pesapal_transaction_id),
+        source_event_id = COALESCE(${patch.sourceEventId ?? null}, source_event_id),
+        provider_receipt_id = COALESCE(${patch.providerReceiptId ?? null}, provider_receipt_id),
         payment_method = COALESCE(${patch.paymentMethod ?? null}, payment_method),
         description = COALESCE(${patch.description ?? null}, description),
         paid_date = CASE
@@ -274,6 +287,20 @@ export async function transitionPaymentStatus(
     } else if (reversedNow) {
       await applyInvoiceDelta(tx, payment.invoice_id, Number(payment.amount), -1);
     }
+
+    if (changed) {
+      await tx`
+        INSERT INTO public.payment_audit_history
+          (payment_id, source_event_id, action, amount, reason, evidence)
+        VALUES (
+          ${payment.id}, ${patch.sourceEventId ?? payment.source_event_id ?? null},
+          ${reversedNow ? 'reversed' : completedNow ? 'posted' : 'reviewed'},
+          ${Number(payment.amount).toFixed(2)}, ${patch.description ?? null},
+          ${JSON.stringify({ previousStatus, nextStatus })}::jsonb
+        )
+      `;
+    }
+    if (completedNow) await enqueuePaymentOutbox(tx, payment.id);
 
     return { payment: updatedPayment, changed, completedNow };
   });

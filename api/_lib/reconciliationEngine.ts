@@ -1,4 +1,5 @@
 import type { Sql } from 'postgres';
+import { postExternalPaymentEvent } from './paymentPosting.js';
 
 /**
  * Payment Reconciliation Engine
@@ -443,53 +444,18 @@ export async function recordReconciliation(
   paymentAmount: number,
   result: ReconciliationResult
 ): Promise<void> {
-  const amountTolerancePercent = getEnvNumber('RECONCILIATION_AMOUNT_TOLERANCE_PERCENT', 0);
-
-  // Wrap all DB changes in a transaction to ensure atomicity
-  await sql.begin(async (tx) => {
-    if (result.matched && result.invoiceId) {
-      // Update external_payment_events with matched invoice
-      await tx`
-        UPDATE public.external_payment_events
-        SET 
-          matched_invoice_id = ${result.invoiceId},
-          reconciliation_status = 'auto_matched',
-          reconciliation_method = ${result.method},
-          confidence_score = ${result.score || 100},
-          reconciled_at = NOW(),
-          reconciliation_notes = ${result.reasons.join('; ')}
-        WHERE id = ${paymentEventId}
-      `;
-
-      // Update invoice status
-      await tx`
-        UPDATE public.invoices
-        SET 
-          amount_paid = COALESCE(amount_paid, 0) + ${paymentAmount},
-          status = CASE
-            WHEN (COALESCE(amount_paid, 0) + ${paymentAmount}) >= (amount - (amount * (${amountTolerancePercent} / 100.0)))
-              THEN 'paid'
-            ELSE 'partially_paid'
-          END,
-          paid_at = CASE
-            WHEN (COALESCE(amount_paid, 0) + ${paymentAmount}) >= (amount - (amount * (${amountTolerancePercent} / 100.0)))
-              THEN NOW()
-            ELSE NULL
-          END
-        WHERE id = ${result.invoiceId}
-      `;
-    } else {
-      // Mark as requiring manual review
-      await tx`
-        UPDATE public.external_payment_events
-        SET 
-          reconciliation_status = 'pending_review',
-          reconciliation_method = ${result.method},
-          confidence_score = ${result.score || 0},
-          reconciliation_notes = ${result.reasons.join('; ')}
-        WHERE id = ${paymentEventId}
-      `;
-    }
-    // Transaction automatically commits if no error, rolls back on exception
-  });
+  if (result.matched && result.invoiceId) {
+    await postExternalPaymentEvent(sql, paymentEventId, {
+      invoiceId: result.invoiceId,
+      method: 'automatic',
+      reconciliationMethod: result.method,
+      note: result.reasons.join('; ') || 'Automatically reconciled',
+    });
+    return;
+  }
+  await sql`UPDATE public.external_payment_events SET reconciliation_status = 'pending_review',
+    processing_status = 'review', operator_review_required = true,
+    reconciliation_method = ${result.method}, confidence_score = ${result.score || 0},
+    reconciliation_notes = ${result.reasons.join('; ')}, processing_attempts = processing_attempts + 1
+    WHERE id = ${paymentEventId}`;
 }

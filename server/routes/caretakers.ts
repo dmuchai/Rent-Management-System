@@ -363,22 +363,18 @@ router.post("/invitations", async (req: any, res: any, next: any) => {
       const { data: existingUserRecord } = await supabase
         .from("users").select("id, role").eq("email", invitation.email).maybeSingle();
 
-      if (existingUserRecord?.role && existingUserRecord.role !== "caretaker") {
-        return res.status(400).json({ error: "Account already exists", message: `This email is already registered as a ${existingUserRecord.role}.` });
-      }
-
       let authUserId = existingUserRecord?.id as string | undefined;
 
       if (authUserId) {
         const { error: updateError } = await supabase.auth.admin.updateUserById(authUserId, {
           password,
-          user_metadata: { role: "caretaker", first_name: invitation.first_name, last_name: invitation.last_name },
+          user_metadata: { first_name: invitation.first_name, last_name: invitation.last_name },
         });
         if (updateError) return res.status(500).json({ error: "Account update failed" });
       } else {
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: invitation.email, password, email_confirm: true,
-          user_metadata: { first_name: invitation.first_name, last_name: invitation.last_name, role: "caretaker" },
+          user_metadata: { first_name: invitation.first_name, last_name: invitation.last_name },
         });
         if (authError || !authData.user) {
           return res.status(500).json({ error: "Account creation failed", message: authError?.message });
@@ -386,10 +382,14 @@ router.post("/invitations", async (req: any, res: any, next: any) => {
         authUserId = authData.user.id;
       }
 
-      await supabase.from("users").upsert({
-        id: authUserId, email: invitation.email, first_name: invitation.first_name, last_name: invitation.last_name,
-        role: "caretaker", created_by: invitation.landlord_id, status: "active",
-      }, { onConflict: "id" });
+      if (existingUserRecord) {
+        await supabase.from("users").update({ status: "active" }).eq("id", authUserId);
+      } else {
+        await supabase.from("users").insert({
+          id: authUserId, email: invitation.email, first_name: invitation.first_name, last_name: invitation.last_name,
+          role: "caretaker", created_by: invitation.landlord_id, status: "active",
+        });
+      }
 
       if (invitation.property_id || invitation.unit_id) {
         await supabase.from("caretaker_assignments").insert([{
@@ -398,6 +398,10 @@ router.post("/invitations", async (req: any, res: any, next: any) => {
           status: "active", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
         }]);
       }
+      await supabase.from("user_context_memberships").upsert({
+        user_id: authUserId, context_owner_id: invitation.landlord_id, role: "caretaker",
+        status: "active", authority_source: "invitation", updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,context_owner_id,role" });
 
       await supabase.from("caretaker_invitations").update({
         invitation_accepted_at: new Date().toISOString(), status: "accepted",

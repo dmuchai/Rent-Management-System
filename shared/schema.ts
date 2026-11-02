@@ -95,6 +95,8 @@ export const users = pgTable("users", {
   passwordResetTokenExpiresAt: timestamp("password_reset_token_expires_at"),
   phoneNumber: varchar("phone_number").unique(),
   phoneVerified: boolean("phone_verified").default(false),
+  createdBy: varchar("created_by").references((): any => users.id),
+  status: varchar("status").default("active"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -239,6 +241,11 @@ export const payments = pgTable("payments", {
   leaseId: varchar("lease_id").notNull().references(() => leases.id),
   invoiceId: varchar("invoice_id").references((): any => invoices.id),
   bankEventId: varchar("bank_event_id").references((): any => externalPaymentEvents.id),
+  sourceEventId: varchar("source_event_id").references((): any => externalPaymentEvents.id),
+  providerCheckoutId: varchar("provider_checkout_id"),
+  providerMerchantRequestId: varchar("provider_merchant_request_id"),
+  expectedMerchantId: varchar("expected_merchant_id"),
+  providerReceiptId: varchar("provider_receipt_id"),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   dueDate: timestamp("due_date").notNull(),
   paidDate: timestamp("paid_date"),
@@ -298,6 +305,11 @@ export const emailQueue = pgTable("email_queue", {
   sentAt: timestamp("sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  claimToken: uuid("claim_token"),
+  leaseExpiresAt: timestamp("lease_expires_at"),
+  availableAt: timestamp("available_at").defaultNow(),
+  idempotencyKey: varchar("idempotency_key"),
+  providerMessageId: varchar("provider_message_id"),
 });
 
 // SMS Queue table for asynchronous processing
@@ -312,6 +324,11 @@ export const smsQueue = pgTable("sms_queue", {
   sentAt: timestamp("sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  claimToken: uuid("claim_token"),
+  leaseExpiresAt: timestamp("lease_expires_at"),
+  availableAt: timestamp("available_at").defaultNow(),
+  idempotencyKey: varchar("idempotency_key"),
+  providerMessageId: varchar("provider_message_id"),
 });
 
 // OTP Codes table for phone verification
@@ -446,6 +463,15 @@ export const externalPaymentEvents = pgTable("external_payment_events", {
   // Idempotency
   isVerified: boolean("is_verified").default(false),
   isDuplicate: boolean("is_duplicate").default(false),
+  processingStatus: varchar("processing_status").default("received"),
+  processingAttempts: integer("processing_attempts").default(0),
+  processingStartedAt: timestamp("processing_started_at"),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+  lastProcessingError: text("last_processing_error"),
+  operatorReviewRequired: boolean("operator_review_required").default(false),
+  unallocatedAmount: decimal("unallocated_amount", { precision: 10, scale: 2 }).default("0"),
+  replayedAt: timestamp("replayed_at"),
   
   // Audit
   receivedAt: timestamp("received_at").defaultNow(),
@@ -454,6 +480,31 @@ export const externalPaymentEvents = pgTable("external_payment_events", {
   // Unique constraint to prevent duplicate webhooks
   uniqueProviderTransaction: unique("uq_external_payment_events_provider_txn").on(table.provider, table.externalTransactionId),
 }));
+
+export const userContextMemberships = pgTable("user_context_memberships", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  contextOwnerId: varchar("context_owner_id").notNull().references(() => users.id),
+  role: varchar("role").notNull(),
+  status: varchar("status").notNull().default("active"),
+  authoritySource: varchar("authority_source").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  uniqueContextRole: unique("uq_user_context_membership").on(table.userId, table.contextOwnerId, table.role),
+}));
+
+export const paymentAuditHistory = pgTable("payment_audit_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  paymentId: varchar("payment_id").references(() => payments.id),
+  sourceEventId: varchar("source_event_id").references(() => externalPaymentEvents.id),
+  action: varchar("action").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  actorId: varchar("actor_id").references(() => users.id),
+  reason: text("reason"),
+  evidence: jsonb("evidence").default({}),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({

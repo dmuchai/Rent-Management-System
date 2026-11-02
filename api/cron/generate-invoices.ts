@@ -7,6 +7,7 @@ import { runAutomatedInvoicing } from '../_lib/invoicingWorker.js';
  * or daily to catch any missing invoices.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+    if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
     const authHeader = req.headers.authorization;
     const CRON_SECRET = process.env.CRON_SECRET;
 
@@ -31,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.error('[Cron] Invoicing failed:', error);
         return res.status(500).json({
             error: 'Failed to run automated invoicing',
-            details: error.message
+            details: 'See server logs for the job error identifier'
         });
     }
 }

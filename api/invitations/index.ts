@@ -186,7 +186,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           user_metadata: {
             firstName: tenant.first_name,
             lastName: tenant.last_name,
-            role: 'tenant',
           }
         });
 
@@ -224,6 +223,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               account_status = 'active',
               invitation_token = NULL
             WHERE id = ${tenant.id}
+          `;
+          await sql`
+            INSERT INTO public.user_context_memberships
+              (user_id, context_owner_id, role, status, authority_source)
+            VALUES (${authUserId}, ${tenant.landlord_id}, 'tenant', 'active', 'invitation')
+            ON CONFLICT (user_id, context_owner_id, role)
+            DO UPDATE SET status = 'active', authority_source = 'invitation', updated_at = NOW()
           `;
         });
       } catch (dbError) {

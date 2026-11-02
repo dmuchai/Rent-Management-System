@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
 import { z } from 'zod';
+import { canEditLeaseStatus, hasScopedUnitAccess } from '../_lib/leasePolicy.js';
 
 // Consolidated handler for Leases
 // Route: /api/leases/[[...route]]
@@ -63,33 +64,6 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 // --- Implementation Functions ---
 
 async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: any, sql: any) {
-    // Auto-expire leases
-    const expiredLeases = await sql`
-    UPDATE public.leases l
-    SET is_active = false, status = 'expired', updated_at = NOW()
-    FROM public.units u
-    INNER JOIN public.properties p ON u.property_id = p.id
-    WHERE l.unit_id = u.id
-    AND (p.owner_id = ${auth.userId} OR l.tenant_id IN (
-      SELECT id FROM public.tenants WHERE user_id = ${auth.userId}
-    ))
-    AND l.is_active = true
-    AND l.end_date < NOW()
-    RETURNING l.unit_id
-  `;
-  
-  // Sync occupancy for all units that had leases expire
-  if (expiredLeases.length > 0) {
-    const unitIds = expiredLeases.map((l: any) => l.unit_id);
-    for (const unitId of unitIds) {
-      await sql`
-        UPDATE public.units u SET is_occupied = EXISTS(
-            SELECT 1 FROM public.leases l WHERE l.unit_id = u.id AND l.is_active = true
-        ) WHERE u.id = ${unitId}
-      `;
-    }
-  }
-
         const isCaretaker = auth.role === 'caretaker';
 
         const leases = await sql`
@@ -186,48 +160,35 @@ async function handleCreateLease(req: VercelRequest, res: VercelResponse, auth: 
         return res.status(403).json({ message: 'Tenants cannot create leases' });
     }
 
-    // Verify unit
-    const units = await sql`SELECT u.*, p.owner_id FROM public.units u JOIN public.properties p ON u.property_id = p.id WHERE u.id = ${leaseData.unitId}`;
-    if (!units.length) return res.status(404).json({ message: 'Unit not found' });
-    if (auth.role !== 'caretaker' && units[0].owner_id !== auth.userId) {
-        return res.status(403).json({ message: 'Access denied' });
-    }
-
-    if (auth.role === 'caretaker') {
-        const assignment = await sql`
-          SELECT id FROM public.caretaker_assignments
-          WHERE caretaker_id = ${auth.userId}
-          AND property_id = ${units[0].property_id}
-          AND status = 'active'
-          LIMIT 1
-        `;
-
-        if (!assignment.length) {
-            return res.status(403).json({ message: 'Caretaker not assigned to this property' });
-        }
-    }
-
-    // Verify tenant
-    const tenants = await sql`SELECT * FROM public.tenants WHERE id = ${leaseData.tenantId}`;
-    if (!tenants.length) return res.status(404).json({ message: 'Tenant not found' });
-    if (tenants[0].landlord_id && tenants[0].landlord_id !== units[0].owner_id) {
-        return res.status(403).json({ message: 'Tenant does not belong to this landlord' });
-    }
-
-    // Check conflicts
-    const conflict = await sql`
-        SELECT * FROM public.leases 
-        WHERE unit_id = ${leaseData.unitId}
-        AND (start_date, end_date) OVERLAPS (${leaseData.startDate}, ${leaseData.endDate})
-    `;
-    if (conflict.length > 0) return res.status(409).json({ message: 'Lease dates conflict', error: 'LEASE_DATE_CONFLICT' });
-
     const isCaretaker = auth.role === 'caretaker';
     const status = isCaretaker ? 'pending_landlord_signature' : 'pending_tenant_signature';
     const landlordSignedAt = isCaretaker ? null : new Date();
     const landlordSignedBy = isCaretaker ? null : auth.userId;
 
-    const [lease] = await sql`
+    const result = await sql.begin(async (tx: any) => {
+      const [unit] = await tx`SELECT u.id, u.property_id, p.owner_id FROM public.units u
+        JOIN public.properties p ON p.id = u.property_id
+        WHERE u.id = ${leaseData.unitId} AND u.archived_at IS NULL AND p.archived_at IS NULL
+        FOR UPDATE OF u`;
+      if (!unit) return { status: 404, body: { message: 'Unit not found' } };
+      const assignments = isCaretaker ? await tx`SELECT property_id, unit_id FROM public.caretaker_assignments
+        WHERE caretaker_id = ${auth.userId} AND landlord_id = ${unit.owner_id} AND status = 'active'` : [];
+      if (!hasScopedUnitAccess(auth, unit.owner_id, unit.id, unit.property_id, assignments)) {
+        return { status: 403, body: { message: 'Access denied' } };
+      }
+      const [tenant] = await tx`SELECT id, landlord_id FROM public.tenants
+        WHERE id = ${leaseData.tenantId} FOR UPDATE`;
+      if (!tenant) return { status: 404, body: { message: 'Tenant not found' } };
+      if (tenant.landlord_id !== unit.owner_id) {
+        return { status: 403, body: { message: 'Tenant does not belong to this portfolio' } };
+      }
+      const [conflict] = await tx`SELECT id FROM public.leases WHERE unit_id = ${leaseData.unitId}
+        AND status NOT IN ('cancelled', 'rejected', 'expired')
+        AND (start_date, end_date) OVERLAPS (${leaseData.startDate}, ${leaseData.endDate})
+        LIMIT 1 FOR UPDATE`;
+      if (conflict) return { status: 409,
+        body: { message: 'Lease dates conflict', error: 'LEASE_DATE_CONFLICT' } };
+      const [lease] = await tx`
         INSERT INTO public.leases (
             tenant_id, unit_id, start_date, end_date, monthly_rent, security_deposit,
             status, landlord_signed_at, landlord_signed_by, created_by, is_active
@@ -236,9 +197,10 @@ async function handleCreateLease(req: VercelRequest, res: VercelResponse, auth: 
             ${leaseData.monthlyRent}, ${leaseData.securityDeposit || null},
             ${status}, ${landlordSignedAt}, ${landlordSignedBy}, ${auth.userId}, false
         ) RETURNING *
-    `;
-
-    return res.status(201).json(lease);
+      `;
+      return { status: 201, body: lease };
+    });
+    return res.status(result.status).json(result.body);
 }
 
 async function handleDeleteLease(req: VercelRequest, res: VercelResponse, auth: any, sql: any, leaseId: string) {
@@ -278,48 +240,72 @@ async function handleUpdateLease(req: VercelRequest, res: VercelResponse, auth: 
         startDate: z.coerce.date(),
         endDate: z.coerce.date(),
         monthlyRent: z.coerce.number().positive(),
-        securityDeposit: z.coerce.number().positive().optional(),
-        isActive: z.boolean().default(true),
+        securityDeposit: z.coerce.number().nonnegative().optional(),
+    }).refine((data) => data.startDate < data.endDate, {
+        message: 'Start date must be before end date', path: ['endDate'],
     });
 
     const leaseData = leaseUpdateSchema.parse(req.body);
 
-    const existing = await sql`
-        SELECT l.*, p.owner_id FROM public.leases l
-        JOIN public.units u ON l.unit_id = u.id
-        JOIN public.properties p ON u.property_id = p.id
-        WHERE l.id = ${leaseId}
-    `;
-    if (!existing.length) return res.status(404).json({ message: 'Lease not found' });
-    if (existing[0].owner_id !== auth.userId) return res.status(403).json({ message: 'Access denied' });
+    const result = await sql.begin(async (tx: any) => {
+        const [existing] = await tx`
+          SELECT l.*, u.property_id, p.owner_id FROM public.leases l
+          JOIN public.units u ON u.id = l.unit_id
+          JOIN public.properties p ON p.id = u.property_id
+          WHERE l.id = ${leaseId} FOR UPDATE OF l
+        `;
+        if (!existing) return { status: 404, body: { message: 'Lease not found' } };
+        const caretakerAssignments = auth.role === 'caretaker' ? await tx`
+          SELECT property_id, unit_id FROM public.caretaker_assignments
+          WHERE caretaker_id = ${auth.userId} AND landlord_id = ${existing.owner_id} AND status = 'active'
+        ` : [];
+        const canManageOldUnit = hasScopedUnitAccess(auth, existing.owner_id, existing.unit_id,
+          existing.property_id, caretakerAssignments);
+        if (!canManageOldUnit) return { status: 403, body: { message: 'Access denied' } };
+        if (!canEditLeaseStatus(existing.status)) {
+          return { status: 409, body: { message: 'Signed or closed leases require an explicit lifecycle action' } };
+        }
 
-    // Check conflicts excluding self
-    const conflict = await sql`
-        SELECT * FROM public.leases 
-        WHERE unit_id = ${leaseData.unitId} AND id != ${leaseId}
-        AND (start_date, end_date) OVERLAPS (${leaseData.startDate}, ${leaseData.endDate})
-    `;
-    if (conflict.length > 0) return res.status(409).json({ message: 'Lease dates conflict', error: 'LEASE_DATE_CONFLICT' });
+        const [destination] = await tx`
+          SELECT u.id, u.property_id, p.owner_id FROM public.units u
+          JOIN public.properties p ON p.id = u.property_id
+          WHERE u.id = ${leaseData.unitId} AND u.archived_at IS NULL AND p.archived_at IS NULL
+          FOR UPDATE OF u
+        `;
+        if (!destination) return { status: 404, body: { message: 'Unit not found' } };
+        if (destination.owner_id !== existing.owner_id) {
+          return { status: 403, body: { message: 'Destination unit is outside this portfolio' } };
+        }
+        const canManageNewUnit = hasScopedUnitAccess(auth, existing.owner_id, destination.id,
+          destination.property_id, caretakerAssignments);
+        if (!canManageNewUnit) return { status: 403, body: { message: 'Destination unit is outside your assignment' } };
 
-    const [updated] = await sql`
-        UPDATE public.leases SET 
-            tenant_id = ${leaseData.tenantId}, unit_id = ${leaseData.unitId},
-            start_date = ${leaseData.startDate}, end_date = ${leaseData.endDate},
-            monthly_rent = ${leaseData.monthlyRent}, security_deposit = ${leaseData.securityDeposit || null},
-            is_active = ${leaseData.isActive}, updated_at = NOW()
-        WHERE id = ${leaseId}
-        RETURNING *
-    `;
+        const [tenant] = await tx`SELECT id, landlord_id FROM public.tenants
+          WHERE id = ${leaseData.tenantId} FOR UPDATE`;
+        if (!tenant) return { status: 404, body: { message: 'Tenant not found' } };
+        if (tenant.landlord_id !== existing.owner_id) {
+          return { status: 403, body: { message: 'Tenant is outside this portfolio' } };
+        }
+        const [conflict] = await tx`SELECT id FROM public.leases
+          WHERE unit_id = ${leaseData.unitId} AND id <> ${leaseId}
+            AND status NOT IN ('cancelled', 'rejected', 'expired')
+            AND (start_date, end_date) OVERLAPS (${leaseData.startDate}, ${leaseData.endDate})
+          LIMIT 1 FOR UPDATE`;
+        if (conflict) return { status: 409, body: { message: 'Lease dates conflict', error: 'LEASE_DATE_CONFLICT' } };
 
-    // Update unit occupancy (simplified logic: check if any active lease exists now)
-    await sql`
-        UPDATE public.units u SET is_occupied = EXISTS(
-            SELECT 1 FROM public.leases l WHERE l.unit_id = u.id AND l.is_active = true
-        ) WHERE u.id = ${leaseData.unitId}
-    `;
-
-    // Return camelCase logic ... (simplified for brevity)
-    return res.json(updated);
+        const [updated] = await tx`UPDATE public.leases SET
+          tenant_id = ${leaseData.tenantId}, unit_id = ${leaseData.unitId},
+          start_date = ${leaseData.startDate}, end_date = ${leaseData.endDate},
+          monthly_rent = ${leaseData.monthlyRent}, security_deposit = ${leaseData.securityDeposit ?? null},
+          status = 'pending_landlord_signature', landlord_signed_at = NULL, landlord_signed_by = NULL,
+          tenant_signed_at = NULL, tenant_signed_by = NULL, is_active = false, updated_at = NOW()
+          WHERE id = ${leaseId} RETURNING *`;
+        await tx`UPDATE public.units u SET is_occupied = EXISTS(
+          SELECT 1 FROM public.leases l WHERE l.unit_id = u.id AND l.is_active = true
+        ), updated_at = NOW() WHERE u.id IN (${existing.unit_id}, ${leaseData.unitId})`;
+        return { status: 200, body: updated };
+    });
+    return res.status(result.status).json(result.body);
 }
 
 async function handleGetLease(req: VercelRequest, res: VercelResponse, auth: any, sql: any, leaseId: string) {

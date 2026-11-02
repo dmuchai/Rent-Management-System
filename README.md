@@ -18,7 +18,7 @@ A comprehensive Rent Management System that streamlines interactions between lan
 
 **Frontend:** React, Vite, Tailwind CSS, Radix UI, TypeScript
 
-**Backend:** Node.js, Express, Drizzle ORM (Postgres mappings)
+**Backend:** Vercel `api/` Functions in production; Node.js/Express development compatibility server; Drizzle ORM/PostgreSQL mappings
 
 **Database & Services:**
 - PostgreSQL (via Supabase/Neon)
@@ -50,7 +50,7 @@ cd Rent-Management-System
 2. Install dependencies
 
 ```bash
-npm install
+npm ci --ignore-scripts
 ```
 
 3. Configure environment variables
@@ -101,6 +101,25 @@ npm run mobile:ios
 - The repo includes M-Pesa webhook handlers, statement parsers and bank paybill support for landlords who accept payments through bank-owned paybills.
 - Pesapal integration exists for tenant online payments and IPN/webhook handling; consult `AUTOMATED_PAYMENT_FLOW.md` and `ARCHITECTURE_FIXES.md` for current implementation notes (some endpoints are marked as partial/in-progress).
 - Statement upload and parsing utilities are available to reconcile bank/MPESA statements into invoices.
+- Provider integrations and automatic payment reconciliation are available only when the corresponding channel is configured and activated. A collection confirmation is not proof of final bank settlement.
+
+## Local release verification
+
+```bash
+npm run check
+npm run check:route-entrypoints
+node --import tsx --test tests/financial-integrity/*.test.ts
+npm run build:vercel
+```
+
+Run allocation tests only against a disposable local PostgreSQL database:
+
+```bash
+TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/landee_test \
+  node --import tsx --test tests/invoicing/bank-allocation.test.ts
+```
+
+Without `TEST_DATABASE_URL`, Linux can create a private PostgreSQL 16 cluster under `/tmp`; override its binary location with `PG_BINDIR`. `LOCAL_TEST_DATABASE_URL` is likewise required by the read-only financial diagnostic and rejects non-local hosts.
 
 ## Environment and Secrets
 
@@ -109,6 +128,7 @@ See `.env.example` for the full set of environment variables. Key ones include:
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`
 - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` (optional)
 - `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET`, `MPESA_PASSKEY`, `MPESA_SHORTCODE`
+- `MPESA_ENV`, `MPESA_CALLBACK_URL`, `CRON_SECRET`
 - `PESAPAL_CONSUMER_KEY`, `PESAPAL_CONSUMER_SECRET`, `PESAPAL_IPN_ID`
 
 ## Scripts
@@ -129,6 +149,9 @@ Several focused docs live in the repo for specific workflows:
 - `AUTOMATED_PAYMENT_FLOW.md` — Pesapal + payment flow details
 - `BANK_PAYBILL_QUICKSTART.md` / `BANK_PAYBILL_TESTING_GUIDE.md` — Bank paybill integration
 - `STATEMENT_UPLOAD_IMPLEMENTATION.md` — Statement parsing and reconciliation
+- `docs/current-state-architecture.md` — deployed API/data boundaries and future per-landlord Safaricom model
+- `docs/operator-payment-runbook.md` — callback, replay, unmatched-payment, queue and reversal operations
+- `docs/remediation-matrix-2026-11-01.md` — review mapping, migration order and staged rollout
 
 If you rely on a specific payment provider or plan to enable distributed rate-limiting, consult the corresponding docs and `.env.example` entries.
 

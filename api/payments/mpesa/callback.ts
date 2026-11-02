@@ -1,135 +1,114 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { z } from 'zod';
 import { createDbConnection } from '../../_lib/db.js';
-import { emailService } from '../../_lib/emailService.js';
-import { smsService } from '../../_lib/smsService.js';
 import { InvoicePaymentError, transitionPaymentStatus } from '../../_lib/invoicePayments.js';
+import { mpesaService } from '../../_lib/mpesaService.js';
+import { parseStkCallback, receiptConflicts, verifyStkResult } from '../../_lib/mpesaVerification.js';
 
-export default async (req: VercelRequest, res: VercelResponse) => {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ message: 'Method not allowed' });
+function providerResponse(res: VercelResponse, status: number, code: number, description: string) {
+  return res.status(status).json({ ResultCode: code, ResultDesc: description });
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
+
+  const sql = createDbConnection();
+  try {
+    const callback = parseStkCallback(req.body);
+    const externalId = `stk:${callback.checkoutRequestId}:${callback.fingerprint}`;
+    const [event] = await sql`
+      INSERT INTO public.external_payment_events (
+        event_type, provider, external_transaction_id, amount, transaction_time,
+        raw_payload, reconciliation_status, processing_status, is_verified
+      ) VALUES (
+        'mpesa_stk_result', 'safaricom', ${externalId}, ${callback.amount ?? 0}, NOW(),
+        ${JSON.stringify(req.body)}::jsonb, 'unmatched', 'received', false
+      )
+      ON CONFLICT ON CONSTRAINT uq_external_payment_events_provider_txn
+      DO UPDATE SET raw_payload = EXCLUDED.raw_payload
+      RETURNING id, processing_status
+    `;
+
+    if (event.processing_status === 'processed') {
+      return providerResponse(res, 200, 0, 'Already processed');
     }
 
-    const sql = createDbConnection();
+    const [payment] = await sql`
+      SELECT id, amount, status, payment_source,
+             COALESCE(provider_checkout_id, pesapal_order_tracking_id) AS checkout_request_id,
+             provider_merchant_request_id, expected_merchant_id, provider_receipt_id, invoice_id
+      FROM public.payments
+      WHERE COALESCE(provider_checkout_id, pesapal_order_tracking_id) = ${callback.checkoutRequestId}
+      LIMIT 1
+    `;
+    if (!payment || payment.payment_source !== 'mpesa_stk') {
+      await sql`UPDATE public.external_payment_events SET processing_status = 'review',
+        operator_review_required = true, last_processing_error = 'Payment attempt not found',
+        processing_attempts = processing_attempts + 1 WHERE id = ${event.id}`;
+      return providerResponse(res, 404, 1, 'Payment not found');
+    }
+
+    let query;
     try {
-        const callbackData = req.body.Body.stkCallback;
-        console.log('[M-PESA Callback] Received data:', JSON.stringify(callbackData));
-
-        const checkoutRequestId = callbackData.CheckoutRequestID;
-        const resultCode = callbackData.ResultCode;
-        const resultDesc = callbackData.ResultDesc;
-
-        if (resultCode === 0) {
-            // Extract transaction metadata
-            const items = callbackData.CallbackMetadata.Item;
-            const mpesaReceiptNumber = items.find((i: any) => i.Name === 'MpesaReceiptNumber')?.Value;
-            const transition = await transitionPaymentStatus(
-                sql,
-                { trackingId: checkoutRequestId },
-                'completed',
-                { transactionId: mpesaReceiptNumber, paymentMethod: 'mpesa', paidDate: new Date() },
-            );
-            const payment = transition.payment;
-
-            console.log(`[M-PESA Callback] Success for Payment ID: ${payment.id}`);
-
-            // Trigger standard notifications (reusing Pesapal notification logic if possible)
-            // Since this is a standalone API, we'll manually trigger the enqueuing logic here.
-            if (transition.completedNow) {
-              try {
-                const [details] = await sql`
-          SELECT 
-            p.*, 
-            l.tenant_id, 
-            t.email as tenant_email, t.first_name as tenant_name, t.phone as tenant_phone,
-            u.unit_number,
-            prop.name as property_name,
-            prop.owner_id as landlord_id,
-            landlord.email as landlord_email, landlord.first_name as landlord_name, landlord.phone_number as landlord_phone
-          FROM public.payments p
-          JOIN public.leases l ON p.lease_id = l.id
-          JOIN public.tenants t ON l.tenant_id = t.id
-          JOIN public.units u ON l.unit_id = u.id
-          JOIN public.properties prop ON u.property_id = prop.id
-          JOIN public.users landlord ON prop.owner_id = landlord.id
-          WHERE p.id = ${payment.id}
-        `;
-
-                if (details) {
-                    const tenantEmailOptions = emailService.composePaymentConfirmation(
-                        details.tenant_email,
-                        details.tenant_name,
-                        details.amount,
-                        new Date(),
-                        details.property_name,
-                        details.unit_number,
-                        mpesaReceiptNumber
-                    );
-
-                    const landlordEmailOptions = emailService.composeLandlordPaymentNotification(
-                        details.landlord_email,
-                        details.landlord_name,
-                        details.tenant_name,
-                        details.amount,
-                        new Date(),
-                        details.property_name,
-                        details.unit_number,
-                        mpesaReceiptNumber
-                    );
-
-                    await sql`
-            INSERT INTO public.email_queue ("to", subject, html_content, text_content, metadata)
-            VALUES 
-              (${tenantEmailOptions.to}, ${tenantEmailOptions.subject}, ${tenantEmailOptions.html}, ${tenantEmailOptions.text ?? null}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: payment.id, recipient: 'tenant' })}),
-              (${landlordEmailOptions.to}, ${landlordEmailOptions.subject}, ${landlordEmailOptions.html}, ${landlordEmailOptions.text ?? null}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: payment.id, recipient: 'landlord' })})
-          `;
-
-                    // SMS Notifications
-                    const tenantMessage = smsService.composePaymentConfirmation(
-                        details.tenant_name,
-                        details.amount,
-                        details.property_name,
-                        details.unit_number,
-                        mpesaReceiptNumber
-                    );
-
-                    const landlordMessage = smsService.composeLandlordPaymentNotification(
-                        details.landlord_name,
-                        details.tenant_name,
-                        details.amount,
-                        details.property_name,
-                        details.unit_number,
-                        mpesaReceiptNumber
-                    );
-
-                    await sql`
-            INSERT INTO public.sms_queue ("to", message, metadata)
-            VALUES 
-              (${details.tenant_phone}, ${tenantMessage}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: payment.id, recipient: 'tenant' })}),
-              (${details.landlord_phone || details.landlord_email}, ${landlordMessage}, ${JSON.stringify({ type: 'payment_confirmation', paymentId: payment.id, recipient: 'landlord' })})
-          `;
-                }
-              } catch (notifyErr) {
-                console.error('[M-PESA Callback] Notification error:', notifyErr);
-              }
-            }
-
-        } else {
-            // Failure
-            console.warn(`[M-PESA Callback] Failed. Code: ${resultCode}, Desc: ${resultDesc}`);
-            await transitionPaymentStatus(sql, { trackingId: checkoutRequestId }, 'failed', {
-                description: `M-PESA Failed: ${resultDesc}`,
-            });
-        }
-
-        return res.status(200).json({ ResultCode: 0, ResultDesc: "Success" });
-
+      query = await mpesaService.queryStkPush(callback.checkoutRequestId);
     } catch (error: any) {
-        console.error('M-PESA Callback error:', error);
-        if (error instanceof InvoicePaymentError && error.code === 'PAYMENT_NOT_FOUND') {
-            return res.status(404).json({ ResultCode: 1, ResultDesc: 'Payment not found' });
-        }
-        return res.status(500).json({ ResultCode: 1, ResultDesc: "Internal Server Error" });
-    } finally {
-        await sql.end();
+      await sql`UPDATE public.external_payment_events SET processing_status = 'retry',
+        next_attempt_at = NOW() + INTERVAL '5 minutes', processing_attempts = processing_attempts + 1,
+        last_processing_error = ${String(error?.message || error).slice(0, 500)} WHERE id = ${event.id}`;
+      return providerResponse(res, 200, 0, 'Result captured; verification pending');
     }
-};
+
+    const verification = verifyStkResult(callback, query, {
+      amount: Number(payment.amount),
+      checkoutRequestId: payment.checkout_request_id,
+      merchantRequestId: payment.provider_merchant_request_id,
+      merchantId: payment.expected_merchant_id || mpesaService.getMerchantId(),
+    });
+    if (!verification.verified) {
+      await sql`UPDATE public.external_payment_events SET processing_status = 'review',
+        operator_review_required = true, processing_attempts = processing_attempts + 1,
+        last_processing_error = ${verification.reason || 'Provider verification failed'},
+        reconciliation_status = 'pending_review' WHERE id = ${event.id}`;
+      return providerResponse(res, 200, 0, 'Result captured for review');
+    }
+    if (verification.successful && receiptConflicts(payment.provider_receipt_id, callback.receipt)) {
+      await sql`UPDATE public.external_payment_events SET processing_status = 'review',
+        operator_review_required = true, reconciliation_status = 'pending_review',
+        last_processing_error = 'Successful result conflicts with the receipt already posted for this checkout'
+        WHERE id = ${event.id}`;
+      return providerResponse(res, 200, 0, 'Conflicting result captured for review');
+    }
+
+    const transition = await transitionPaymentStatus(
+      sql,
+      { paymentId: payment.id },
+      verification.successful ? 'completed' : 'failed',
+      verification.successful
+        ? {
+            transactionId: callback.receipt,
+            providerReceiptId: callback.receipt,
+            sourceEventId: event.id,
+            paymentMethod: 'mpesa',
+            paidDate: new Date(),
+          }
+        : { sourceEventId: event.id, description: `M-PESA result: ${callback.resultDesc}` },
+    );
+
+    await sql`UPDATE public.external_payment_events SET is_verified = true,
+      processing_status = 'processed', processed_at = NOW(), processing_attempts = processing_attempts + 1,
+      reconciliation_status = ${verification.successful ? 'auto_matched' : 'ignored'},
+      reconciled_at = NOW(), last_processing_error = NULL,
+      matched_invoice_id = ${transition.payment.invoice_id || null}
+      WHERE id = ${event.id}`;
+    return providerResponse(res, 200, 0, transition.changed ? 'Result processed' : 'Already processed');
+  } catch (error: any) {
+    console.error('[M-PESA callback] Processing failed', error instanceof Error ? error.message : String(error));
+    if (error instanceof z.ZodError) return providerResponse(res, 400, 1, 'Invalid callback payload');
+    if (error instanceof InvoicePaymentError && error.code === 'PAYMENT_NOT_FOUND') {
+      return providerResponse(res, 404, 1, 'Payment not found');
+    }
+    return providerResponse(res, 500, 1, 'Callback persistence or processing failed');
+  } finally {
+    await sql.end();
+  }
+}

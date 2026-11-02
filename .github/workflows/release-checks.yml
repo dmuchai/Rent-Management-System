@@ -1,0 +1,39 @@
+name: Release checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/**']
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: landee_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d landee_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/landee_test
+      SUPABASE_URL: http://127.0.0.1:54321
+      SUPABASE_SERVICE_ROLE_KEY: local-ci-placeholder-not-a-live-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm run check:route-entrypoints
+      - run: npm run test:financial-integrity
+      - run: npm run test:invoicing
+      - run: npm run test:subscription
+      - run: npm run test:account-deletion
+      - run: npm run test:kcb
+      - run: npm run build:vercel

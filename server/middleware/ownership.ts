@@ -8,11 +8,12 @@ function getActor(req: Request) {
   return {
     userId: user?.sub as string | undefined,
     role: user?.appRole as string | undefined,
+    contextOwnerId: user?.contextOwnerId as string | undefined,
   };
 }
 
 export async function ensurePropertyOwnership(req: Request, res: Response, propertyId: string): Promise<boolean> {
-  const { userId, role } = getActor(req);
+  const { userId, role, contextOwnerId } = getActor(req);
 
   if (!userId || !role) {
     res.status(401).json({ message: "Unauthorized" });
@@ -35,7 +36,7 @@ export async function ensurePropertyOwnership(req: Request, res: Response, prope
     return false;
   }
 
-  if (property.owner_id !== userId) {
+  if (property.owner_id !== contextOwnerId) {
     res.status(403).json({ message: "Forbidden" });
     return false;
   }
