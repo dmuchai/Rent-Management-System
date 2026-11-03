@@ -19,7 +19,7 @@ import infobipLogo from "@/assets/partners/infobip.png";
 export default function Landing() {
   // Set custom title for landing page
   useEffect(() => {
-    document.title = 'Landee | The #1 Property Management System in Kenya';
+    document.title = 'Landee | Property Management for Kenya';
 
     // Add smooth scrolling behavior
     document.documentElement.style.scrollBehavior = 'smooth';
@@ -47,7 +47,7 @@ export default function Landing() {
     },
     {
       title: "Automate payments",
-      description: "Enable M-Pesa and bank payments with instant reconciliation.",
+      description: "Activate supported payment channels and reconcile incoming records automatically or through review.",
     },
     {
       title: "Stay on top of operations",
@@ -57,19 +57,19 @@ export default function Landing() {
   const faqItems = [
     {
       question: "How fast can I get started?",
-      answer: "Most landlords are live within a day. Import tenants and units, then activate payments.",
+      answer: "Add your properties, units, and tenants, then configure the payment channels available to your account.",
     },
     {
       question: "Which payment methods are supported?",
-      answer: "We support M-Pesa, Pesapal, and bank transfers with automatic reconciliation.",
+      answer: "Landee supports M-Pesa, Pesapal, bank webhook, and statement-based workflows where the relevant channel is configured and activated.",
     },
     {
       question: "Do tenants need an app?",
-      answer: "No. Tenants can pay via M-Pesa or bank transfer and still receive receipts instantly.",
+      answer: "No. Tenant access and receipts depend on the workflow and payment channel configured by the landlord.",
     },
     {
       question: "Is my data secure?",
-      answer: "Yes. We use bank-grade security, backups, and role-based access controls.",
+      answer: "Landee uses authenticated access and scoped roles. Ask us about current backup and data-handling controls for your deployment.",
     },
     {
       question: "Can I export reports for accounting?",
@@ -209,7 +209,7 @@ export default function Landing() {
             <span className="text-primary bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent"> dashboard</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-3xl mx-auto leading-relaxed">
-            Automate M-Pesa and bank payments, reconcile instantly, and keep tenants informed with SMS and email reminders.
+            Reconcile supported M-Pesa and bank payment records when those channels are activated, and keep tenants informed with configured SMS and email reminders.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
             <Button
@@ -237,7 +237,7 @@ export default function Landing() {
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <i className="fas fa-check-circle text-primary"></i>
-              <span>Instant reconciliation</span>
+              <span>Automatic payment reconciliation on activated channels</span>
             </div>
             <div className="flex items-center gap-2">
               <i className="fas fa-check-circle text-primary"></i>
@@ -255,7 +255,7 @@ export default function Landing() {
       <section className="py-10 bg-muted/20 border-y border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-sm text-muted-foreground mb-6">
-            Trusted payment and messaging partners
+            Supported service integrations
           </p>
           <div className="flex flex-wrap items-center justify-center gap-8">
             {partnerLogos.map((logo) => (
@@ -270,25 +270,25 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Stats Section */}
+      {/* Evidence-based product summary */}
       <section className="py-16 bg-card border-y border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             <div>
-              <div className="text-3xl md:text-4xl font-bold text-primary mb-2">500+</div>
-              <div className="text-sm text-muted-foreground">Properties Managed</div>
+              <div className="text-3xl md:text-4xl font-bold text-primary mb-2">10</div>
+              <div className="text-sm text-muted-foreground">Active units on Starter</div>
             </div>
             <div>
-              <div className="text-3xl md:text-4xl font-bold text-chart-2 mb-2">1,200+</div>
-              <div className="text-sm text-muted-foreground">Active Tenants</div>
+              <div className="text-3xl md:text-4xl font-bold text-chart-2 mb-2">30 days</div>
+              <div className="text-sm text-muted-foreground">Eligible Starter trial</div>
             </div>
             <div>
-              <div className="text-3xl md:text-4xl font-bold text-chart-1 mb-2">99.9%</div>
-              <div className="text-sm text-muted-foreground">Uptime</div>
+              <div className="text-3xl md:text-4xl font-bold text-chart-1 mb-2">KES 1,000</div>
+              <div className="text-sm text-muted-foreground">Starter per month</div>
             </div>
             <div>
-              <div className="text-3xl md:text-4xl font-bold text-chart-5 mb-2">KES 50M+</div>
-              <div className="text-sm text-muted-foreground">Rent Collected</div>
+              <div className="text-3xl md:text-4xl font-bold text-chart-5 mb-2">Web + Android</div>
+              <div className="text-sm text-muted-foreground">One synced account</div>
             </div>
           </div>
           <div className="mt-10 rounded-2xl border border-border bg-muted/40 px-6 py-6 text-center">
@@ -359,7 +359,7 @@ export default function Landing() {
                 <i className="fas fa-credit-card text-chart-1 text-2xl"></i>
               </div>
               <h3 className="text-xl font-semibold mb-3">Payment Processing</h3>
-              <p className="text-muted-foreground leading-relaxed">Integrated Pesapal payments with automated rent collection and receipt generation.</p>
+              <p className="text-muted-foreground leading-relaxed">Payment attempts, receipts, and automatic payment reconciliation for supported, activated channels.</p>
             </div>
 
             <div className="group bg-card p-8 rounded-2xl border border-border hover:border-chart-4/50 hover:shadow-xl transition-all duration-300">
@@ -398,7 +398,7 @@ export default function Landing() {
             </div>
             <h2 className="text-3xl md:text-5xl font-bold mb-4">Connected to the tools you already use</h2>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-              Payments, messaging, and compliance integrations keep your workflow in one place.
+              Availability varies by configured provider and channel. Logos identify supported integration work, not contractual partnerships.
             </p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 items-center">
@@ -429,7 +429,7 @@ export default function Landing() {
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">Start with a 30-day Starter trial, then KES 1,000/month for up to 10 active units. Choose a larger plan as your portfolio grows.</p>
           </div>
 
-          <p className="text-center text-sm text-muted-foreground mb-8">Existing accounts keep their four-unit Free allowance. New registrations require a trial or paid subscription. Trials renew automatically unless cancelled; Google Play confirms eligibility and renewal details.</p>
+          <p className="text-center text-sm text-muted-foreground mb-8">Existing accounts keep their four-unit Free allowance. New registrations require a trial or paid subscription. Purchases currently occur in the installed Landee Android app through Google Play and then sync to the same web account. Google Play confirms eligibility and renewal details.</p>
           <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
             {/* Starter Plan */}
             <div className="bg-card border-2 border-border rounded-2xl p-8 hover:shadow-xl transition-all">
@@ -463,7 +463,7 @@ export default function Landing() {
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
-                  <span>Automatic bank reconciliation and receipts</span>
+                  <span>Automatic payment reconciliation and receipts on supported, activated channels</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <i className="fas fa-check-circle text-primary mt-1"></i>
@@ -491,7 +491,7 @@ export default function Landing() {
                 <li>✓ Unlimited properties and management users</li>
                 <li>✓ Scheduled reminders</li>
                 <li>✓ PDF statements and exports</li>
-                <li>✓ All features, including automatic bank reconciliation</li>
+                <li>✓ All features, including automatic payment reconciliation on activated channels</li>
               </ul>
               <Button variant="outline" className="w-full text-base py-6" onClick={redirectToLogin}>Choose Bronze</Button>
             </div>
@@ -777,7 +777,7 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-5xl font-bold mb-6">Ready to Transform Your Property Management?</h2>
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Join hundreds of landlords who have simplified their workflow with Landee
+            Start with the property-management workflow that fits your portfolio
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button

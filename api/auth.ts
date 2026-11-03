@@ -6,6 +6,7 @@ import { isOtpRateLimited, kenyanPhoneSchema, OTP_EXPIRY_MS, OTP_RESEND_WINDOW_M
 import { emailService } from "./_lib/emailService.js";
 import { createDbConnection } from "./_lib/db.js";
 import { checkRateLimit } from "./_lib/rate-limit.js";
+import { verifyAuth } from "./_lib/auth.js";
 
 /**
  * IMPORTANT PRINCIPLES
@@ -247,7 +248,7 @@ export default async function handler(
           email: user.email,
           first_name: firstName,
           last_name: lastName,
-          role: metadata.role || null,
+          role: null,
         };
 
         if (phoneNumber) {
@@ -344,16 +345,6 @@ export default async function handler(
       const admin = getAdminClient();
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
 
-      // Check if this email is already a tenant (invited or active)
-      const { data: existingTenant } = await admin
-        .from("tenants")
-        .select("id")
-        .eq("email", email)
-        .limit(1)
-        .maybeSingle();
-
-      const role = existingTenant ? "tenant" : null;
-
       // Use admin.generateLink({ type: 'signup' }) as the SINGLE call that both creates the
       // auth user and returns the confirmation link. This avoids the conflict that occurs when
       // calling supabase.auth.signUp() first and then generateLink() separately (generateLink
@@ -370,7 +361,6 @@ export default async function handler(
             firstName,
             lastName,
             phone_number: phoneNumber,
-            ...(role ? { role } : {}),
           },
         },
       });
@@ -643,6 +633,8 @@ export default async function handler(
     if (action === "user" && req.method === "GET") {
       const user = await getUserFromAuthHeader(req);
       if (!user) return res.status(401).json({ error: "Unauthorized" });
+      const authority = await verifyAuth(req);
+      if (!authority) return res.status(403).json({ error: "No trusted account context is available" });
 
       const admin = getAdminClient();
 
@@ -685,11 +677,12 @@ export default async function handler(
       let phoneVerified = profile?.phone_verified ?? false;
 
       // If user is a tenant and phone is missing, try to fetch from tenants table
-      if (profile?.role === "tenant" && !phoneNumber) {
+      if (authority.role === "tenant" && !phoneNumber) {
         const { data: tenantData } = await admin
           .from("tenants")
           .select("phone")
           .eq("user_id", user.id)
+          .eq("landlord_id", authority.contextOwnerId)
           .single();
 
         if (tenantData?.phone) {
@@ -697,14 +690,10 @@ export default async function handler(
         }
       }
 
-      // Determine user role - handle null vs undefined properly
-      const userRole = profile?.role || user.user_metadata?.role || null;
-
       console.log(`[Auth] Returning user data:`, {
         id: user.id,
-        role: userRole,
-        profileRole: profile?.role,
-        metadataRole: user.user_metadata?.role
+        role: authority.role,
+        contextOwnerId: authority.contextOwnerId,
       });
 
       return res.status(200).json({
@@ -712,7 +701,8 @@ export default async function handler(
         email: user.email,
         firstName: profile?.first_name ?? user.user_metadata?.first_name ?? user.user_metadata?.firstName ?? "",
         lastName: profile?.last_name ?? user.user_metadata?.last_name ?? user.user_metadata?.lastName ?? "",
-        role: userRole,
+        role: authority.role,
+        contextOwnerId: authority.contextOwnerId,
         phoneNumber: phoneNumber || user.user_metadata?.phone_number || "",
         phoneVerified,
       });
@@ -864,6 +854,30 @@ export default async function handler(
         });
       }
 
+      let contextOwnerId: string;
+      let authoritySource: 'administrator' | 'tenant_link' | 'invitation';
+      if (role === 'landlord') {
+        contextOwnerId = user.id;
+        authoritySource = 'administrator';
+      } else if (role === 'tenant') {
+        const { data: tenantLink } = await admin.from('tenants').select('landlord_id')
+          .or(`user_id.eq.${user.id},email.eq.${user.email}`).not('landlord_id', 'is', null).limit(1).maybeSingle();
+        if (!tenantLink?.landlord_id) {
+          return res.status(403).json({ error: 'A landlord invitation is required for tenant access' });
+        }
+        contextOwnerId = tenantLink.landlord_id;
+        authoritySource = 'tenant_link';
+      } else {
+        const { data: managerMembership } = await admin.from('user_context_memberships')
+          .select('context_owner_id').eq('user_id', user.id).eq('role', 'property_manager')
+          .eq('status', 'active').limit(1).maybeSingle();
+        if (!managerMembership?.context_owner_id) {
+          return res.status(403).json({ error: 'A portfolio invitation is required for property-manager access' });
+        }
+        contextOwnerId = managerMembership.context_owner_id;
+        authoritySource = 'invitation';
+      }
+
       // 1. Update public.users table, creating the profile row if sync-user has
       // not completed yet after an OAuth/email-confirmation redirect.
       const { error: dbError } = await admin
@@ -880,17 +894,17 @@ export default async function handler(
         return res.status(500).json({ error: "Failed to set role", details: dbError.message });
       }
 
-      // 2. Update Supabase Auth metadata (so it persists across sessions)
-      const { error: authError } = await admin.auth.admin.updateUserById(user.id, {
-        user_metadata: {
-          ...user.user_metadata,
-          role,
-        }
-      });
-
-      if (authError) {
-        console.error("[Auth] Role metadata update failed:", authError);
-        // Not critical enough to fail the request if DB update succeeded
+      const { error: membershipError } = await admin.from('user_context_memberships').upsert({
+        user_id: user.id,
+        context_owner_id: contextOwnerId,
+        role,
+        status: 'active',
+        authority_source: authoritySource,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,context_owner_id,role' });
+      if (membershipError) {
+        console.error('[Auth] Scoped membership creation failed:', membershipError.message);
+        return res.status(500).json({ error: 'Failed to establish scoped role' });
       }
 
       console.log(`[Auth] Role set to '${role}' for user ${user.id}`);

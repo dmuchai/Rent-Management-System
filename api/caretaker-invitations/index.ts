@@ -241,7 +241,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           user_metadata: {
             first_name: invitation.first_name,
             last_name: invitation.last_name,
-            role: 'caretaker',
           }
         });
 
@@ -270,8 +269,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               'active'
             )
             ON CONFLICT (id) DO UPDATE SET
-              role = EXCLUDED.role,
-              created_by = EXCLUDED.created_by,
+              role = COALESCE(public.users.role, EXCLUDED.role),
+              created_by = COALESCE(public.users.created_by, EXCLUDED.created_by),
               status = EXCLUDED.status
           `;
 
@@ -287,6 +286,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               )
             `;
           }
+          await tx`
+            INSERT INTO public.user_context_memberships
+              (user_id, context_owner_id, role, status, authority_source)
+            VALUES (${authUserId}, ${invitation.landlord_id}, 'caretaker', 'active', 'invitation')
+            ON CONFLICT (user_id, context_owner_id, role)
+            DO UPDATE SET status = 'active', authority_source = 'invitation', updated_at = NOW()
+          `;
 
           await tx`
             UPDATE public.caretaker_invitations
@@ -317,7 +323,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (shouldUpdateExistingAuth && existingAuthUser) {
         const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
           existingAuthUser.id,
-          { password, user_metadata: { role: 'caretaker', first_name: invitation.first_name, last_name: invitation.last_name } }
+          { password, user_metadata: { first_name: invitation.first_name, last_name: invitation.last_name } }
         );
 
         if (updateError) {

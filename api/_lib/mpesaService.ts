@@ -13,6 +13,15 @@ interface StkPushResponse {
     CustomerMessage: string;
 }
 
+export interface StkQueryResponse {
+    MerchantRequestID: string;
+    CheckoutRequestID: string;
+    ResultCode: string | number;
+    ResultDesc: string;
+    ResponseCode?: string;
+    ResponseDescription?: string;
+}
+
 export class MpesaService {
     private baseUrl: string;
     private consumerKey: string;
@@ -127,6 +136,42 @@ export class MpesaService {
         }
 
         return await response.json();
+    }
+
+    /**
+     * Daraja does not document a callback signature for M-PESA Express. Query
+     * the authenticated merchant endpoint before treating callback data as a
+     * payment result. This deliberately fails closed when credentials are absent.
+     */
+    async queryStkPush(checkoutRequestId: string): Promise<StkQueryResponse> {
+        if (!this.isConfigured()) throw new Error('M-PESA service not configured');
+        const token = await this.getAccessToken();
+        const timestamp = new Date(Date.now() + 3 * 60 * 60 * 1000)
+            .toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+        const password = Buffer.from(`${this.shortcode}${this.passkey}${timestamp}`).toString('base64');
+        const response = await fetch(`${this.baseUrl}/mpesa/stkpushquery/v1/query`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token.trim()}`,
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'User-Agent': 'Landee/1.0.0',
+            },
+            body: JSON.stringify({
+                BusinessShortCode: this.shortcode,
+                Password: password,
+                Timestamp: timestamp,
+                CheckoutRequestID: checkoutRequestId,
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`M-PESA STK status query failed: ${response.status} ${response.statusText}`);
+        }
+        return response.json() as Promise<StkQueryResponse>;
+    }
+
+    getMerchantId(): string {
+        return this.shortcode;
     }
 
     isConfigured(): boolean {

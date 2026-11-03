@@ -7,7 +7,7 @@ import { Menu, PanelLeftClose, PanelLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { API_BASE_URL } from "@/lib/config";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, setAuthorityContext } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { clearAuthQueries } from "@/lib/auth-keys";
 
@@ -20,6 +20,8 @@ interface HeaderProps {
   isSidebarCollapsed?: boolean;
 }
 
+type AuthorityContext = { role: string; contextOwnerId: string; label: string };
+
 export default function Header({ title, showSidebar = true, onSectionChange, onMenuClick, onToggleSidebar, isSidebarCollapsed }: HeaderProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -27,6 +29,14 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showAllNotifications, setShowAllNotifications] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const { data: authorityContexts } = useQuery<{
+    contexts: AuthorityContext[];
+    active: { role: string; contextOwnerId: string };
+  }>({
+    queryKey: ['/api/auth-contexts'],
+    queryFn: async () => (await apiRequest('GET', '/api/auth-contexts')).json(),
+    enabled: Boolean(user),
+  });
 
   const handleLogout = async () => {
     // Call API logout FIRST while we still have the session token
@@ -51,6 +61,7 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
 
     // Clear auth-related queries from cache using consistent keys
     clearAuthQueries(queryClient);
+    setAuthorityContext(null);
 
     // Always redirect to login after logout, regardless of API result
     toast({
@@ -330,6 +341,33 @@ export default function Header({ title, showSidebar = true, onSectionChange, onM
                   <Badge variant="secondary" className="mt-2 capitalize">{user?.role || 'Landlord'}</Badge>
                 </div>
                 <div className="p-2">
+                  {authorityContexts && authorityContexts.contexts.length > 1 ? (
+                    <div className="px-3 py-2">
+                      <label htmlFor="authority-context" className="mb-1 block text-xs font-medium text-muted-foreground">
+                        Use Landee as
+                      </label>
+                      <select
+                        id="authority-context"
+                        className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                        value={`${authorityContexts.active.role}:${authorityContexts.active.contextOwnerId}`}
+                        onChange={(event) => {
+                          const context = authorityContexts.contexts.find((item) =>
+                            `${item.role}:${item.contextOwnerId}` === event.target.value);
+                          if (!context) return;
+                          setAuthorityContext(context);
+                          queryClient.clear();
+                          window.location.reload();
+                        }}
+                      >
+                        {authorityContexts.contexts.map((context) => (
+                          <option key={`${context.role}:${context.contextOwnerId}`}
+                            value={`${context.role}:${context.contextOwnerId}`}>
+                            {context.role.replace('_', ' ')} · {context.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
                   <button 
                     onClick={handleViewProfile}
                     className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent rounded-md"

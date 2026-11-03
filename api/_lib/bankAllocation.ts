@@ -1,4 +1,5 @@
 import type { Sql } from 'postgres';
+import { enqueuePaymentOutbox } from './paymentOutbox.js';
 
 type OutstandingInvoice = {
   id: string;
@@ -129,9 +130,9 @@ export async function allocateBankEvent(
       // The event lock and unique index make concurrent/repeated delivery safe.
       const receipts = await tx`
         INSERT INTO public.payments
-          (lease_id, invoice_id, bank_event_id, amount, due_date, paid_date,
+          (lease_id, invoice_id, bank_event_id, source_event_id, amount, due_date, paid_date,
            payment_method, payment_type, payment_source, status, description)
-        VALUES (${invoice.lease_id}, ${invoice.id}, ${eventId}, ${amount},
+        VALUES (${invoice.lease_id}, ${invoice.id}, ${eventId}, ${eventId}, ${amount},
                 ${new Date(invoice.due_date)}, ${new Date(event.transaction_time)},
                 'bank_transfer', 'rent', 'bank_reconciliation', 'completed',
                 'Bank payment allocated to oldest outstanding rent invoice')
@@ -142,6 +143,11 @@ export async function allocateBankEvent(
         RETURNING id
       `;
       if (receipts.length !== 1) throw new Error('Bank allocation already has a completed receipt');
+      await tx`INSERT INTO public.payment_audit_history
+        (payment_id, source_event_id, action, amount, reason, evidence)
+        VALUES (${receipts[0].id}, ${eventId}, 'posted', ${amount},
+          'Oldest-invoice allocation', ${JSON.stringify({ provider: event.provider })}::jsonb)`;
+      await enqueuePaymentOutbox(tx, receipts[0].id);
       await tx`
         UPDATE public.invoices SET amount_paid = ${nextPaid},
           status = ${paid ? 'paid' : 'partially_paid'}::invoice_status,
@@ -157,7 +163,8 @@ export async function allocateBankEvent(
       SET reconciliation_status = ${options.auditEvidence ? 'manually_matched' : 'auto_matched'},
           matched_invoice_id = ${allocations[0].invoice.id},
           reconciliation_method = 'oldest_invoice', confidence_score = 100,
-          reconciled_at = NOW(), reconciliation_notes = ${note}
+          reconciled_at = NOW(), reconciliation_notes = ${note},
+          processing_status = 'processed', processed_at = NOW(), last_processing_error = NULL
       WHERE id = ${eventId}
     `;
     return { matched: true, duplicate: false, allocationCount: allocations.length,
@@ -191,12 +198,17 @@ export async function reverseBankAllocations(tx: any, eventId: string, landlordI
         updated_at = NOW() WHERE id = ${invoice.id}
     `;
     await tx`UPDATE public.payments SET status = 'cancelled', updated_at = NOW() WHERE id = ${allocation.id}`;
+    await tx`INSERT INTO public.payment_audit_history
+      (payment_id, source_event_id, action, amount, actor_id, reason)
+      VALUES (${allocation.id}, ${eventId}, 'reversed', ${allocation.amount}, ${landlordId},
+        'Landlord reversed bank allocation')`;
   }
   if (allocations.length) {
     await tx`
       UPDATE public.external_payment_events SET reconciliation_status = 'pending_review',
         matched_invoice_id = NULL, reconciliation_method = 'manual_review', confidence_score = 0,
-        reconciled_at = NULL, reconciliation_notes = 'Bank allocations reversed by landlord; receipts cancelled'
+        reconciled_at = NULL, reconciliation_notes = 'Bank allocations reversed by landlord; receipts cancelled',
+        processing_status = 'review', operator_review_required = true
       WHERE id = ${eventId}
     `;
   }

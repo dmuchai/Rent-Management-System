@@ -1,304 +1,130 @@
-import { VercelRequest, VercelResponse } from '@vercel/node';
-import { createDbConnection } from '../../_lib/db';
-import { reconcilePayment, recordReconciliation } from '../../_lib/reconciliationEngine';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { z } from 'zod';
+import { createDbConnection } from '../../_lib/db.js';
+import { reconcilePayment, recordReconciliation } from '../../_lib/reconciliationEngine.js';
 import { ownerHasSubscriptionFeature } from '../../_lib/subscription.js';
 
-const sql = createDbConnection();
+const SAFARICOM_IPS = new Set([
+  '196.201.214.200', '196.201.214.206', '196.201.213.114', '196.201.214.207',
+  '196.201.214.208', '196.201.213.44', '196.201.212.127', '196.201.212.128',
+  '196.201.212.129', '196.201.212.136', '196.201.212.74', '196.201.212.69',
+]);
 
-/**
- * M-Pesa C2B Callback Handler for Bank Paybill Payments
- * 
- * Webhook endpoint that receives payment notifications from Safaricom
- * when customers pay to a bank's paybill using a landlord's account number.
- * 
- * Flow:
- * 1. Tenant pays: Paybill 222111 (Family Bank), Account 1234567890 (Landlord's account)
- * 2. Safaricom sends C2B notification to this webhook
- * 3. Extract bank paybill + account number from callback
- * 4. Lookup landlord by bank account
- * 5. Route to reconciliation engine for heuristic matching
- * 6. Auto-match or flag for manual review
- */
+const c2bSchema = z.object({
+  TransactionType: z.string().min(1),
+  TransID: z.string().min(1),
+  TransTime: z.string().regex(/^\d{14}$/),
+  TransAmount: z.coerce.number().positive(),
+  BusinessShortCode: z.string().min(1),
+  BillRefNumber: z.string().min(1),
+  MSISDN: z.string().min(9),
+}).passthrough();
 
-// Safaricom IP whitelist (production IPs - update based on Safaricom documentation)
-const SAFARICOM_IPS = [
-  '196.201.214.200',
-  '196.201.214.206',
-  '196.201.213.114',
-  '196.201.214.207',
-  '196.201.214.208',
-  '196.201.213.44',
-  '196.201.212.127',
-  '196.201.212.128',
-  '196.201.212.129',
-  '196.201.212.136',
-  '196.201.212.74',
-  '196.201.212.69',
-];
-
-interface MPesaC2BCallback {
-  TransactionType: string;
-  TransID: string;
-  TransTime: string;
-  TransAmount: string;
-  BusinessShortCode: string;
-  BillRefNumber: string;
-  InvoiceNumber?: string;
-  OrgAccountBalance?: string;
-  ThirdPartyTransID?: string;
-  MSISDN: string;
-  FirstName?: string;
-  MiddleName?: string;
-  LastName?: string;
-}
-
-/**
- * Verify request comes from Safaricom
- * Only trusts x-forwarded-for when running on Vercel to prevent IP spoofing
- */
-function verifySourceIP(req: VercelRequest): boolean {
-  let clientIP: string | undefined;
-
-  // Only trust proxy headers when running on Vercel
-  // Otherwise, attackers could spoof x-forwarded-for/x-real-ip headers
+function sourceIp(req: VercelRequest) {
   if (process.env.VERCEL === '1' || process.env.VERCEL === 'true') {
-    // On Vercel, trust the first IP in x-forwarded-for (original client)
-    // Format: "client, proxy1, proxy2" - we want "client"
-    const forwardedFor = req.headers['x-forwarded-for']?.toString();
-    if (forwardedFor) {
-      clientIP = forwardedFor.split(',')[0].trim();
-    } else {
-      // Fallback to x-real-ip on Vercel
-      clientIP = req.headers['x-real-ip']?.toString()?.trim();
-    }
-  } else {
-    // Not on Vercel - use socket remoteAddress directly (no proxy)
-    clientIP = req.socket?.remoteAddress;
+    return req.headers['x-forwarded-for']?.toString().split(',')[0].trim()
+      || req.headers['x-real-ip']?.toString().trim();
   }
-
-  if (!clientIP) {
-    return false;
-  }
-
-  return SAFARICOM_IPS.includes(clientIP);
+  return req.socket?.remoteAddress?.replace(/^::ffff:/, '');
 }
 
-/**
- * Prevent replay attacks using timestamp validation
- * M-Pesa TransTime is in EAT (East Africa Time, UTC+3)
- */
-function validateTimestamp(transTime: string): boolean {
-  try {
-    // TransTime format: YYYYMMDDHHmmss (e.g., "20230615143022")
-    // This is in EAT (East Africa Time = UTC+3)
-    const year = parseInt(transTime.substring(0, 4));
-    const month = parseInt(transTime.substring(4, 6)) - 1;
-    const day = parseInt(transTime.substring(6, 8));
-    const hour = parseInt(transTime.substring(8, 10));
-    const minute = parseInt(transTime.substring(10, 12));
-    const second = parseInt(transTime.substring(12, 14));
-
-    // Convert EAT to UTC by subtracting 3 hours
-    // Create UTC timestamp then subtract 3 hours (EAT = UTC+3)
-    const paymentTimeUtc = new Date(Date.UTC(year, month, day, hour - 3, minute, second));
-    const nowUtc = Date.now(); // Already in UTC (milliseconds since epoch)
-    const ageInMinutes = (nowUtc - paymentTimeUtc.getTime()) / (1000 * 60);
-
-    // Reject if payment is more than 15 minutes old (replay attack)
-    // or in the future (clock skew)
-    return ageInMinutes >= 0 && ageInMinutes <= 15;
-  } catch (error) {
-    return false;
-  }
+function transactionTime(value: string) {
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(4, 6)) - 1;
+  const day = Number(value.slice(6, 8));
+  const hour = Number(value.slice(8, 10));
+  const minute = Number(value.slice(10, 12));
+  const second = Number(value.slice(12, 14));
+  const result = new Date(Date.UTC(year, month, day, hour - 3, minute, second));
+  if (Number.isNaN(result.getTime())) throw new Error('Invalid transaction time');
+  return result;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!SAFARICOM_IPS.has(sourceIp(req) || '')) return res.status(403).json({ error: 'Forbidden' });
+
+  let callback: z.infer<typeof c2bSchema>;
+  try {
+    callback = c2bSchema.parse(req.body);
+  } catch (error) {
+    return res.status(400).json({ ResultCode: 1, ResultDesc: 'Invalid callback payload' });
   }
 
+  const sql = createDbConnection();
+  let eventId: string | null = null;
   try {
-    // Security Layer 1: IP Whitelist
-    if (!verifySourceIP(req)) {
-    const callback = req.body as MPesaC2BCallback;
-
-    // Basic validation
-    if (!callback.TransID || !callback.TransTime || !callback.TransAmount || 
-        !callback.BusinessShortCode || !callback.BillRefNumber || !callback.MSISDN) {
-      console.error('[M-Pesa C2B] Missing required fields:', callback);
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    const callback = req.body as MPesaC2BCallback;
-
-    // Security Layer 2: Timestamp validation (prevent replay)
-    if (!validateTimestamp(callback.TransTime)) {
-      console.error('[M-Pesa C2B] Invalid timestamp:', callback.TransTime);
-      return res.status(400).json({ error: 'Invalid timestamp' });
-    }
-
-    // Parse payment details
-    const phoneNumber = callback.MSISDN;
-    const amount = parseFloat(callback.TransAmount);
-    const bankPaybillNumber = callback.BusinessShortCode;
-    const bankAccountNumber = callback.BillRefNumber;
-    const transactionId = callback.TransID;
-
-    // Parse timestamp
-    const year = parseInt(callback.TransTime.substring(0, 4));
-    const month = parseInt(callback.TransTime.substring(4, 6)) - 1;
-    const day = parseInt(callback.TransTime.substring(6, 8));
-    const hour = parseInt(callback.TransTime.substring(8, 10));
-    const minute = parseInt(callback.TransTime.substring(10, 12));
-    const second = parseInt(callback.TransTime.substring(12, 14));
-    const timestamp = new Date(year, month, day, hour, minute, second);
-
-    // Lookup landlord payment channel
     const [channel] = await sql`
-      SELECT landlord_id, bank_name, display_name
-      FROM public.landlord_payment_channels
-      WHERE bank_paybill_number = ${bankPaybillNumber}
-        AND bank_account_number = ${bankAccountNumber}
-        AND channel_type = 'mpesa_to_bank'
-        AND is_active = true
+      SELECT id, landlord_id FROM public.landlord_payment_channels
+      WHERE bank_paybill_number = ${callback.BusinessShortCode}
+        AND bank_account_number = ${callback.BillRefNumber}
+        AND channel_type = 'mpesa_to_bank' AND is_active = true
+      LIMIT 1
     `;
-
-    if (!channel) {
-      // Bank account not registered - store as unmatched
-      // Use ON CONFLICT to make this idempotent (handle duplicate webhooks)
-      const result = await sql`
-        INSERT INTO public.external_payment_events (
-          event_type,
-          provider,
-          external_transaction_id,
-          amount,
-          payer_phone,
-          payer_account_ref,
-          transaction_time,
-          raw_payload,
-          reconciliation_status
-        ) VALUES (
-          'mpesa_c2b',
-          'safaricom',
-          ${transactionId},
-          ${amount},
-          ${phoneNumber},
-          ${bankAccountNumber},
-          ${timestamp.toISOString()},
-          ${JSON.stringify(callback)},
-          'unmatched'
-        )
-        ON CONFLICT ON CONSTRAINT uq_external_payment_events_provider_txn DO NOTHING
-      `;
-
-      // Check if insert succeeded (new transaction) or was duplicate
-      if (result.count === 0) {
-        console.warn('[M-Pesa C2B] Duplicate transaction (unmatched):', transactionId);
-      } else {
-        console.warn('[M-Pesa C2B] Unknown bank account:', {
-          paybill: bankPaybillNumber,
-          account: bankAccountNumber,
-        });
-      }
-
-      // Always return success to Safaricom to prevent retries
-      return res.status(200).json({
-        ResultCode: 0,
-        ResultDesc: result.count === 0 ? 'Already processed' : 'Payment received (channel not registered)',
-      });
-    }
-
-    // Store payment event (idempotent insert with ON CONFLICT)
-    const result = await sql`
+    const timestamp = transactionTime(callback.TransTime);
+    const [event] = await sql`
       INSERT INTO public.external_payment_events (
-        event_type,
-        provider,
-        landlord_id,
-        payment_channel_id,
-        external_transaction_id,
-        amount,
-        payer_phone,
-        payer_account_ref,
-        transaction_time,
-        raw_payload,
-        reconciliation_status
+        event_type, provider, landlord_id, payment_channel_id, external_transaction_id,
+        amount, payer_phone, payer_account_ref, transaction_time, raw_payload,
+        reconciliation_status, processing_status, is_verified, operator_review_required
       ) VALUES (
-        'mpesa_c2b',
-        'safaricom',
-        ${channel.landlord_id},
-        NULL,
-        ${transactionId},
-        ${amount},
-        ${phoneNumber},
-        ${bankAccountNumber},
-        ${timestamp.toISOString()},
-        ${JSON.stringify(callback)},
-        'unmatched'
+        'mpesa_c2b', 'safaricom', ${channel?.landlord_id || null}, ${channel?.id || null},
+        ${callback.TransID}, ${callback.TransAmount}, ${callback.MSISDN}, ${callback.BillRefNumber},
+        ${timestamp}, ${JSON.stringify(callback)}::jsonb,
+        ${channel ? 'unmatched' : 'pending_review'}, ${channel ? 'received' : 'review'}, true, ${!channel}
       )
-      ON CONFLICT ON CONSTRAINT uq_external_payment_events_provider_txn DO NOTHING
-      RETURNING id
+      ON CONFLICT ON CONSTRAINT uq_external_payment_events_provider_txn
+      DO UPDATE SET external_transaction_id = EXCLUDED.external_transaction_id
+      RETURNING id, landlord_id, processing_status
     `;
+    eventId = event.id;
 
-    // Check if this is a duplicate transaction
-    if (result.count === 0) {
-      console.warn('[M-Pesa C2B] Duplicate transaction:', transactionId);
-      return res.status(200).json({
-        ResultCode: 0,
-        ResultDesc: 'Already processed',
-      });
+    if (!event.landlord_id) {
+      return res.status(200).json({ ResultCode: 0, ResultDesc: 'Payment captured for channel review' });
+    }
+    if (event.processing_status === 'processed') {
+      return res.status(200).json({ ResultCode: 0, ResultDesc: 'Already processed' });
+    }
+    if (!(await ownerHasSubscriptionFeature(event.landlord_id, 'payment_reconciliation'))) {
+      await sql`UPDATE public.external_payment_events SET processing_status = 'review',
+        operator_review_required = true, reconciliation_status = 'pending_review',
+        reconciliation_notes = 'Reconciliation feature is not active for this portfolio'
+        WHERE id = ${event.id}`;
+      return res.status(200).json({ ResultCode: 0, ResultDesc: 'Payment captured for review' });
     }
 
-    const [paymentEvent] = result;
-
-    if (!(await ownerHasSubscriptionFeature(channel.landlord_id, 'payment_reconciliation'))) {
-      return res.status(200).json({ ResultCode: 0, ResultDesc: 'Payment received' });
+    await sql`UPDATE public.external_payment_events SET processing_status = 'processing',
+      processing_started_at = NOW() WHERE id = ${event.id}
+      AND processing_status IN ('received', 'retry', 'processing')`;
+    try {
+      const result = await reconcilePayment(sql, {
+        id: event.id,
+        transactionId: callback.TransID,
+        phoneNumber: callback.MSISDN,
+        amount: callback.TransAmount,
+        timestamp,
+        bankPaybillNumber: callback.BusinessShortCode,
+        bankAccountNumber: callback.BillRefNumber,
+        rawData: callback,
+      });
+      await recordReconciliation(sql, event.id, callback.TransAmount, result);
+    } catch (error: any) {
+      await sql`UPDATE public.external_payment_events SET processing_status =
+          CASE WHEN processing_attempts + 1 >= 5 THEN 'failed' ELSE 'retry' END,
+        processing_attempts = processing_attempts + 1,
+        next_attempt_at = NOW() + (LEAST(processing_attempts + 1, 5) * INTERVAL '5 minutes'),
+        last_processing_error = ${String(error?.message || error).slice(0, 500)},
+        operator_review_required = (processing_attempts + 1 >= 5)
+        WHERE id = ${event.id}`;
     }
 
-    // Attempt automatic reconciliation
-    const reconciliationResult = await reconcilePayment(sql, {
-      id: paymentEvent.id,
-      transactionId,
-      phoneNumber,
-      amount,
-      timestamp,
-      bankPaybillNumber,
-      bankAccountNumber,
-      rawData: callback,
-    });
-
-    // Record reconciliation result
-    await recordReconciliation(sql, paymentEvent.id, amount, reconciliationResult);
-
-    // Log outcome
-    if (reconciliationResult.matched) {
-      console.log('[M-Pesa C2B] Auto-matched:', {
-        transactionId,
-        invoiceId: reconciliationResult.invoiceId,
-        confidence: reconciliationResult.confidence,
-        method: reconciliationResult.method,
-      });
-    } else {
-      console.warn('[M-Pesa C2B] Manual review required:', {
-        transactionId,
-        reasons: reconciliationResult.reasons,
-      });
-    }
-
-    // Return success to Safaricom
-    return res.status(200).json({
-      ResultCode: 0,
-      ResultDesc: 'Payment processed successfully',
-    });
-  } catch (error) {
-    console.error('[M-Pesa C2B] Error:', error);
-    
-    // Return success to Safaricom to prevent retries
-    // Log error for manual investigation
-    return res.status(200).json({
-      ResultCode: 0,
-      ResultDesc: 'Payment received (processing error)',
-    });
+    return res.status(200).json({ ResultCode: 0, ResultDesc: 'Payment captured' });
+  } catch (error: any) {
+    console.error('[M-PESA C2B] Durable ingestion failed', error instanceof Error ? error.message : String(error));
+    // A non-success response is intentional: if durable capture itself failed,
+    // the provider must retry rather than silently losing the notification.
+    return res.status(500).json({ ResultCode: 1, ResultDesc: eventId ? 'Processing state update failed' : 'Capture failed' });
+  } finally {
+    await sql.end();
   }
 }

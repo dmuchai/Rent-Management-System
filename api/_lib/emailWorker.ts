@@ -1,5 +1,7 @@
 import { createDbConnection } from './db.js';
 import { EmailService } from './emailService.js';
+import { randomUUID } from 'node:crypto';
+import { claimEmailJobs } from './queueClaims.js';
 
 const emailService = new EmailService();
 
@@ -12,14 +14,10 @@ export async function processEmailQueue(batchSize = 20) {
     const sql = createDbConnection();
 
     try {
-        // Fetch pending emails
-        const pendingEmails = await sql`
-            SELECT * FROM public.email_queue
-            WHERE status IN ('pending', 'failed')
-              AND retry_count < 5
-            ORDER BY created_at ASC
-            LIMIT ${batchSize}
-        `;
+        const claimToken = randomUUID();
+        // Atomic claim with an expiring lease. SKIP LOCKED allows concurrent
+        // workers without selecting the same delivery.
+        const pendingEmails = await claimEmailJobs(sql, batchSize, claimToken);
 
         if (pendingEmails.length === 0) {
             console.log(`${logPrefix} No pending emails to process.`);
@@ -33,13 +31,6 @@ export async function processEmailQueue(batchSize = 20) {
 
         for (const email of pendingEmails) {
             try {
-                // Mark as processing
-                await sql`
-                    UPDATE public.email_queue
-                    SET status = 'processing', updated_at = NOW()
-                    WHERE id = ${email.id}
-                `;
-
                 await emailService.sendEmail({
                     to: email.to,
                     subject: email.subject,
@@ -50,12 +41,13 @@ export async function processEmailQueue(batchSize = 20) {
                 // Mark as sent
                 await sql`
                     UPDATE public.email_queue
-                    SET status = 'sent', sent_at = NOW(), updated_at = NOW()
-                    WHERE id = ${email.id}
+                    SET status = 'sent', sent_at = NOW(), claim_token = NULL,
+                        lease_expires_at = NULL, updated_at = NOW()
+                    WHERE id = ${email.id} AND claim_token = ${claimToken}
                 `;
 
                 successCount++;
-                console.log(`${logPrefix} SUCCESS: ${email.subject} -> ${email.to}`);
+                console.log(`${logPrefix} SUCCESS: ${email.id}`);
             } catch (error: any) {
                 failCount++;
                 console.error(`${logPrefix} ERROR for ${email.id}:`, error.message);
@@ -65,8 +57,9 @@ export async function processEmailQueue(batchSize = 20) {
                     SET status = 'failed', 
                         retry_count = retry_count + 1,
                         last_error = ${error.message || String(error)},
-                        updated_at = NOW()
-                    WHERE id = ${email.id}
+                        available_at = NOW() + (LEAST(retry_count + 1, 5) * INTERVAL '5 minutes'),
+                        claim_token = NULL, lease_expires_at = NULL, updated_at = NOW()
+                    WHERE id = ${email.id} AND claim_token = ${claimToken}
                 `;
             }
         }

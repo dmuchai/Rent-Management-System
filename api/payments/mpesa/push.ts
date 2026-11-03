@@ -59,7 +59,11 @@ export default async (req: VercelRequest, res: VercelResponse) => {
             // 3. Update payment with CheckoutRequestID for tracking
             await sql`
         UPDATE public.payments
-        SET pesapal_order_tracking_id = ${response.CheckoutRequestID} 
+        SET pesapal_order_tracking_id = ${response.CheckoutRequestID},
+            provider_checkout_id = ${response.CheckoutRequestID},
+            provider_merchant_request_id = ${response.MerchantRequestID},
+            expected_merchant_id = ${mpesaService.getMerchantId()},
+            updated_at = NOW()
         WHERE id = ${payment.id}
       `;
             // Note: Reusing pesapal_order_tracking_id for simplicity or we could add a dedicated field.

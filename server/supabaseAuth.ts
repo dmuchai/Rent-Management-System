@@ -12,6 +12,7 @@ dotenv.config();
 import { createClient } from '@supabase/supabase-js';
 import type { Express, RequestHandler } from 'express';
 import { requiresManagementSubscription, READ_ONLY_SUBSCRIPTION_ERROR } from '../shared/subscription/write-policy.js';
+import { selectTrustedAuthority } from '../api/_lib/authority.js';
 
 declare global {
   namespace Express {
@@ -77,17 +78,32 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
       console.log('Error fetching user role:', roleError.message);
     }
 
+    const { data: memberships } = await supabase.from('user_context_memberships')
+      .select('role, context_owner_id').eq('user_id', userId).eq('status', 'active');
+    const authority = memberships?.length ? selectTrustedAuthority(
+      memberships,
+      req.headers['x-landee-context-role']?.toString(),
+      req.headers['x-landee-context-owner']?.toString(),
+    ) : (userData?.role ? {
+      role: userData.role,
+      context_owner_id: ['caretaker', 'property_manager'].includes(userData.role) ? userData.created_by : userId,
+    } : null);
+    if (!authority?.role || !authority.context_owner_id) {
+      return res.status(403).json({ message: 'No trusted account context is available' });
+    }
+
     // Attach payload and role to request
     // Using 'appRole' to avoid collision with Supabase JWT's 'role' field
     req.user = {
       ...(payload as any),
-      appRole: userData?.role || (payload as any).user_metadata?.role || 'landlord' // fallback
+      appRole: authority.role,
+      contextOwnerId: authority.context_owner_id,
     };
 
     if (process.env.ENABLE_SUBSCRIPTIONS === 'true' && requiresManagementSubscription(req.method, req.originalUrl, req.user.appRole)) {
       try {
         const { getOwnerSubscriptionAccess } = await import('./utils/subscriptionAccess');
-        const ownerId = req.user.appRole === 'caretaker' || (req.user.appRole === 'property_manager' && userData?.created_by) ? userData?.created_by : userId;
+        const ownerId = req.user.contextOwnerId;
         if (!ownerId || (await getOwnerSubscriptionAccess(ownerId)).readOnly) {
           return res.status(403).json(READ_ONLY_SUBSCRIPTION_ERROR);
         }

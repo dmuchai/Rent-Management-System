@@ -2,6 +2,27 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { API_BASE_URL } from "./config";
 import { supabase } from "./supabase";
 
+const AUTH_CONTEXT_KEY = 'landee-auth-context:v1';
+
+function applyAuthorityContext(headers: Record<string, string>) {
+  if (typeof window === 'undefined') return;
+  try {
+    const context = JSON.parse(window.localStorage.getItem(AUTH_CONTEXT_KEY) || 'null');
+    if (context?.role && context?.contextOwnerId) {
+      headers['x-landee-context-role'] = context.role;
+      headers['x-landee-context-owner'] = context.contextOwnerId;
+    }
+  } catch {
+    window.localStorage.removeItem(AUTH_CONTEXT_KEY);
+  }
+}
+
+export function setAuthorityContext(context: { role: string; contextOwnerId: string } | null) {
+  if (typeof window === 'undefined') return;
+  if (context) window.localStorage.setItem(AUTH_CONTEXT_KEY, JSON.stringify(context));
+  else window.localStorage.removeItem(AUTH_CONTEXT_KEY);
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -45,6 +66,7 @@ export async function apiRequest(
   const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
 
   const headers: Record<string, string> = {};
+  applyAuthorityContext(headers);
   // Attach JSON header when sending a body
   if (data) {
     headers["Content-Type"] = "application/json";
@@ -90,6 +112,7 @@ export const getQueryFn: <T>(options: {
       const fullUrl = rawUrl.startsWith('http') ? rawUrl : `${API_BASE_URL}${rawUrl}`;
 
       const headers: Record<string, string> = {};
+      applyAuthorityContext(headers);
       try {
         const token = await getAccessTokenWithRetry(5, 100);
         if (token) headers["Authorization"] = `Bearer ${token}`;

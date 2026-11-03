@@ -6,6 +6,7 @@ import { getEffectiveSubscriptionAccess, createPlanLimitError } from '../_lib/su
 import { insertUnitSchema } from '../../shared/schema.js';
 import { z } from 'zod';
 import { canAddUnit } from '../../shared/subscription/index.js';
+import { lockAndCountActiveUnits } from '../_lib/unitLimits.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   const sql = createDbConnection();
@@ -70,42 +71,31 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       return res.status(200).json(transformedUnits);
     } else if (req.method === 'POST') {
       const unitData = insertUnitSchema.parse(req.body);
+      const portfolioOwnerId = auth.contextOwnerId;
 
-      const { planCode } = await getEffectiveSubscriptionAccess(auth.userId);
+      const { planCode } = await getEffectiveSubscriptionAccess(portfolioOwnerId);
 
-      const unitCountResult = await sql`
-        SELECT COUNT(*)::int AS count
-        FROM public.units u
-        INNER JOIN public.properties p ON p.id = u.property_id
-        WHERE p.owner_id = ${auth.userId}
-          AND p.archived_at IS NULL
-          AND u.archived_at IS NULL
-      `;
-
-      const currentUnits = Number(unitCountResult[0]?.count || 0);
-      if (!canAddUnit(planCode, currentUnits)) {
-        return res.status(409).json(createPlanLimitError(planCode, 'active_units', currentUnits));
-      }
-
-      // Verify property ownership before transaction
-      const properties = await sql`
-        SELECT * FROM public.properties WHERE id = ${unitData.propertyId} AND archived_at IS NULL
-      `;
-
-      if (properties.length === 0) {
-        return res.status(404).json({ message: 'Property not found' });
-      } else if (properties[0].owner_id !== auth.userId) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      // Use a transaction to ensure atomicity and prevent race conditions
       const result = await sql.begin(async (tx) => {
-        // Lock the property row to prevent concurrent unit insertions
-        await tx`
-          SELECT id FROM public.properties 
-          WHERE id = ${unitData.propertyId} 
-          FOR UPDATE
-        `;
+        // One owner-scoped lock serializes additions across every property in
+        // the portfolio. A property row lock alone cannot enforce this limit.
+        const currentUnits = await lockAndCountActiveUnits(tx, portfolioOwnerId);
+        const [property] = await tx`SELECT id, owner_id FROM public.properties
+          WHERE id = ${unitData.propertyId} AND archived_at IS NULL FOR UPDATE`;
+        if (!property) return { errorStatus: 404, errorBody: { message: 'Property not found' } };
+        if (property.owner_id !== portfolioOwnerId) {
+          return { errorStatus: 403, errorBody: { message: 'Access denied' } };
+        }
+        if (auth.role === 'caretaker') {
+          const [assignment] = await tx`SELECT id FROM public.caretaker_assignments
+            WHERE caretaker_id = ${auth.userId} AND landlord_id = ${portfolioOwnerId}
+              AND property_id = ${property.id} AND status = 'active' LIMIT 1`;
+          if (!assignment) return { errorStatus: 403,
+            errorBody: { message: 'Caretaker is not assigned to this property' } };
+        }
+        if (!canAddUnit(planCode, currentUnits)) {
+          return { errorStatus: 409,
+            errorBody: createPlanLimitError(planCode, 'active_units', currentUnits) };
+        }
 
         // Insert the unit
         const [unit] = await tx`
@@ -129,22 +119,27 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           WHERE id = ${unitData.propertyId}
         `;
         
-        return unit;
+        return { unit };
       });
+      if ('errorStatus' in result && result.errorStatus) {
+        return res.status(result.errorStatus).json(result.errorBody);
+      }
+      const createdUnit = result.unit;
+      if (!createdUnit) throw new Error('Unit transaction completed without a result');
       
       // Transform to camelCase for frontend
       const transformedUnit = {
-        id: result.id,
-        propertyId: result.property_id,
-        unitNumber: result.unit_number,
-        bedrooms: result.bedrooms,
-        bathrooms: result.bathrooms,
-        size: result.size,
-        rentAmount: result.rent_amount,
-        isOccupied: result.is_occupied,
-        archivedAt: result.archived_at,
-        createdAt: result.created_at,
-        updatedAt: result.updated_at
+        id: createdUnit.id,
+        propertyId: createdUnit.property_id,
+        unitNumber: createdUnit.unit_number,
+        bedrooms: createdUnit.bedrooms,
+        bathrooms: createdUnit.bathrooms,
+        size: createdUnit.size,
+        rentAmount: createdUnit.rent_amount,
+        isOccupied: createdUnit.is_occupied,
+        archivedAt: createdUnit.archived_at,
+        createdAt: createdUnit.created_at,
+        updatedAt: createdUnit.updated_at
       };
       return res.status(201).json(transformedUnit);
     } else if (req.method === 'PUT') {
