@@ -24,6 +24,10 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: local-ci-placeholder-not-a-live-key
     steps:
       - uses: actions/checkout@v4
+      - name: Install route check dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
       - uses: actions/setup-node@v4
         with:
           node-version: 22
