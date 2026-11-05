@@ -12,6 +12,7 @@ import { handleBankWebhook } from '../../api/webhooks/banks/_lib/handleBankWebho
 import { lockAndCountActiveUnits } from '../../api/_lib/unitLimits.js';
 import { claimEmailJobs } from '../../api/_lib/queueClaims.js';
 import { postExternalPaymentEvent } from '../../api/_lib/paymentPosting.js';
+import { buildInvoiceReminderMetadata } from '../../api/_lib/invoicingWorker.js';
 
 const invoice = (id: string, period: string, amount = 1000, paid = 0) => ({
   id, lease_id: 'lease-a', amount, amount_paid: paid,
@@ -152,6 +153,20 @@ beforeEach(async () => {
     INSERT INTO external_payment_events (id,landlord_id,amount,payer_phone)
       VALUES ('event-a','owner-a',100,'+254711000001');
   `);
+});
+
+test('stores invoice reminder metadata as a JSONB object queryable by leaseId', async () => {
+  const metadata = buildInvoiceReminderMetadata('owner-a', 'lease-a', 'invoice-a', 'REF-A');
+  await sql`
+    INSERT INTO email_queue ("to", subject, metadata)
+    VALUES ('tenant-a@example.test', 'Invoice reminder', ${sql.json(metadata)})
+  `;
+  const [row] = await sql`
+    SELECT jsonb_typeof(metadata) AS metadata_type, metadata->>'leaseId' AS lease_id
+    FROM email_queue
+  `;
+  assert.equal(row.metadata_type, 'object');
+  assert.equal(row.lease_id, 'lease-a');
 });
 
 test('transaction creates exactly one partial payment receipt on the oldest invoice', async () => {

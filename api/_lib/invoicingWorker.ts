@@ -6,6 +6,16 @@ type InvoicingOptions = {
     billingDate?: Date;
 };
 
+export function buildInvoiceReminderMetadata(landlordId: string, leaseId: string, invoiceId: string, invoiceReference: string) {
+    return {
+        type: 'new_invoice',
+        landlordId,
+        leaseId,
+        invoiceId,
+        invoiceReference,
+    };
+}
+
 /**
  * Creates one canonical rent invoice per active lease and billing month.
  * Payment rows are deliberately not created here: they represent actual
@@ -113,10 +123,12 @@ export async function runAutomatedInvoicing(options: InvoicingOptions = {}) {
                         </div>
                     `;
                     const textContent = `Dear ${details.tenant_name}, your rent invoice ${invoice.reference_code} for ${monthLabel} has been generated. Amount Due: KES ${lease.monthly_rent}. Due Date: ${dueDate.toLocaleDateString('en-KE', { timeZone: 'UTC' })}.`;
-                    const metadata = JSON.stringify({
-                        type: 'new_invoice', landlordId: lease.landlord_id, leaseId: lease.id,
-                        invoiceId: invoice.id, invoiceReference: invoice.reference_code,
-                    });
+                    const metadata = buildInvoiceReminderMetadata(
+                        lease.landlord_id,
+                        lease.id,
+                        invoice.id,
+                        invoice.reference_code,
+                    );
 
                     if (await hasFeature(lease.landlord_id, 'scheduled_reminders')) {
                         await sql`
@@ -124,7 +136,7 @@ export async function runAutomatedInvoicing(options: InvoicingOptions = {}) {
                             VALUES (
                                 ${details.tenant_email},
                                 ${`New Rent Invoice - ${details.property_name} Unit ${details.unit_number}`},
-                                ${htmlContent}, ${textContent}, ${metadata}, NOW(), NOW()
+                                ${htmlContent}, ${textContent}, ${sql.json(metadata)}, NOW(), NOW()
                             )
                         `;
                     }
@@ -140,7 +152,7 @@ export async function runAutomatedInvoicing(options: InvoicingOptions = {}) {
 
                         await sql`
                             INSERT INTO public.sms_queue ("to", message, metadata)
-                            VALUES (${details.tenant_phone}, ${smsMsg}, ${metadata})
+                            VALUES (${details.tenant_phone}, ${smsMsg}, ${sql.json(metadata)})
                         `;
                     }
                 }
