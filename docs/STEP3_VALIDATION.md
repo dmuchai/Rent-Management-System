@@ -3,7 +3,7 @@
 ## Current release
 
 - Branch: `codex/staging-step3-fixes`
-- Commit before this defect fix: `df9c16ee408d410472f515105ac09953a5b1c947`
+- Current commit: `1087d9e4c2f0e7a1fd731311813da9f2b117762c`
 - Staging project: `landee-staging` (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`)
 - Staging URL: https://landee-staging.vercel.app
 - Staging Supabase project: `mcclctunrpyhumubpeyo`
@@ -30,9 +30,9 @@ These are local tests using disposable PostgreSQL and controlled provider transp
 
 ### Staging deployment
 
-The prior deployment was Vercel deployment `33uXB4VwAcTxyzPuALvs4CAky3sS`, Ready at `df9c16e`, with the sign-in page smoke-tested. Staging is protected by Vercel SSO. The repository branch guard disables automatic Git deployment for `codex/staging-step3-fixes`; deployment must target the isolated `landee-staging` project explicitly.
+The current deployment is Vercel deployment `dpl_2MVNEXsVLgdi7FGY8TrgVhJoutoH`, Ready at `1087d9e`, with aliases `https://landee-staging.vercel.app` and `https://landee-staging-jvs031fng-dmmuchai-1174s-projects.vercel.app`. Its Vercel target is `production` within the isolated `landee-staging` project; it is not the live Landee project. The sign-in route returns the expected Vercel SSO protection response. The repository branch guard disables automatic Git deployment for `codex/staging-step3-fixes`; deployment was explicitly targeted to the isolated project.
 
-This release still requires a post-deploy check of the new invoice metadata writer. The hosted authenticated regression matrix is blocked until genuine staging Auth identities and a protected browser/API session are available.
+This release still requires a post-deploy authenticated check of the new invoice metadata writer. The hosted authenticated regression matrix is blocked until genuine staging Auth identities and a protected browser/API session are available.
 
 ## Matrix status
 
