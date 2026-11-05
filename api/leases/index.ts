@@ -82,7 +82,9 @@ async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: a
             OR (${isCaretaker} AND EXISTS (
                 SELECT 1
                 FROM public.caretaker_assignments ca
-                WHERE ca.property_id = p.id
+                WHERE (ca.unit_id = u.id OR (ca.unit_id IS NULL AND ca.property_id = p.id))
+                AND ca.landlord_id = p.owner_id
+                AND p.owner_id = ${auth.contextOwnerId}
                 AND ca.caretaker_id = ${auth.userId}
                 AND ca.status = 'active'
             ))

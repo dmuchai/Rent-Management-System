@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         raw_payload, reconciliation_status, processing_status, is_verified
       ) VALUES (
         'mpesa_stk_result', 'safaricom', ${externalId}, ${callback.amount ?? 0}, NOW(),
-        ${JSON.stringify(req.body)}::jsonb, 'unmatched', 'received', false
+        ${sql.json(req.body)}, 'unmatched', 'received', false
       )
       ON CONFLICT ON CONSTRAINT uq_external_payment_events_provider_txn
       DO UPDATE SET raw_payload = EXCLUDED.raw_payload

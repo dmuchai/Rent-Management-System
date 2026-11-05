@@ -14,5 +14,7 @@ export function hasScopedUnitAccess(
   if (actor.userId === ownerId) return true;
   if (actor.role === 'property_manager' && actor.contextOwnerId === ownerId) return true;
   return actor.role === 'caretaker' && actor.contextOwnerId === ownerId
-    && assignments.some((item) => item.unit_id === unitId || item.property_id === propertyId);
+    && assignments.some((item) => item.unit_id
+      ? item.unit_id === unitId
+      : item.property_id === propertyId);
 }

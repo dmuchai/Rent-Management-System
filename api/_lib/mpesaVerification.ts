@@ -17,6 +17,12 @@ const callbackSchema = z.object({
 
 export type ParsedStkCallback = ReturnType<typeof parseStkCallback>;
 
+// Older stored callbacks were JSON-encoded twice. Decode only that legacy
+// storage representation, then apply the same strict callback validation.
+export function parseStoredStkCallback(payload: unknown) {
+  return parseStkCallback(typeof payload === 'string' ? JSON.parse(payload) : payload);
+}
+
 export function parseStkCallback(body: unknown) {
   const callback = callbackSchema.parse(body).Body.stkCallback;
   const metadata = new Map(callback.CallbackMetadata?.Item.map((item) => [item.Name, item.Value]) || []);

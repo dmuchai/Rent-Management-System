@@ -1,7 +1,7 @@
 import { createDbConnection } from './db.js';
 import { reconcilePayment, recordReconciliation } from './reconciliationEngine.js';
 import { mpesaService } from './mpesaService.js';
-import { parseStkCallback, receiptConflicts, verifyStkResult } from './mpesaVerification.js';
+import { parseStoredStkCallback, receiptConflicts, verifyStkResult } from './mpesaVerification.js';
 import { transitionPaymentStatus } from './invoicePayments.js';
 
 export async function processPaymentEvents(batchSize = 20) {
@@ -34,7 +34,7 @@ export async function processPaymentEvents(batchSize = 20) {
           });
           await recordReconciliation(sql, event.id, Number(event.amount), result);
         } else if (event.event_type === 'mpesa_stk_result') {
-          const callback = parseStkCallback(event.raw_payload);
+          const callback = parseStoredStkCallback(event.raw_payload);
           const [payment] = await sql`SELECT id, amount,
             COALESCE(provider_checkout_id, pesapal_order_tracking_id) AS checkout_request_id,
             provider_merchant_request_id, expected_merchant_id, provider_receipt_id

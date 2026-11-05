@@ -8,6 +8,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Only managers inherit portfolio totals; tenant/caretaker contexts must not gain owner-wide access.
+  const ownerId = auth.role === 'property_manager' ? auth.contextOwnerId : auth.userId;
   const sql = createDbConnection();
 
   const { propertyId } = req.query;
@@ -36,7 +38,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       sql`
         SELECT COUNT(*) as count
         FROM public.properties p
-        WHERE p.owner_id = ${auth.userId}
+        WHERE p.owner_id = ${ownerId}
         ${propertyId ? sql`AND p.id = ${propertyId as string}` : sql``}
       `,
       // 2. Get unique tenants count
@@ -46,7 +48,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         INNER JOIN public.leases l ON t.id = l.tenant_id
         INNER JOIN public.units u ON l.unit_id = u.id
         INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId}
+        WHERE p.owner_id = ${ownerId}
         ${propertyIdFilter}
       `,
       // 3. Get revenue statistics
@@ -64,7 +66,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         INNER JOIN public.leases l ON pm.lease_id = l.id
         INNER JOIN public.units u ON l.unit_id = u.id
         INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId}
+        WHERE p.owner_id = ${ownerId}
         ${propertyIdFilter}
       `,
       // 4. Get occupancy rate
@@ -74,7 +76,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           COUNT(CASE WHEN u.is_occupied = true THEN 1 END) as occupied_units
         FROM public.units u
         INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId}
+        WHERE p.owner_id = ${ownerId}
         ${propertyIdFilter}
       `,
       // 5. Get formal invoice statistics. These records are distinct from
@@ -91,7 +93,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
             )
           ) AS overdue_count
         FROM public.invoices i
-        WHERE i.landlord_id = ${auth.userId}
+        WHERE i.landlord_id = ${ownerId}
         AND i.invoice_type <> 'uat_validation'
         ${propertyId ? sql`
           AND i.lease_id IN (
@@ -113,7 +115,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         INNER JOIN public.tenants t ON l.tenant_id = t.id
         INNER JOIN public.units u ON l.unit_id = u.id
         INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId}
+        WHERE p.owner_id = ${ownerId}
         ${propertyIdFilter}
         AND l.is_active = true
         AND l.end_date BETWEEN NOW() AND NOW() + INTERVAL '30 days'
@@ -128,7 +130,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         INNER JOIN public.leases l ON pm.lease_id = l.id
         INNER JOIN public.units u ON l.unit_id = u.id
         INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId}
+        WHERE p.owner_id = ${ownerId}
         ${propertyIdFilter}
         AND pm.status = 'completed'
         AND COALESCE(pm.paid_date, pm.created_at) >= NOW() - INTERVAL '6 months'
@@ -147,7 +149,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         INNER JOIN public.tenants t ON l.tenant_id = t.id
         INNER JOIN public.units u ON l.unit_id = u.id
         INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId} 
+        WHERE p.owner_id = ${ownerId}
         ${propertyIdFilter}
         AND pm.status = 'completed'
         ORDER BY COALESCE(pm.paid_date, pm.created_at) DESC
@@ -160,7 +162,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         INNER JOIN public.leases l ON pm.lease_id = l.id
         INNER JOIN public.units u ON l.unit_id = u.id
         INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId}
+        WHERE p.owner_id = ${ownerId}
         ${propertyIdFilter}
       `
     ]);
