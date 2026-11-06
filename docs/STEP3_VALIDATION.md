@@ -18,6 +18,8 @@ The staging fixture bootstrap is implemented in [STAGING_VALIDATION_BOOTSTRAP.md
 
 On 6 November 2026 the bootstrap was executed successfully against the staging project using the operator-provided ignored `.env.test.local`. Seven synthetic Auth users, matching profiles, portfolios, memberships, caretaker assignments, leases, and the controlled invoice were created or updated under the `step3-` fixture prefix. Direct unauthenticated HTTP probes returned `401` from Vercel Deployment Protection before reaching Landee Auth; this is not evidence of invalid staging credentials. Complete hosted checks require an authenticated Vercel SSO browser session followed by the normal Landee login.
 
+The authenticated Landlord A browser session subsequently passed a hosted UI smoke check at `https://landee-staging.vercel.app/dashboard`: the dashboard displayed the Step 3 portfolio, one overdue invoice, 50% occupancy (1/2 units), and the active Step 3 Tenant A lease. Hosted Properties displayed one property with two units (A1 occupied, A2 available); Hosted Tenants displayed only Tenant A; Hosted Leases displayed only the active A1 lease at KES 1,000. This is genuine hosted staging evidence for Landlord A, not a local handler test.
+
 ## Evidence
 
 ### Completed locally
