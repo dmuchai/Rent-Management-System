@@ -3,7 +3,7 @@
 ## Current release
 
 - Branch: `codex/staging-step3-fixes`
-- Current commit: `09baa71` (`Record authenticated caretaker API passes`)
+- Current commit: `2b7d729` (`Clarify staging authorization evidence`)
 - Staging project: `landee-staging` (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`)
 - Staging URL: https://landee-staging.vercel.app
 - Staging Supabase project: `mcclctunrpyhumubpeyo`
@@ -20,7 +20,9 @@ On 6 November 2026 the bootstrap was executed successfully against the staging p
 
 The authenticated staging browser subsequently passed genuine hosted UI checks for the seeded identities. Landlord A displayed the Step 3 portfolio, one overdue invoice, 50% occupancy (1/2 units), and the active Step 3 Tenant A lease; its Properties, Tenants, and Leases views showed only the authorised portfolio. Landlord B displayed only Property B/Unit B1 and Tenant B. Manager A displayed the authorised Landlord A totals (1 property, 1 active tenant, 50% occupancy, and 1 overdue invoice), rather than the manager's own empty portfolio. Property Caretaker A displayed one assigned property and Tenant A; Unit Caretaker A displayed the assigned Tenant A/unit scope. Tenant A displayed only Property A/Unit A1 and Tenant B displayed only Property B/Unit B1. These are hosted staging observations, not local handler tests.
 
-On 7 November, the shared browser was re-authenticated as Unit Caretaker A (`0700000307`). Its hosted dashboard showed one assigned tenant and one assigned property; the Properties view showed only Step 3 Property A with one tenant/lease, and the Tenants view contained only Step3 Tenant A. The tenant-creation dialog was opened and cancelled without submitting a write. This confirms hosted UI scoping, but not the required authenticated API list/create/update response assertions. The Subscription view for the landlord session displayed “Subscriptions are not enabled yet”; hosted legacy-Free versus noneligible enforcement therefore remains unverified.
+The operator subsequently completed the corrected authenticated API harness for all six required identities. Each run verified the expected trusted role, returned `200` for permitted list/profile reads applicable to that identity, and returned explicit `403` for the schema-valid foreign-property unit-create probe and the existing foreign/sibling-unit probe. The six sanitized results are recorded below; no credential, token, cookie, or response body containing secrets was retained.
+
+On 7 November, the shared browser was re-authenticated as Unit Caretaker A (`0700000307`). Its hosted dashboard showed one assigned tenant and one assigned property; the Properties view showed only Step 3 Property A with one tenant/lease, and the Tenants view contained only Step3 Tenant A. The tenant-creation dialog was opened and cancelled without submitting a write. The later corrected API harness supplies the list/create-denial evidence for this identity; it does not cover a successful assigned-unit update. The Subscription view for the landlord session displayed “Subscriptions are not enabled yet”; hosted legacy-Free versus noneligible enforcement therefore remains unverified.
 
 ## Evidence
 
@@ -31,6 +33,10 @@ On 7 November, the shared browser was re-authenticated as Unit Caretaker A (`070
 - `npm run test:financial-integrity` — passed.
 - `npm run test:subscription` — passed.
 - `npm run test:kcb` — passed.
+- `npm run test:account-deletion` — passed.
+- `npm run test:tenant-payments` — passed.
+- `npm run check:route-entrypoints` — passed.
+- `npm run build`, `npm run build:frontend`, and `npm run build:vercel` — passed.
 - Existing branch release CI for `df9c16e` passed: https://github.com/dmuchai/Rent-Management-System/actions/runs/42032686496
 - `git diff --check` — passed.
 
@@ -44,24 +50,50 @@ The guarded staging bootstrap and authenticated browser session are available on
 
 A guarded `npm run staging:validate-api` harness is now implemented in [validate-staging-api.ts](../scripts/validate-staging-api.ts). It accepts a session access token and optional Vercel SSO cookie through environment variables, performs read checks and a schema-valid unit-create authorization probe against a supplied foreign fixture property without creating data, never logs credentials, and fails closed when the staging URL or token is missing. It is ready for one run per synthetic identity once the authenticated browser can provide both values.
 
-The harness now accepts `STAGING_EXPECTED_ROLE` and verifies the trusted role returned by `/api/auth?action=user`. Review of the reported Landlord A run found that its `tenant profile` `404` means no tenant profile exists for a landlord, not authorization; its empty unit-create `400` came from Zod before the role/portfolio checks; and its sibling PATCH `400` came from omitting restore input for an active unit. None of those three statuses is authorization evidence. The harness now requires a valid unit payload against an out-of-portfolio property and requires HTTP `403` for the create denial, and requires HTTP `403` for the existing sibling denial. The prior five-line output must therefore be rerun and is not marked as passed for Landlord A.
+The harness now accepts `STAGING_EXPECTED_ROLE` and verifies the trusted role returned by `/api/auth?action=user`. The earlier Landlord A `404/400/400` output was correctly rejected as authorization evidence because it represented a missing tenant profile and malformed probes. The corrected six-identity run completed with valid fixture inputs and explicit `403` authorization responses.
+
+### Corrected authenticated API matrix
+
+| Identity | Expected role | Permitted reads | Foreign unit-create probe | Sibling-unit probe | Evidence |
+|---|---|---:|---:|---:|---|
+| Landlord A | `landlord` | `200` | `403` | `403` | Sanitized operator harness output |
+| Landlord B | `landlord` | `200` | `403` | `403` | Sanitized operator harness output |
+| Property Manager A | `property_manager` | `200` | `403` | `403` | Sanitized operator harness output |
+| Property Caretaker A | `caretaker` | `200` | `403` | `403` | Sanitized operator harness output |
+| Tenant A | `tenant` | `200` | `403` | `403` | Sanitized operator harness output |
+| Tenant B | `tenant` | `200` | `403` | `403` | Sanitized operator harness output |
+
+The harness probes are non-destructive: the create payload targets a valid
+property outside the identity's portfolio, and the sibling probe targets an
+existing foreign fixture. This is hosted API evidence, distinct from the
+hosted UI observations and local handler/provider tests.
 
 ## Matrix status
 
 | Area | Status | Evidence or blocker |
 |---|---|---|
-| Unit-scoped caretaker list/create/update | Prior output invalid for authorization; corrected rerun pending | The reported 400 create and 400/403 sibling results used invalid/incomplete requests. Rerun with a valid out-of-portfolio property payload and an existing sibling fixture; assigned-unit update and sibling update denial remain pending |
+| Unit-scoped caretaker list/create/update | Corrected hosted list/create-denial/sibling-denial run passed; update still pending | The valid foreign-property create and existing sibling probes returned 403 for Unit Caretaker A. A successful assigned-unit update and corresponding sibling update denial remain pending |
 | Property-scoped caretaker portfolio | Local complete; hosted scope smoke passed | Property Caretaker A hosted dashboard showed only the assigned Property A and Tenant A |
 | Manager dashboard totals | Local complete; hosted passed | Manager A hosted dashboard showed Landlord A's 1 property, 1 active tenant, 50% occupancy, and 1 overdue invoice |
 | Callback verification, retry, duplicate idempotency | Local complete; hosted blocked | Provider was mocked locally; no live Daraja request |
 | Invoice reminder metadata | Local and staging query complete | Staging invoice `b0bab968-52df-4020-bd21-1daa58457e02` produced an email queue row with `jsonb_typeof(metadata) = 'object'` and `metadata->>'leaseId' = 'step3-lease-b'`; historical rows were not rewritten |
 | Partial/excess payments and reversals | Local complete | Disposable PostgreSQL financial-integrity tests |
-| Cross-landlord isolation and tenant restrictions | Local complete; hosted UI smoke passed; corrected API role matrix pending | Tenant A/B UI isolation passed. API harness still needs corrected Landlord A/B, Manager A, Property Caretaker A, Tenant A, and Tenant B runs with valid fixture payloads and explicit 403 assertions |
+| Cross-landlord isolation and tenant restrictions | Local complete; hosted UI/API matrix passed; update coverage pending | Tenant A/B UI isolation passed, and all six corrected API runs returned expected role/read/403 results. Assigned-unit and portfolio update assertions remain pending |
 | Forged/revoked contexts | Local complete; hosted blocked | Local authorization tests; no staging token-revocation/request-forgery harness was executed |
 | Queue concurrency and recovery | Local complete | Disposable PostgreSQL claim/lease tests |
 | Invoice-generation idempotency and lease expiry | Staging database evidence complete; authenticated cron capture blocked | The November 2026 staging invoicing run generated one invoice, and the identical second run generated zero. Existing staging fixtures show `step3-expired-lease` as `expired/is_active=false` with `step3-expired-unit.is_occupied=false`, and `step3-active-lease` as `active/is_active=true` with its unit occupied. A fresh authenticated cron/API capture remains blocked by Vercel SSO. |
 | Subscription enforcement | Local complete; hosted feature disabled | The hosted Subscription view reported subscriptions are not enabled; legacy Free versus noneligible write enforcement was not exercised |
 | Full backup restoration | Blocked | Migration 015 was only a synthetic structural rehearsal; no verified complete production backup restoration |
+| Independent database RLS policy verification | Blocked pending direct staging query | Source review confirms RLS is enabled on the legacy resource tables and on the migration-015 evidence/membership/job tables. The checked-in legacy policy file is owner-only and does not independently demonstrate the scoped property-manager/caretaker/tenant rules; migration 015 adds no end-user policies for its newly protected tables. A direct staging `pg_policies`/`relrowsecurity` query under a non-service database role is still required. |
+
+## Independent control review
+
+- **Database RLS:** The repository source audit found `ENABLE ROW LEVEL SECURITY` on the legacy resources and on `payment_audit_history`, `user_context_memberships`, and `operational_job_runs`. The checked-in `supabase-rls-policies.sql` only grants owner-based policies for properties/units and limited tenant/document reads; it does not prove the API's scoped authority model for managers and caretakers. The API uses server-side database credentials, so HTTP `403` results are not RLS evidence. No production database was queried. Step 3 requires a staging-only `pg_class`/`pg_policies` inspection and representative anon/authenticated-role read/write probes before this control can be marked complete.
+- **Frontend roles:** `Sidebar` filters navigation by trusted role; `App` routes tenants and caretakers to dedicated dashboards and routes landlords/property managers to the management dashboard; subscription purchasing is limited to landlord/property-manager roles. These are usability controls only. Backend `requireAuth` and portfolio checks remain authoritative, and the six hosted API runs exercised those controls.
+- **Subscription/free tier:** Local tests pass for legacy Free eligibility, new-account ineligibility, plan limits, expiry/read-only behavior, and write-policy exceptions. The hosted staging Subscription view previously reported that subscriptions were disabled, so legacy-Free versus noneligible-new-account enforcement, purchase, renewal, cancellation, expiry, and entitlement sync remain unverified in staging.
+- **Authentication and recovery:** Normal Supabase login was used for the six hosted identities. Password recovery has separate forgot/reset routes and uses Supabase recovery sessions; no reset email was sent or consumed during this pass. Recovery remains a manual hosted check, not a claimed pass.
+- **Payment webhook isolation:** Local callback verification, retry, duplicate, allocation, reversal, and financial-integrity suites pass with controlled transports. No live Daraja/Safaricom request was made; staging provider isolation and a hosted retry/duplicate transport capture remain pending.
+- **Backup/recovery:** Migration 015's synthetic rehearsal is not a complete backup restore. Data, Auth, Storage, RLS, triggers, indexes, and policies have not been restored and verified together in an isolated environment.
 
 ## Rollout boundaries and next actions
 
@@ -72,7 +104,7 @@ The harness now accepts `STAGING_EXPECTED_ROLE` and verifies the trusted role re
 - Before Step 4, obtain Daraja sandbox/approved credentials, designated test identities/devices, and decisions for callback evidence, reversals, and settlement. Prepare Google Play and RevenueCat test products plus a device for purchase, renewal, cancellation, expiry, and web entitlement-sync checks. None of these provider flows has passed yet.
 - Per-landlord Safaricom onboarding and settlement remains a separate design phase; merchant configuration, settlement ownership, reconciliation evidence, and provider capabilities require explicit decisions. No speculative settlement behavior is implemented.
 
-Step 3 is **not ready to close**. Unit Caretaker A's five reported API checks are now recorded as passed for that role, but assigned-unit update and the remaining role matrix are outstanding. Callback recovery, subscription enforcement, fresh cron capture, and full backup restoration also remain outstanding. UI observations must not be promoted to API evidence.
+Step 3 is **not ready to close**. The six corrected authenticated API runs are complete, but independent staging RLS verification, assigned-unit update coverage, hosted callback recovery/duplicate evidence, subscription enforcement with the feature enabled, fresh authenticated cron capture, and full backup restoration remain release blockers. UI observations must not be promoted to API or RLS evidence.
 
 ## Remaining authenticated API runs
 
