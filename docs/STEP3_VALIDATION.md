@@ -3,7 +3,7 @@
 ## Current release
 
 - Branch: `codex/staging-step3-fixes`
-- Current commit: `4043877` (`Correct staging validation commit reference`)
+- Current commit: `e835783` (`Record authenticated caretaker UI checks`)
 - Staging project: `landee-staging` (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`)
 - Staging URL: https://landee-staging.vercel.app
 - Staging Supabase project: `mcclctunrpyhumubpeyo`
