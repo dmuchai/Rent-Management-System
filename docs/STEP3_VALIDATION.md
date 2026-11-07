@@ -1,14 +1,14 @@
-# Step 3 validation — 5 November 2026
+# Step 3 validation — 7 November 2026
 
 ## Current release
 
 - Branch: `codex/staging-step3-fixes`
-- Current commit: `1087d9e4c2f0e7a1fd731311813da9f2b117762c`
+- Current commit: `412c749` (`Record hosted landlord validation`)
 - Staging project: `landee-staging` (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`)
 - Staging URL: https://landee-staging.vercel.app
 - Staging Supabase project: `mcclctunrpyhumubpeyo`
 - Live Supabase project remains excluded from mutations: `emdahodfztpfdjkrbnqz`
-- Validation date: 5 November 2026 (EAT)
+- Validation date: 7 November 2026 (EAT)
 
 The three previously reported defects are present in `df9c16e`: unit-scoped caretaker access is narrowed to the assigned unit, manager aggregates use the authorised context owner, and STK callback persistence/replay accepts only one legacy JSON-string layer while preserving strict validation.
 
@@ -18,7 +18,7 @@ The staging fixture bootstrap is implemented in [STAGING_VALIDATION_BOOTSTRAP.md
 
 On 6 November 2026 the bootstrap was executed successfully against the staging project using the operator-provided ignored `.env.test.local`. Seven synthetic Auth users, matching profiles, portfolios, memberships, caretaker assignments, leases, and the controlled invoice were created or updated under the `step3-` fixture prefix. Direct unauthenticated HTTP probes returned `401` from Vercel Deployment Protection before reaching Landee Auth; this is not evidence of invalid staging credentials. Complete hosted checks require an authenticated Vercel SSO browser session followed by the normal Landee login.
 
-The authenticated Landlord A browser session subsequently passed a hosted UI smoke check at `https://landee-staging.vercel.app/dashboard`: the dashboard displayed the Step 3 portfolio, one overdue invoice, 50% occupancy (1/2 units), and the active Step 3 Tenant A lease. Hosted Properties displayed one property with two units (A1 occupied, A2 available); Hosted Tenants displayed only Tenant A; Hosted Leases displayed only the active A1 lease at KES 1,000. This is genuine hosted staging evidence for Landlord A, not a local handler test.
+The authenticated staging browser subsequently passed genuine hosted UI checks for the seeded identities. Landlord A displayed the Step 3 portfolio, one overdue invoice, 50% occupancy (1/2 units), and the active Step 3 Tenant A lease; its Properties, Tenants, and Leases views showed only the authorised portfolio. Landlord B displayed only Property B/Unit B1 and Tenant B. Manager A displayed the authorised Landlord A totals (1 property, 1 active tenant, 50% occupancy, and 1 overdue invoice), rather than the manager's own empty portfolio. Property Caretaker A displayed one assigned property and Tenant A; Unit Caretaker A displayed the assigned Tenant A/unit scope. Tenant A displayed only Property A/Unit A1 and Tenant B displayed only Property B/Unit B1. These are hosted staging observations, not local handler tests.
 
 ## Evidence
 
@@ -38,23 +38,23 @@ These are local tests using disposable PostgreSQL and controlled provider transp
 
 The current deployment is Vercel deployment `dpl_2MVNEXsVLgdi7FGY8TrgVhJoutoH`, Ready at `1087d9e`, with aliases `https://landee-staging.vercel.app` and `https://landee-staging-jvs031fng-dmmuchai-1174s-projects.vercel.app`. Its Vercel target is `production` within the isolated `landee-staging` project; it is not the live Landee project. The sign-in route returns the expected Vercel SSO protection response. The repository branch guard disables automatic Git deployment for `codex/staging-step3-fixes`; deployment was explicitly targeted to the isolated project.
 
-This release still requires a post-deploy authenticated check of the new invoice metadata writer. The guarded staging bootstrap is complete; the hosted authenticated regression matrix is blocked at Vercel Deployment Protection until a Vercel SSO browser session is authenticated.
+The guarded staging bootstrap and authenticated browser session are now available. The hosted role smoke checks above passed after normal Landee login/logout. The post-deploy invoice metadata writer query, callback retry transport, subscription enforcement, scheduler idempotency, and mutation/negative API paths still require a staging operator harness or authenticated API capture; they are not proven by the UI smoke checks.
 
 ## Matrix status
 
 | Area | Status | Evidence or blocker |
 |---|---|---|
-| Unit-scoped caretaker list/create/update | Local complete; hosted blocked | Local authenticated handler harness passed; hosted Auth session pending |
-| Property-scoped caretaker portfolio | Local complete; hosted blocked | Local scope checks passed; hosted Auth session pending |
-| Manager dashboard totals | Local complete; hosted blocked | Authorised-context regression passed locally |
+| Unit-scoped caretaker list/create/update | Local complete; hosted scope smoke passed; API mutation paths blocked | Unit Caretaker A hosted dashboard showed the assigned Tenant A/unit; direct list/create/update and sibling-denial API assertions still need an authenticated request harness |
+| Property-scoped caretaker portfolio | Local complete; hosted scope smoke passed | Property Caretaker A hosted dashboard showed only the assigned Property A and Tenant A |
+| Manager dashboard totals | Local complete; hosted passed | Manager A hosted dashboard showed Landlord A's 1 property, 1 active tenant, 50% occupancy, and 1 overdue invoice |
 | Callback verification, retry, duplicate idempotency | Local complete; hosted blocked | Provider was mocked locally; no live Daraja request |
-| Invoice reminder metadata | Local complete; staging recheck pending | Disposable PostgreSQL proves object storage and `leaseId` queryability |
+| Invoice reminder metadata | Local complete; hosted query blocked | Disposable PostgreSQL proves object storage and `leaseId` queryability; no hosted database query was executed |
 | Partial/excess payments and reversals | Local complete | Disposable PostgreSQL financial-integrity tests |
-| Cross-landlord isolation and tenant restrictions | Local complete; hosted blocked | Local auth/handler evidence; no hosted identity run |
-| Forged/revoked contexts | Local complete; hosted blocked | Local authorization tests; hosted identity lifecycle pending |
+| Cross-landlord isolation and tenant restrictions | Local complete; hosted identity smoke passed | Tenant A saw only Property A/Unit A1; Tenant B saw only Property B/Unit B1; forged request and mutation assertions remain blocked |
+| Forged/revoked contexts | Local complete; hosted blocked | Local authorization tests; no staging token-revocation/request-forgery harness was executed |
 | Queue concurrency and recovery | Local complete | Disposable PostgreSQL claim/lease tests |
 | Invoice-generation idempotency and lease expiry | Local/structural evidence | Hosted scheduler and representative staging data pending |
-| Subscription enforcement | Local complete; hosted blocked | Subscription tests cover legacy Free allowance and noneligible plans; staging flags/accounts need hosted verification |
+| Subscription enforcement | Local complete; hosted blocked | Subscription tests cover legacy Free allowance and noneligible plans; hosted feature flags and account-state verification remain pending |
 | Full backup restoration | Blocked | Migration 015 was only a synthetic structural rehearsal; no verified complete production backup restoration |
 
 ## Rollout boundaries and next actions
@@ -66,4 +66,4 @@ This release still requires a post-deploy authenticated check of the new invoice
 - Before Step 4, obtain Daraja sandbox/approved credentials, designated test identities/devices, and decisions for callback evidence, reversals, and settlement. Prepare Google Play and RevenueCat test products plus a device for purchase, renewal, cancellation, expiry, and web entitlement-sync checks. None of these provider flows has passed yet.
 - Per-landlord Safaricom onboarding and settlement remains a separate design phase; merchant configuration, settlement ownership, reconciliation evidence, and provider capabilities require explicit decisions. No speculative settlement behavior is implemented.
 
-Step 3 is **not ready to close** until the hosted authenticated matrix and staging metadata recheck complete, and backup/recovery evidence is clearly separated from the synthetic rehearsal.
+Step 3 is **not ready to close**. Hosted role and isolation smoke checks are now complete for the available synthetic identities, but the authenticated API mutation/negative paths, invoice metadata query, callback recovery, subscription enforcement, scheduler checks, and full backup restoration evidence remain outstanding.
