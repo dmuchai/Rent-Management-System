@@ -42,21 +42,21 @@ The current deployment is Vercel deployment `dpl_2MVNEXsVLgdi7FGY8TrgVhJoutoH`, 
 
 The guarded staging bootstrap and authenticated browser session are available only when the operator shares an active Vercel SSO session. The hosted role smoke checks above passed after normal Landee login/logout. In this validation pass, all six synthetic identities authenticated successfully against isolated staging Supabase, but direct requests to `https://landee-staging.vercel.app/api/*` were intercepted by Vercel Deployment Protection before reaching Landee Auth; the opened browser likewise resolved to the Vercel login page. A staging-only invoicing run for November 2026 generated one invoice and an email reminder; a direct staging database query returned `jsonb_typeof(metadata) = 'object'` and `metadata->>'leaseId' = 'step3-lease-b'`. Repeating the same invoicing run generated zero additional invoices, providing staging idempotency evidence. The deployment listed above predates `d986eac`; no new deployment was made during this validation pass because deployment credentials were not present in the shell.
 
-A guarded `npm run staging:validate-api` harness is now implemented in [validate-staging-api.ts](../scripts/validate-staging-api.ts). It accepts a session access token and optional Vercel SSO cookie through environment variables, performs read checks and an empty non-mutating unit-create role check, never logs credentials, and fails closed when the staging URL or token is missing. It is ready for one run per synthetic identity once the authenticated browser can provide both values.
+A guarded `npm run staging:validate-api` harness is now implemented in [validate-staging-api.ts](../scripts/validate-staging-api.ts). It accepts a session access token and optional Vercel SSO cookie through environment variables, performs read checks and a schema-valid unit-create authorization probe against a supplied foreign fixture property without creating data, never logs credentials, and fails closed when the staging URL or token is missing. It is ready for one run per synthetic identity once the authenticated browser can provide both values.
 
-The harness now accepts `STAGING_EXPECTED_ROLE` and verifies the trusted role returned by `/api/auth?action=user`, in addition to the safe sibling PATCH denial probe. The reported run was performed for the authenticated Unit Caretaker A identity (`0700000307`), confirmed by the shared browser as `caretaker`; its results were: unit list `200`, tenant list `200`, tenant profile `200`, unit creation role guard `400`, and sibling unit denial `403`. These are passed for Unit Caretaker A only and do not establish the other role paths.
+The harness now accepts `STAGING_EXPECTED_ROLE` and verifies the trusted role returned by `/api/auth?action=user`. Review of the reported Landlord A run found that its `tenant profile` `404` means no tenant profile exists for a landlord, not authorization; its empty unit-create `400` came from Zod before the role/portfolio checks; and its sibling PATCH `400` came from omitting restore input for an active unit. None of those three statuses is authorization evidence. The harness now requires a valid unit payload against an out-of-portfolio property and requires HTTP `403` for the create denial, and requires HTTP `403` for the existing sibling denial. The prior five-line output must therefore be rerun and is not marked as passed for Landlord A.
 
 ## Matrix status
 
 | Area | Status | Evidence or blocker |
 |---|---|---|
-| Unit-scoped caretaker list/create/update | API list/create/sibling denial passed for Unit Caretaker A; update still pending | Reported harness results: unit list 200, tenant list 200, tenant profile 200, empty unit-create guard 400, sibling denial 403. The probe did not update a unit; assigned-unit update and sibling update denial remain pending |
+| Unit-scoped caretaker list/create/update | Prior output invalid for authorization; corrected rerun pending | The reported 400 create and 400/403 sibling results used invalid/incomplete requests. Rerun with a valid out-of-portfolio property payload and an existing sibling fixture; assigned-unit update and sibling update denial remain pending |
 | Property-scoped caretaker portfolio | Local complete; hosted scope smoke passed | Property Caretaker A hosted dashboard showed only the assigned Property A and Tenant A |
 | Manager dashboard totals | Local complete; hosted passed | Manager A hosted dashboard showed Landlord A's 1 property, 1 active tenant, 50% occupancy, and 1 overdue invoice |
 | Callback verification, retry, duplicate idempotency | Local complete; hosted blocked | Provider was mocked locally; no live Daraja request |
 | Invoice reminder metadata | Local and staging query complete | Staging invoice `b0bab968-52df-4020-bd21-1daa58457e02` produced an email queue row with `jsonb_typeof(metadata) = 'object'` and `metadata->>'leaseId' = 'step3-lease-b'`; historical rows were not rewritten |
 | Partial/excess payments and reversals | Local complete | Disposable PostgreSQL financial-integrity tests |
-| Cross-landlord isolation and tenant restrictions | Local complete; hosted UI smoke passed; API role matrix pending | Tenant A/B UI isolation passed. API harness still needs Landlord A/B, Manager A, Property Caretaker A, Tenant A, and Tenant B runs with role assertions and appropriate fixture IDs |
+| Cross-landlord isolation and tenant restrictions | Local complete; hosted UI smoke passed; corrected API role matrix pending | Tenant A/B UI isolation passed. API harness still needs corrected Landlord A/B, Manager A, Property Caretaker A, Tenant A, and Tenant B runs with valid fixture payloads and explicit 403 assertions |
 | Forged/revoked contexts | Local complete; hosted blocked | Local authorization tests; no staging token-revocation/request-forgery harness was executed |
 | Queue concurrency and recovery | Local complete | Disposable PostgreSQL claim/lease tests |
 | Invoice-generation idempotency and lease expiry | Staging database evidence complete; authenticated cron capture blocked | The November 2026 staging invoicing run generated one invoice, and the identical second run generated zero. Existing staging fixtures show `step3-expired-lease` as `expired/is_active=false` with `step3-expired-unit.is_occupied=false`, and `step3-active-lease` as `active/is_active=true` with its unit occupied. A fresh authenticated cron/API capture remains blocked by Vercel SSO. |
@@ -87,22 +87,35 @@ Run the harness once per identity with a fresh token and the same Vercel SSO coo
 | Tenant A | `0700000303` | `tenant` | `step3-unit-b1` |
 | Tenant B | `0700000304` | `tenant` | `step3-unit-a2` |
 
+The highest-priority remaining runs are Property Manager A (`0700000305`, expected
+`property_manager`) and Tenant B (`0700000304`, expected `tenant`). Manager A
+must produce `200` for its authorised lists and explicit `403` responses for
+the foreign-property create and sibling-unit probes. Tenant B must produce
+`200` for its tenant profile and scoped reads, plus explicit `403` responses
+for both authorization probes. Landlord A's reported tenant-profile `404` is
+an expected missing-profile result, while its `400` create and sibling
+responses were invalid-request results; none is authorization evidence until
+the corrected harness produces explicit `403` responses.
+
 For each row, authenticate normally, export only the resulting access token and
-SSO cookie into the shell, set `STAGING_EXPECTED_ROLE` and
-`STAGING_SIBLING_UNIT_ID`, then run:
+SSO cookie into the shell, set `STAGING_EXPECTED_ROLE`,
+`STAGING_CREATE_PROPERTY_ID` to a property outside that identity's portfolio,
+and `STAGING_SIBLING_UNIT_ID` to an existing sibling fixture, then run:
 
 ```bash
 STAGING_BASE_URL=https://landee-staging.vercel.app \
 STAGING_API_TOKEN="$STAGING_API_TOKEN" \
 STAGING_VERCEL_COOKIE="$STAGING_VERCEL_COOKIE" \
 STAGING_EXPECTED_ROLE=caretaker \
+STAGING_CREATE_PROPERTY_ID=step3-property-b \
 STAGING_SIBLING_UNIT_ID=step3-unit-a2 \
 npm run staging:validate-api
 ```
 
 Replace only the expected role and sibling fixture for each table row. Do not
-reuse a token after switching identity. Record the sanitized PASS lines and
-the identity/role, not the credential values. A complete API sign-off also
+reuse a token after switching identity. Record the sanitized PASS/INFO lines and the identity/role, not the credential
+values. HTTP 400 or 404 must be investigated from the response body and must
+not be recorded as authorization passes. A complete API sign-off also
 requires an assigned-unit update assertion for Unit Caretaker A and equivalent
 portfolio/update checks for the landlord, manager, and property caretaker
 roles; the current harness intentionally performs no successful mutation.

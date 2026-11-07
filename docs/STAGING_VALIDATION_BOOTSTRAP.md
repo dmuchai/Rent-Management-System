@@ -44,15 +44,20 @@ STAGING_BASE_URL=https://landee-staging.vercel.app \
 STAGING_API_TOKEN='staging-access-token' \
 STAGING_VERCEL_COOKIE='authorized-cookie-header-value' \
 STAGING_EXPECTED_ROLE='caretaker' \
+STAGING_CREATE_PROPERTY_ID='step3-property-b' \
 STAGING_SIBLING_UNIT_ID='step3-unit-a2' \
 npm run staging:validate-api
 ```
 
-Run the command once per synthetic identity. The harness performs reads plus a
-deliberately empty unit-create request that must be rejected before insertion;
-it fails if that request returns `201`. When `STAGING_SIBLING_UNIT_ID` is set,
-it also sends a PATCH denial probe against that fixture and accepts only a
-non-success response. When `STAGING_EXPECTED_ROLE` is set, it checks
+Run the command once per synthetic identity. `STAGING_CREATE_PROPERTY_ID` must
+identify a valid property outside the identity's authorised portfolio (for
+example `step3-property-b` for Landlord A, Manager A, and the caretakers).
+The harness sends a schema-valid unit payload and requires HTTP 403; a 400 is
+treated as malformed-request evidence, not authorization evidence. The request
+cannot insert because the property is outside the identity's portfolio.
+When `STAGING_SIBLING_UNIT_ID` is set, it sends a PATCH denial probe against
+that existing fixture and requires HTTP 403; a 400 is treated as invalid
+restore input, not authorization evidence. When `STAGING_EXPECTED_ROLE` is set, it checks
 `/api/auth?action=user` and fails if the trusted role differs. Use
 `landlord`, `property_manager`, `caretaker`, or `tenant` as the expected role.
 It never prints or persists the access token or cookie. Deployment-protection

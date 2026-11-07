@@ -5,6 +5,7 @@ const accessToken = process.env.STAGING_API_TOKEN ?? '';
 const vercelCookie = process.env.STAGING_VERCEL_COOKIE ?? '';
 const siblingUnitId = process.env.STAGING_SIBLING_UNIT_ID ?? '';
 const expectedRole = process.env.STAGING_EXPECTED_ROLE ?? '';
+const createPropertyId = process.env.STAGING_CREATE_PROPERTY_ID ?? '';
 
 if (!baseUrl || !/^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/.test(baseUrl)) {
   throw new Error('STAGING_BASE_URL must be an isolated https://*.vercel.app URL');
@@ -37,6 +38,11 @@ function expectStatus(label: string, actual: number, expected: number[]) {
   console.log(`PASS ${label}: HTTP ${actual}`);
 }
 
+function expectAuthorizationDenied(label: string, response: { status: number; body: unknown }) {
+  assert.equal(response.status, 403, `${label}: expected explicit HTTP 403 authorization denial, received ${response.status}`);
+  console.log(`PASS ${label}: HTTP 403 authorization denial`);
+}
+
 const units = await request('/api/units');
 expectStatus('unit list', units.status, [200]);
 assert.ok(Array.isArray(units.body), 'unit list must return an array');
@@ -46,7 +52,13 @@ expectStatus('tenant list', tenantList.status, [200, 403]);
 if (tenantList.status === 200) assert.ok(Array.isArray(tenantList.body), 'tenant list must return an array');
 
 const tenantProfile = await request('/api/tenants/me');
-expectStatus('tenant profile or role denial', tenantProfile.status, [200, 403, 404]);
+if (expectedRole === 'tenant') {
+  expectStatus('tenant profile', tenantProfile.status, [200]);
+} else if (tenantProfile.status === 404) {
+  console.log('INFO tenant profile: HTTP 404 means no tenant profile exists for this identity; it is not authorization evidence');
+} else {
+  expectStatus('tenant profile for non-tenant identity', tenantProfile.status, [200]);
+}
 
 if (expectedRole) {
   const profile = await request('/api/auth?action=user');
@@ -58,24 +70,34 @@ if (expectedRole) {
   console.log(`PASS authenticated role profile: ${String(role)}`);
 }
 
-// This request must not create data: tenant authority is rejected before body parsing.
+// Use a valid schema payload and a cross-portfolio property so any denial is
+// attributable to authorization, not request parsing. No row can be inserted.
+if (!createPropertyId) {
+  throw new Error('STAGING_CREATE_PROPERTY_ID is required for the valid unit authorization probe');
+}
 const tenantCreate = await request('/api/units', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({}),
+  body: JSON.stringify({
+    propertyId: createPropertyId,
+    unitNumber: 'STEP3-AUTH-PROBE',
+    bedrooms: 1,
+    bathrooms: 1,
+    size: '1',
+    rentAmount: '1',
+    isOccupied: false,
+  }),
 });
-expectStatus('unit creation role guard', tenantCreate.status, [400, 403, 409]);
-if (tenantCreate.status === 201) {
-  throw new Error('Safety failure: validation request unexpectedly created a unit');
-}
+expectAuthorizationDenied('unit creation authorization guard', tenantCreate);
 
 if (siblingUnitId) {
-  // PATCH is used only as a denial probe. An active fixture sibling must be
-  // rejected before restore validation and cannot be changed by this request.
+  // PATCH is used only as a denial probe. The route checks ownership before
+  // restore-state validation, so an existing foreign/sibling fixture must
+  // produce an explicit 403 rather than a malformed-request 400.
   const siblingRestore = await request(`/api/units/${encodeURIComponent(siblingUnitId)}`, {
     method: 'PATCH',
   });
-  expectStatus('sibling unit denial', siblingRestore.status, [400, 403, 404]);
+  expectAuthorizationDenied('sibling unit denial', siblingRestore);
 }
 
 console.log(JSON.stringify({
@@ -83,9 +105,9 @@ console.log(JSON.stringify({
   checks: [
     'unit list',
     'tenant list',
-    'tenant profile or role denial',
+    'tenant profile (or explicit no-profile info)',
     ...(expectedRole ? ['authenticated role profile'] : []),
-    'non-mutating unit creation role guard',
+    'valid unit creation authorization guard',
     ...(siblingUnitId ? ['sibling unit denial'] : []),
   ],
   note: 'This harness validates the active identity only. Run once per synthetic staging identity and retain sanitized output.',
