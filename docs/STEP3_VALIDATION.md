@@ -20,6 +20,8 @@ On 6 November 2026 the bootstrap was executed successfully against the staging p
 
 The authenticated staging browser subsequently passed genuine hosted UI checks for the seeded identities. Landlord A displayed the Step 3 portfolio, one overdue invoice, 50% occupancy (1/2 units), and the active Step 3 Tenant A lease; its Properties, Tenants, and Leases views showed only the authorised portfolio. Landlord B displayed only Property B/Unit B1 and Tenant B. Manager A displayed the authorised Landlord A totals (1 property, 1 active tenant, 50% occupancy, and 1 overdue invoice), rather than the manager's own empty portfolio. Property Caretaker A displayed one assigned property and Tenant A; Unit Caretaker A displayed the assigned Tenant A/unit scope. Tenant A displayed only Property A/Unit A1 and Tenant B displayed only Property B/Unit B1. These are hosted staging observations, not local handler tests.
 
+On 7 November, the shared browser was re-authenticated as Unit Caretaker A (`0700000307`). Its hosted dashboard showed one assigned tenant and one assigned property; the Properties view showed only Step 3 Property A with one tenant/lease, and the Tenants view contained only Step3 Tenant A. The tenant-creation dialog was opened and cancelled without submitting a write. This confirms hosted UI scoping, but not the required authenticated API list/create/update response assertions. The Subscription view for the landlord session displayed “Subscriptions are not enabled yet”; hosted legacy-Free versus noneligible enforcement therefore remains unverified.
+
 ## Evidence
 
 ### Completed locally
@@ -44,7 +46,7 @@ The guarded staging bootstrap and authenticated browser session are available on
 
 | Area | Status | Evidence or blocker |
 |---|---|---|
-| Unit-scoped caretaker list/create/update | Local complete; hosted scope smoke passed; API mutation paths blocked | Unit Caretaker A hosted dashboard showed the assigned Tenant A/unit; direct list/create/update and sibling-denial API assertions still need an authenticated request harness |
+| Unit-scoped caretaker list/create/update | Hosted UI scope passed; API mutation paths blocked | Re-authenticated Unit Caretaker A showed exactly one assigned property and Tenant A in hosted views; no create was submitted. Direct list/create/update and sibling-denial API assertions still need an authenticated request harness |
 | Property-scoped caretaker portfolio | Local complete; hosted scope smoke passed | Property Caretaker A hosted dashboard showed only the assigned Property A and Tenant A |
 | Manager dashboard totals | Local complete; hosted passed | Manager A hosted dashboard showed Landlord A's 1 property, 1 active tenant, 50% occupancy, and 1 overdue invoice |
 | Callback verification, retry, duplicate idempotency | Local complete; hosted blocked | Provider was mocked locally; no live Daraja request |
@@ -54,7 +56,7 @@ The guarded staging bootstrap and authenticated browser session are available on
 | Forged/revoked contexts | Local complete; hosted blocked | Local authorization tests; no staging token-revocation/request-forgery harness was executed |
 | Queue concurrency and recovery | Local complete | Disposable PostgreSQL claim/lease tests |
 | Invoice-generation idempotency and lease expiry | Staging database evidence complete; authenticated cron capture blocked | The November 2026 staging invoicing run generated one invoice, and the identical second run generated zero. Existing staging fixtures show `step3-expired-lease` as `expired/is_active=false` with `step3-expired-unit.is_occupied=false`, and `step3-active-lease` as `active/is_active=true` with its unit occupied. A fresh authenticated cron/API capture remains blocked by Vercel SSO. |
-| Subscription enforcement | Local complete; hosted blocked | Subscription tests cover legacy Free allowance and noneligible plans; hosted feature flags and account-state verification remain pending |
+| Subscription enforcement | Local complete; hosted feature disabled | The hosted Subscription view reported subscriptions are not enabled; legacy Free versus noneligible write enforcement was not exercised |
 | Full backup restoration | Blocked | Migration 015 was only a synthetic structural rehearsal; no verified complete production backup restoration |
 
 ## Rollout boundaries and next actions
@@ -66,4 +68,4 @@ The guarded staging bootstrap and authenticated browser session are available on
 - Before Step 4, obtain Daraja sandbox/approved credentials, designated test identities/devices, and decisions for callback evidence, reversals, and settlement. Prepare Google Play and RevenueCat test products plus a device for purchase, renewal, cancellation, expiry, and web entitlement-sync checks. None of these provider flows has passed yet.
 - Per-landlord Safaricom onboarding and settlement remains a separate design phase; merchant configuration, settlement ownership, reconciliation evidence, and provider capabilities require explicit decisions. No speculative settlement behavior is implemented.
 
-Step 3 is **not ready to close**. Hosted role and isolation smoke checks, staging invoice metadata, invoice-generation idempotency, and representative lease-expiry state are evidenced, but authenticated API mutation/negative paths, callback recovery, subscription enforcement, fresh cron capture, and full backup restoration remain outstanding. Supabase password authentication alone is insufficient for these checks while Vercel Deployment Protection is enabled.
+Step 3 is **not ready to close**. Hosted role/isolation UI checks, staging invoice metadata, invoice-generation idempotency, and representative lease-expiry state are evidenced, but authenticated API mutation/negative paths, callback recovery, subscription enforcement, fresh cron capture, and full backup restoration remain outstanding. The shared browser can authenticate the application, but its dedicated automation/evaluation channel is unstable and the application token was not available for a direct request harness; UI observations must not be promoted to API evidence.
