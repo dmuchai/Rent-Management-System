@@ -3,7 +3,7 @@
 ## Current release
 
 - Branch: `codex/staging-step3-fixes`
-- Current commit: `81079c6` (`Add safe staging sibling denial probe`)
+- Current commit: pending (`Record authenticated API validation evidence`)
 - Staging project: `landee-staging` (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`)
 - Staging URL: https://landee-staging.vercel.app
 - Staging Supabase project: `mcclctunrpyhumubpeyo`
@@ -44,19 +44,19 @@ The guarded staging bootstrap and authenticated browser session are available on
 
 A guarded `npm run staging:validate-api` harness is now implemented in [validate-staging-api.ts](../scripts/validate-staging-api.ts). It accepts a session access token and optional Vercel SSO cookie through environment variables, performs read checks and an empty non-mutating unit-create role check, never logs credentials, and fails closed when the staging URL or token is missing. It is ready for one run per synthetic identity once the authenticated browser can provide both values.
 
-The harness now also accepts `STAGING_SIBLING_UNIT_ID` and performs a safe PATCH denial probe against that fixture. Running it with a placeholder token from the shell reached Vercel and returned `401`; this confirms the shell still lacks the browser's SSO authorization and is not Landee API evidence.
+The harness now accepts `STAGING_EXPECTED_ROLE` and verifies the trusted role returned by `/api/auth?action=user`, in addition to the safe sibling PATCH denial probe. The reported run was performed for the authenticated Unit Caretaker A identity (`0700000307`), confirmed by the shared browser as `caretaker`; its results were: unit list `200`, tenant list `200`, tenant profile `200`, unit creation role guard `400`, and sibling unit denial `403`. These are passed for Unit Caretaker A only and do not establish the other role paths.
 
 ## Matrix status
 
 | Area | Status | Evidence or blocker |
 |---|---|---|
-| Unit-scoped caretaker list/create/update | Hosted UI scope passed; API mutation paths blocked | Re-authenticated Unit Caretaker A showed exactly one assigned property and Tenant A in hosted views; no create was submitted. Direct list/create/update and sibling-denial API assertions still need an authenticated request harness |
+| Unit-scoped caretaker list/create/update | API list/create/sibling denial passed for Unit Caretaker A; update still pending | Reported harness results: unit list 200, tenant list 200, tenant profile 200, empty unit-create guard 400, sibling denial 403. The probe did not update a unit; assigned-unit update and sibling update denial remain pending |
 | Property-scoped caretaker portfolio | Local complete; hosted scope smoke passed | Property Caretaker A hosted dashboard showed only the assigned Property A and Tenant A |
 | Manager dashboard totals | Local complete; hosted passed | Manager A hosted dashboard showed Landlord A's 1 property, 1 active tenant, 50% occupancy, and 1 overdue invoice |
 | Callback verification, retry, duplicate idempotency | Local complete; hosted blocked | Provider was mocked locally; no live Daraja request |
 | Invoice reminder metadata | Local and staging query complete | Staging invoice `b0bab968-52df-4020-bd21-1daa58457e02` produced an email queue row with `jsonb_typeof(metadata) = 'object'` and `metadata->>'leaseId' = 'step3-lease-b'`; historical rows were not rewritten |
 | Partial/excess payments and reversals | Local complete | Disposable PostgreSQL financial-integrity tests |
-| Cross-landlord isolation and tenant restrictions | Local complete; hosted identity smoke passed | Tenant A saw only Property A/Unit A1; Tenant B saw only Property B/Unit B1; forged request and mutation assertions remain blocked |
+| Cross-landlord isolation and tenant restrictions | Local complete; hosted UI smoke passed; API role matrix pending | Tenant A/B UI isolation passed. API harness still needs Landlord A/B, Manager A, Property Caretaker A, Tenant A, and Tenant B runs with role assertions and appropriate fixture IDs |
 | Forged/revoked contexts | Local complete; hosted blocked | Local authorization tests; no staging token-revocation/request-forgery harness was executed |
 | Queue concurrency and recovery | Local complete | Disposable PostgreSQL claim/lease tests |
 | Invoice-generation idempotency and lease expiry | Staging database evidence complete; authenticated cron capture blocked | The November 2026 staging invoicing run generated one invoice, and the identical second run generated zero. Existing staging fixtures show `step3-expired-lease` as `expired/is_active=false` with `step3-expired-unit.is_occupied=false`, and `step3-active-lease` as `active/is_active=true` with its unit occupied. A fresh authenticated cron/API capture remains blocked by Vercel SSO. |
@@ -72,4 +72,37 @@ The harness now also accepts `STAGING_SIBLING_UNIT_ID` and performs a safe PATCH
 - Before Step 4, obtain Daraja sandbox/approved credentials, designated test identities/devices, and decisions for callback evidence, reversals, and settlement. Prepare Google Play and RevenueCat test products plus a device for purchase, renewal, cancellation, expiry, and web entitlement-sync checks. None of these provider flows has passed yet.
 - Per-landlord Safaricom onboarding and settlement remains a separate design phase; merchant configuration, settlement ownership, reconciliation evidence, and provider capabilities require explicit decisions. No speculative settlement behavior is implemented.
 
-Step 3 is **not ready to close**. Hosted role/isolation UI checks, staging invoice metadata, invoice-generation idempotency, and representative lease-expiry state are evidenced, but authenticated API mutation/negative paths, callback recovery, subscription enforcement, fresh cron capture, and full backup restoration remain outstanding. The shared browser can authenticate the application, but its dedicated automation/evaluation channel is unstable and the application token was not available for a direct request harness; UI observations must not be promoted to API evidence.
+Step 3 is **not ready to close**. Unit Caretaker A's five reported API checks are now recorded as passed for that role, but assigned-unit update and the remaining role matrix are outstanding. Callback recovery, subscription enforcement, fresh cron capture, and full backup restoration also remain outstanding. UI observations must not be promoted to API evidence.
+
+## Remaining authenticated API runs
+
+Run the harness once per identity with a fresh token and the same Vercel SSO cookie. Keep the environment variables in the local protected shell; never paste them into chat or commit them.
+
+| Identity | Phone | Expected role | Sibling probe |
+|---|---:|---|---|
+| Landlord A | `0700000301` | `landlord` | `step3-unit-b1` |
+| Landlord B | `0700000302` | `landlord` | `step3-unit-a2` |
+| Manager A | `0700000305` | `property_manager` | `step3-unit-b1` |
+| Property Caretaker A | `0700000306` | `caretaker` | `step3-unit-b1` |
+| Tenant A | `0700000303` | `tenant` | `step3-unit-b1` |
+| Tenant B | `0700000304` | `tenant` | `step3-unit-a2` |
+
+For each row, authenticate normally, export only the resulting access token and
+SSO cookie into the shell, set `STAGING_EXPECTED_ROLE` and
+`STAGING_SIBLING_UNIT_ID`, then run:
+
+```bash
+STAGING_BASE_URL=https://landee-staging.vercel.app \
+STAGING_API_TOKEN="$STAGING_API_TOKEN" \
+STAGING_VERCEL_COOKIE="$STAGING_VERCEL_COOKIE" \
+STAGING_EXPECTED_ROLE=caretaker \
+STAGING_SIBLING_UNIT_ID=step3-unit-a2 \
+npm run staging:validate-api
+```
+
+Replace only the expected role and sibling fixture for each table row. Do not
+reuse a token after switching identity. Record the sanitized PASS lines and
+the identity/role, not the credential values. A complete API sign-off also
+requires an assigned-unit update assertion for Unit Caretaker A and equivalent
+portfolio/update checks for the landlord, manager, and property caretaker
+roles; the current harness intentionally performs no successful mutation.

@@ -4,6 +4,7 @@ const baseUrl = process.env.STAGING_BASE_URL ?? '';
 const accessToken = process.env.STAGING_API_TOKEN ?? '';
 const vercelCookie = process.env.STAGING_VERCEL_COOKIE ?? '';
 const siblingUnitId = process.env.STAGING_SIBLING_UNIT_ID ?? '';
+const expectedRole = process.env.STAGING_EXPECTED_ROLE ?? '';
 
 if (!baseUrl || !/^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/.test(baseUrl)) {
   throw new Error('STAGING_BASE_URL must be an isolated https://*.vercel.app URL');
@@ -47,6 +48,16 @@ if (tenantList.status === 200) assert.ok(Array.isArray(tenantList.body), 'tenant
 const tenantProfile = await request('/api/tenants/me');
 expectStatus('tenant profile or role denial', tenantProfile.status, [200, 403, 404]);
 
+if (expectedRole) {
+  const profile = await request('/api/auth?action=user');
+  expectStatus('authenticated role profile', profile.status, [200]);
+  const role = profile.body && typeof profile.body === 'object' && 'role' in profile.body
+    ? (profile.body as { role?: unknown }).role
+    : undefined;
+  assert.equal(role, expectedRole, `expected role ${expectedRole} but received ${String(role)}`);
+  console.log(`PASS authenticated role profile: ${String(role)}`);
+}
+
 // This request must not create data: tenant authority is rejected before body parsing.
 const tenantCreate = await request('/api/units', {
   method: 'POST',
@@ -73,6 +84,7 @@ console.log(JSON.stringify({
     'unit list',
     'tenant list',
     'tenant profile or role denial',
+    ...(expectedRole ? ['authenticated role profile'] : []),
     'non-mutating unit creation role guard',
     ...(siblingUnitId ? ['sibling unit denial'] : []),
   ],

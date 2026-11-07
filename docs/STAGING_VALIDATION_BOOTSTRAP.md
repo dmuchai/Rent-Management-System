@@ -43,6 +43,7 @@ the SSO cookie from the same authorized browser session:
 STAGING_BASE_URL=https://landee-staging.vercel.app \
 STAGING_API_TOKEN='staging-access-token' \
 STAGING_VERCEL_COOKIE='authorized-cookie-header-value' \
+STAGING_EXPECTED_ROLE='caretaker' \
 STAGING_SIBLING_UNIT_ID='step3-unit-a2' \
 npm run staging:validate-api
 ```
@@ -51,6 +52,9 @@ Run the command once per synthetic identity. The harness performs reads plus a
 deliberately empty unit-create request that must be rejected before insertion;
 it fails if that request returns `201`. When `STAGING_SIBLING_UNIT_ID` is set,
 it also sends a PATCH denial probe against that fixture and accepts only a
-non-success response. It never prints or persists the access token or cookie.
-Deployment-protection HTML or a `401` response is reported as a failed
-prerequisite rather than treated as Landee API evidence.
+non-success response. When `STAGING_EXPECTED_ROLE` is set, it checks
+`/api/auth?action=user` and fails if the trusted role differs. Use
+`landlord`, `property_manager`, `caretaker`, or `tenant` as the expected role.
+It never prints or persists the access token or cookie. Deployment-protection
+HTML or a `401` response is reported as a failed prerequisite rather than
+treated as Landee API evidence.
