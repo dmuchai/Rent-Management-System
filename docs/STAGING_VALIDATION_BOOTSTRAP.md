@@ -32,3 +32,22 @@ The generated staging users are:
 All use the operator-supplied `STAGING_TEST_PASSWORD`. The synthetic email addresses are visible in [bootstrap-staging-validation.ts](../scripts/bootstrap-staging-validation.ts).
 
 After bootstrap, sign in at `https://landee-staging.vercel.app/login`, obtain tokens through the normal login flow, and run the hosted matrix. Never use these credentials against production.
+
+## Authenticated API validation
+
+The read and negative-role checks can be run with an access token obtained from
+the normal staging login. Vercel Deployment Protection may additionally require
+the SSO cookie from the same authorized browser session:
+
+```bash
+STAGING_BASE_URL=https://landee-staging.vercel.app \
+STAGING_API_TOKEN='staging-access-token' \
+STAGING_VERCEL_COOKIE='authorized-cookie-header-value' \
+npm run staging:validate-api
+```
+
+Run the command once per synthetic identity. The harness performs reads plus a
+deliberately empty unit-create request that must be rejected before insertion;
+it fails if that request returns `201`. It never prints or persists the access
+token or cookie. Deployment-protection HTML or a `401` response is reported as
+a failed prerequisite rather than treated as Landee API evidence.
