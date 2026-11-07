@@ -3,7 +3,7 @@
 ## Current release
 
 - Branch: `codex/staging-step3-fixes`
-- Current commit: pending (`Record authenticated API validation evidence`)
+- Current commit: `09baa71` (`Record authenticated caretaker API passes`)
 - Staging project: `landee-staging` (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`)
 - Staging URL: https://landee-staging.vercel.app
 - Staging Supabase project: `mcclctunrpyhumubpeyo`
