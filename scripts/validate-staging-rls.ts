@@ -65,14 +65,20 @@ const landlordProperties = rows(
   await request('landlordA', 'properties', 'select=id,owner_id&id=eq.step3-property-a'),
   'Landlord A own properties',
 );
-assert.ok(landlordProperties.length > 0, 'Landlord A fixture property is missing');
+assert.ok(
+  landlordProperties.length > 0,
+  'Landlord A fixture property is not visible under this JWT; confirm fixture existence with staging metadata before attributing this to a missing record',
+);
 pass('Landlord A can read own properties');
 
 const landlordBProperties = rows(
   await request('landlordB', 'properties', 'select=id,owner_id&id=eq.step3-property-b'),
   'Landlord B own properties',
 );
-assert.ok(landlordBProperties.length > 0, 'Landlord B fixture property is missing');
+assert.ok(
+  landlordBProperties.length > 0,
+  'Landlord B fixture property is not visible under this JWT; confirm fixture existence with staging metadata before attributing this to a missing record',
+);
 pass('Landlord B can read own properties');
 
 assertNoForeignRows(
@@ -88,7 +94,10 @@ const managerProperties = rows(
   await request('managerA', 'properties', 'select=id,owner_id'),
   'Property Manager A property read',
 );
-assert.ok(managerProperties.length > 0, 'Property Manager A has no visible assigned property');
+assert.ok(
+  managerProperties.length > 0,
+  'Property Manager A has no visible assigned property; confirm assignment and RLS policy state with staging metadata',
+);
 assert.ok(
   managerProperties.every((property) => property.owner_id === 'step3-landlord-a'),
   'Property Manager A can read a property outside the assigned portfolio',
@@ -99,7 +108,10 @@ const caretakerUnits = rows(
   await request('propertyCaretakerA', 'units', 'select=id,property_id'),
   'Property Caretaker A unit read',
 );
-assert.ok(caretakerUnits.length > 0, 'Property Caretaker A has no visible assigned unit');
+assert.ok(
+  caretakerUnits.length > 0,
+  'Property Caretaker A has no visible assigned unit; confirm assignment and RLS policy state with staging metadata',
+);
 pass('Property Caretaker A can read assigned units');
 
 assertNoForeignRows(
@@ -111,7 +123,10 @@ const tenantRows = rows(
   await request('tenantA', 'tenants', 'select=id,user_id&id=eq.step3-tenant-record-a'),
   'Tenant A own profile read',
 );
-assert.ok(tenantRows.length > 0, 'Tenant A fixture profile is missing');
+assert.ok(
+  tenantRows.length > 0,
+  'Tenant A fixture profile is not visible under this JWT; confirm fixture existence with staging metadata before attributing this to a missing record',
+);
 pass('Tenant A can read own tenant profile');
 assertNoForeignRows(
   'Tenant A cannot read Tenant B profile',
