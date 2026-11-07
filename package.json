@@ -27,6 +27,8 @@
     "diagnose:financial-integrity": "tsx scripts/diagnose-financial-integrity.ts",
     "staging:bootstrap-validation": "tsx scripts/bootstrap-staging-validation.ts",
     "staging:validate-api": "tsx scripts/validate-staging-api.ts",
+    "staging:validate-rls": "tsx scripts/validate-staging-rls.ts",
+    "test:frontend-role-boundaries": "tsx scripts/validate-frontend-role-boundaries.ts",
     "test:kcb-sandbox": "node scripts/check-kcb-sandbox-auth.js",
     "test:tenant-payments": "tsx --test tests/tenant-payments/*.test.ts",
     "mobile:sync": "VITE_API_URL=https://landee.kejalink.co.ke npm run build:frontend && npx cap sync",
