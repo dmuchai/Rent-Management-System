@@ -4,6 +4,7 @@ import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
 import { getEffectiveSubscriptionAccess, createPlanLimitError } from '../_lib/subscription.js';
 import { canAddUnit, type PlanCode } from '../../shared/subscription/index.js';
+import { lockAndCountActiveUnits } from '../_lib/unitLimits.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   // Validate method before creating DB connection
@@ -72,16 +73,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           throw new Error('UNIT_NOT_ARCHIVED');
         }
 
-        const [activeUnits] = await tx`
-          SELECT COUNT(*)::int AS count
-          FROM public.units u
-          INNER JOIN public.properties p ON p.id = u.property_id
-          WHERE p.owner_id = ${auth.userId}
-            AND p.archived_at IS NULL
-            AND u.archived_at IS NULL
-        `;
-
-        activeUnitCount = Number(activeUnits?.count || 0);
+        activeUnitCount = await lockAndCountActiveUnits(tx, auth.contextOwnerId);
         if (!canAddUnit(planCode, activeUnitCount)) {
           throw new Error('PLAN_LIMIT_REACHED');
         }

@@ -70,7 +70,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     // This avoids every route having to re-query the users table
     const { data: userData, error: roleError } = await supabase
       .from('users')
-      .select('role, created_by')
+      .select('role, created_by, status')
       .eq('id', userId)
       .single();
 
@@ -78,16 +78,40 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
       console.log('Error fetching user role:', roleError.message);
     }
 
-    const { data: memberships } = await supabase.from('user_context_memberships')
-      .select('role, context_owner_id').eq('user_id', userId).eq('status', 'active');
-    const authority = memberships?.length ? selectTrustedAuthority(
-      memberships,
+    if (userData?.status === 'inactive' || userData?.status === 'suspended') {
+      return res.status(403).json({ message: 'Account is not active' });
+    }
+    const { data: memberships, error: membershipsError } = await supabase.from('user_context_memberships')
+      .select('role, context_owner_id, status')
+      .eq('user_id', userId)
+      .order('role', { ascending: true })
+      .order('context_owner_id', { ascending: true });
+    if (membershipsError) {
+      console.error('Error fetching user memberships:', membershipsError.message);
+      return res.status(503).json({ message: 'Unable to verify account context' });
+    }
+    const activeMemberships = (memberships || []).filter((membership: any) => membership.status === 'active');
+    let authority = activeMemberships.length ? selectTrustedAuthority(
+      activeMemberships,
       req.headers['x-landee-context-role']?.toString(),
       req.headers['x-landee-context-owner']?.toString(),
-    ) : (userData?.role ? {
-      role: userData.role,
-      context_owner_id: ['caretaker', 'property_manager'].includes(userData.role) ? userData.created_by : userId,
-    } : null);
+    ) : null;
+    if (!authority && !memberships?.length && userData?.role) {
+      let contextOwnerId = userData.role === 'tenant'
+        ? null
+        : ['caretaker', 'property_manager'].includes(userData.role) ? userData.created_by : userId;
+      if (userData.role === 'tenant') {
+        const { data: tenant } = await supabase.from('tenants')
+          .select('landlord_id')
+          .eq('user_id', userId)
+          .not('landlord_id', 'is', null)
+          .order('landlord_id', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        contextOwnerId = tenant?.landlord_id || null;
+      }
+      authority = contextOwnerId ? { role: userData.role, context_owner_id: contextOwnerId } : null;
+    }
     if (!authority?.role || !authority.context_owner_id) {
       return res.status(403).json({ message: 'No trusted account context is available' });
     }

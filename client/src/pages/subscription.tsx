@@ -98,9 +98,16 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
     try {
       const completed = await purchasePackage(subscriptionPackage);
       if (!completed) return;
+      const previousPlan = currentPlanCode;
+      const isDowngrade = getPlanConfig(previousPlan).upgradeOrder
+        > getPlanConfig(subscriptionPackage.planCode as PlanCode).upgradeOrder;
       toast({
         title: 'Subscription confirmed',
-        description: `Google Play confirmed your subscription. Downgrades take effect at renewal; your current access continues until then.`,
+        description: isDowngrade
+          ? 'Google Play confirmed your downgrade. It will take effect at renewal; your current access continues until then.'
+          : subscriptionPackage.trialDays
+            ? `Google Play confirmed your ${subscriptionPackage.trialDays}-day trial.`
+            : 'Google Play confirmed your subscription upgrade.',
       });
       await refreshSubscription();
     } catch (purchaseError) {
@@ -361,7 +368,10 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
             ? Math.max(0, Math.round(((monthlyPrice * 12 - annualPrice) / (monthlyPrice * 12)) * 100))
             : null;
           const hasCurrentPlan = currentPlanCode === planCode;
-          const planIsLower = getPlanConfig(currentPlanCode).upgradeOrder > planConfig.upgradeOrder;
+          const comparisonPlanCode = account?.access.transitionActive
+            ? (account.access.storedPlanCode as PlanCode)
+            : currentPlanCode;
+          const planIsLower = getPlanConfig(comparisonPlanCode).upgradeOrder > planConfig.upgradeOrder;
 
           return (
             <Card key={planCode} className={hasCurrentPlan ? 'border-primary/60 shadow-md' : undefined}>

@@ -70,6 +70,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       }));
       return res.status(200).json(transformedUnits);
     } else if (req.method === 'POST') {
+      if (!['landlord', 'property_manager', 'caretaker'].includes(auth.role)) {
+        return res.status(403).json({ message: 'Only landlords, property managers, and caretakers can create units' });
+      }
       const unitData = insertUnitSchema.parse(req.body);
       const portfolioOwnerId = auth.contextOwnerId;
 

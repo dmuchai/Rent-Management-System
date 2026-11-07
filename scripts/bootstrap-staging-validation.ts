@@ -17,6 +17,12 @@ function assertStagingUrl(url: string) {
   if (parsed.hostname !== `${expectedProjectRef}.supabase.co`) {
     throw new Error(`Refusing non-staging Supabase URL: ${parsed.hostname}`);
   }
+
+  function assertStagingDatabase(url: string) {
+    if (!url.includes(expectedProjectRef)) {
+      throw new Error(`Refusing database URL without staging project ref ${expectedProjectRef}`);
+    }
+  }
 }
 
 const url = required('STAGING_SUPABASE_URL', stagingUrl);
@@ -24,6 +30,7 @@ const key = required('STAGING_SUPABASE_SERVICE_ROLE_KEY', serviceRoleKey);
 const db = required('STAGING_DATABASE_URL', databaseUrl);
 required('STAGING_TEST_PASSWORD', password);
 assertStagingUrl(url);
+assertStagingDatabase(db);
 if (process.env.STAGING_ALLOW_MUTATION !== 'true') {
   throw new Error('Set STAGING_ALLOW_MUTATION=true to enable staging fixture creation');
 }
@@ -43,11 +50,16 @@ const identities = [
 
 const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 const userIds = new Map<string, string>();
+const allUsers: Array<{ id: string; email?: string }> = [];
+for (let page = 1; ; page += 1) {
+  const { data: listed, error: listError } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
+  if (listError) throw listError;
+  allUsers.push(...listed.users);
+  if (listed.users.length < 1000) break;
+}
 
 for (const identity of identities) {
-  const { data: listed, error: listError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (listError) throw listError;
-  const existing = listed.users.find((user) => user.email === identity.email);
+  const existing = allUsers.find((user) => user.email === identity.email);
   if (existing) {
     userIds.set(identity.key, existing.id);
     const { error } = await supabase.auth.admin.updateUserById(existing.id, {

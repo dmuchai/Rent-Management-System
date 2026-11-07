@@ -30,6 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const tenants = await sql`
         SELECT 
           id,
+          landlord_id,
           first_name,
           last_name,
           email,
@@ -48,6 +49,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const tenant = tenants[0];
+      if (!tenant.landlord_id) {
+        return res.status(422).json({
+          error: 'Invitation unavailable',
+          message: 'This tenant invitation has no landlord context. Please ask the landlord to issue a new invitation.',
+        });
+      }
 
       if (!tenant.invitation_sent_at) {
         return res.status(400).json({ 

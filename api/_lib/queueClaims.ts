@@ -5,6 +5,7 @@ export async function claimEmailJobs(sql: any, batchSize: number, claimToken: st
       AND (status IN ('pending', 'failed') OR (status = 'processing' AND lease_expires_at < NOW()))
     ORDER BY created_at ASC FOR UPDATE SKIP LOCKED LIMIT ${batchSize}
   ) UPDATE public.email_queue q SET status = 'processing', claim_token = ${claimToken},
+    retry_count = q.retry_count + CASE WHEN q.status = 'processing' THEN 1 ELSE 0 END,
     lease_expires_at = NOW() + INTERVAL '5 minutes', updated_at = NOW()
   FROM candidates WHERE q.id = candidates.id RETURNING q.*`;
 }
@@ -16,6 +17,7 @@ export async function claimSmsJobs(sql: any, batchSize: number, claimToken: stri
       AND (status IN ('pending', 'failed') OR (status = 'processing' AND lease_expires_at < NOW()))
     ORDER BY created_at ASC FOR UPDATE SKIP LOCKED LIMIT ${batchSize}
   ) UPDATE public.sms_queue q SET status = 'processing', claim_token = ${claimToken},
+    retry_count = q.retry_count + CASE WHEN q.status = 'processing' THEN 1 ELSE 0 END,
     lease_expires_at = NOW() + INTERVAL '5 minutes', updated_at = NOW()
   FROM candidates WHERE q.id = candidates.id RETURNING q.*`;
 }

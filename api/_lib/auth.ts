@@ -76,20 +76,28 @@ export async function verifyAuth(req: VercelRequest): Promise<TrustedAuth | null
       if (upsertError) {
         console.error('❌ Failed to sync user in database:', upsertError.message);
       } else if (userData) {
+        if (userData.status === 'inactive' || userData.status === 'suspended') {
+          return null;
+        }
         const requestedRole = req.headers['x-landee-context-role']?.toString();
         const requestedOwner = req.headers['x-landee-context-owner']?.toString();
         const { data: memberships, error: membershipsError } = await supabaseAdmin
           .from('user_context_memberships')
-          .select('role, context_owner_id')
+          .select('role, context_owner_id, status')
           .eq('user_id', user.id)
-          .eq('status', 'active');
+          .order('role', { ascending: true })
+          .order('context_owner_id', { ascending: true });
         if (!membershipsError && memberships?.length) {
-          const authority = selectTrustedAuthority(memberships, requestedRole, requestedOwner);
+          const authority = selectTrustedAuthority(
+            memberships.filter((membership) => membership.status === 'active'),
+            requestedRole,
+            requestedOwner,
+          );
           if (authority && ALLOWED_ROLES.includes(authority.role as AllowedRole)) {
             role = authority.role as AllowedRole;
             contextOwnerId = authority.context_owner_id;
           }
-        } else if (userData.status !== 'inactive' && userData.status !== 'suspended'
+        } else if (!membershipsError && !memberships?.length
           && ALLOWED_ROLES.includes(userData.role as AllowedRole)) {
           // Compatibility during the additive migration rollout. This is a
           // persisted server-side role, never user-editable auth metadata.
@@ -156,9 +164,7 @@ export function requireAuth(
 
     if (isSubscriptionsEnabled() && requiresManagementSubscription(req.method, req.url, auth.role)) {
       try {
-        const { data: profile, error } = await supabaseAdmin.from('users').select('created_by').eq('id', auth.userId).single();
-        if (error) throw error;
-        const ownerId = auth.role === 'caretaker' || (auth.role === 'property_manager' && profile?.created_by) ? profile?.created_by : auth.userId;
+        const ownerId = auth.contextOwnerId;
         if (!ownerId || (await getEffectiveSubscriptionAccess(ownerId)).readOnly) {
           return res.status(403).json(READ_ONLY_SUBSCRIPTION_ERROR);
         }

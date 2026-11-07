@@ -17,6 +17,10 @@ function applyAuthorityContext(headers: Record<string, string>) {
   }
 }
 
+function clearAuthorityContext() {
+  if (typeof window !== 'undefined') window.localStorage.removeItem(AUTH_CONTEXT_KEY);
+}
+
 export function setAuthorityContext(context: { role: string; contextOwnerId: string } | null) {
   if (typeof window === 'undefined') return;
   if (context) window.localStorage.setItem(AUTH_CONTEXT_KEY, JSON.stringify(context));
@@ -67,6 +71,7 @@ export async function apiRequest(
 
   const headers: Record<string, string> = {};
   applyAuthorityContext(headers);
+  const hadContext = Boolean(headers['x-landee-context-role'] && headers['x-landee-context-owner']);
   // Attach JSON header when sending a body
   if (data) {
     headers["Content-Type"] = "application/json";
@@ -90,12 +95,19 @@ export async function apiRequest(
   }
 
   // Using httpOnly cookies for authentication - no need for Bearer token
-  const res = await fetch(fullUrl, {
+  const request = () => fetch(fullUrl, {
     method,
     headers,
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include", // Send httpOnly cookies
+    credentials: "include",
   });
+  let res = await request();
+  if (hadContext && (res.status === 401 || res.status === 403)) {
+    clearAuthorityContext();
+    delete headers['x-landee-context-role'];
+    delete headers['x-landee-context-owner'];
+    res = await request();
+  }
 
   await throwIfResNotOk(res);
   return res;
@@ -113,6 +125,7 @@ export const getQueryFn: <T>(options: {
 
       const headers: Record<string, string> = {};
       applyAuthorityContext(headers);
+      const hadContext = Boolean(headers['x-landee-context-role'] && headers['x-landee-context-owner']);
       try {
         const token = await getAccessTokenWithRetry(5, 100);
         if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -120,10 +133,16 @@ export const getQueryFn: <T>(options: {
         // ignore
       }
 
-      const res = await fetch(fullUrl, {
+      let res = await fetch(fullUrl, {
         headers,
         credentials: "include",
       });
+      if (hadContext && (res.status === 401 || res.status === 403)) {
+        clearAuthorityContext();
+        delete headers['x-landee-context-role'];
+        delete headers['x-landee-context-owner'];
+        res = await fetch(fullUrl, { headers, credentials: "include" });
+      }
 
       if (unauthorizedBehavior === "returnNull" && res.status === 401) {
         return null;

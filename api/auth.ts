@@ -634,7 +634,6 @@ export default async function handler(
       const user = await getUserFromAuthHeader(req);
       if (!user) return res.status(401).json({ error: "Unauthorized" });
       const authority = await verifyAuth(req);
-      if (!authority) return res.status(403).json({ error: "No trusted account context is available" });
 
       const admin = getAdminClient();
 
@@ -677,7 +676,7 @@ export default async function handler(
       let phoneVerified = profile?.phone_verified ?? false;
 
       // If user is a tenant and phone is missing, try to fetch from tenants table
-      if (authority.role === "tenant" && !phoneNumber) {
+      if (authority?.role === "tenant" && authority.contextOwnerId && !phoneNumber) {
         const { data: tenantData } = await admin
           .from("tenants")
           .select("phone")
@@ -692,8 +691,8 @@ export default async function handler(
 
       console.log(`[Auth] Returning user data:`, {
         id: user.id,
-        role: authority.role,
-        contextOwnerId: authority.contextOwnerId,
+        role: authority?.role ?? null,
+        contextOwnerId: authority?.contextOwnerId ?? null,
       });
 
       return res.status(200).json({
@@ -701,8 +700,8 @@ export default async function handler(
         email: user.email,
         firstName: profile?.first_name ?? user.user_metadata?.first_name ?? user.user_metadata?.firstName ?? "",
         lastName: profile?.last_name ?? user.user_metadata?.last_name ?? user.user_metadata?.lastName ?? "",
-        role: authority.role,
-        contextOwnerId: authority.contextOwnerId,
+        role: authority?.role ?? null,
+        contextOwnerId: authority?.contextOwnerId ?? null,
         phoneNumber: phoneNumber || user.user_metadata?.phone_number || "",
         phoneVerified,
       });

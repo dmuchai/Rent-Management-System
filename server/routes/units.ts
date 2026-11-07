@@ -64,10 +64,13 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
 router.post("/", isAuthenticated, async (req: any, res: any) => {
   try {
     const unitData = insertUnitSchema.parse(req.body);
+    if (!["landlord", "property_manager", "caretaker"].includes(req.user.appRole)) {
+      return res.status(403).json({ message: "Only landlords, property managers, and caretakers can create units" });
+    }
     if (!(await ensurePropertyOwnership(req, res, unitData.propertyId))) {
       return;
     }
-    const ownerId = req.user.sub;
+    const ownerId = req.user.contextOwnerId;
     const { planCode } = await getOwnerSubscriptionAccess(ownerId);
     const { data: ownerProperties } = await supabase.from("properties").select("id").eq("owner_id", ownerId).is("archived_at", null);
     const propertyIds = (ownerProperties || []).map((property: any) => property.id);
@@ -111,16 +114,17 @@ router.put("/:id", isAuthenticated, requireUnitOwnership, async (req: any, res: 
 // DELETE /api/units/:id
 router.patch('/:id', isAuthenticated, requireUnitOwnership, async (req: any, res: any) => {
   try {
-    const ownerId = req.user.sub;
+    const ownerId = req.user.contextOwnerId;
     const access = await getOwnerSubscriptionAccess(ownerId);
     const { data: properties, error: propertyError } = await supabase.from('properties').select('id').eq('owner_id', ownerId).is('archived_at', null);
     if (propertyError) throw propertyError;
     const ids = (properties || []).map((p: any) => p.id);
     const usage = ids.length ? await supabase.from('units').select('id', { count: 'exact', head: true }).in('property_id', ids).is('archived_at', null) : { count: 0, error: null };
     if (usage.error) throw usage.error;
-    if (!canAddUnit(access.planCode, usage.count || 0)) return res.status(403).json(buildPlanLimitError(access.planCode, 'active_units', usage.count || 0));
-    const { error } = await supabase.from('units').update({ archived_at: null, updated_at: new Date().toISOString() }).eq('id', req.params.id).in('property_id', ids);
+    if (!canAddUnit(access.planCode, usage.count || 0)) return res.status(409).json(buildPlanLimitError(access.planCode, 'active_units', usage.count || 0));
+    const { data: restored, error } = await supabase.from('units').update({ archived_at: null, updated_at: new Date().toISOString() }).eq('id', req.params.id).in('property_id', ids).select('id');
     if (error) throw error;
+    if (!restored?.length) return res.status(400).json({ message: 'Unit cannot be restored' });
     return res.json({ message: 'Unit restored successfully' });
   } catch {
     return res.status(500).json({ message: 'Failed to restore unit' });

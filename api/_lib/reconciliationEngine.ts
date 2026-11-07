@@ -457,5 +457,7 @@ export async function recordReconciliation(
     processing_status = 'review', operator_review_required = true,
     reconciliation_method = ${result.method}, confidence_score = ${result.score || 0},
     reconciliation_notes = ${result.reasons.join('; ')}, processing_attempts = processing_attempts + 1
-    WHERE id = ${paymentEventId}`;
+    WHERE id = ${paymentEventId}
+      AND processing_status NOT IN ('processed')
+      AND reconciliation_status NOT IN ('auto_matched', 'manually_matched')`;
 }

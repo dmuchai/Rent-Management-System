@@ -68,7 +68,13 @@ export async function postExternalPaymentEvent(
       )
       ON CONFLICT (source_event_id, invoice_id)
         WHERE source_event_id IS NOT NULL AND invoice_id IS NOT NULL
-      DO NOTHING
+      DO UPDATE SET lease_id = EXCLUDED.lease_id, invoice_id = EXCLUDED.invoice_id,
+        bank_event_id = EXCLUDED.bank_event_id, amount = EXCLUDED.amount,
+        due_date = EXCLUDED.due_date, paid_date = EXCLUDED.paid_date,
+        payment_method = EXCLUDED.payment_method, payment_type = EXCLUDED.payment_type,
+        payment_source = EXCLUDED.payment_source, status = EXCLUDED.status,
+        description = EXCLUDED.description, updated_at = NOW()
+        WHERE public.payments.status = 'cancelled'
       RETURNING id
     `;
     if (!receipt) {

@@ -34,11 +34,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const [payment] = await sql`
-      SELECT id, amount, status, payment_source,
+      SELECT pay.id, pay.amount, pay.status, pay.payment_source,
              COALESCE(provider_checkout_id, pesapal_order_tracking_id) AS checkout_request_id,
-             provider_merchant_request_id, expected_merchant_id, provider_receipt_id, invoice_id
-      FROM public.payments
-      WHERE COALESCE(provider_checkout_id, pesapal_order_tracking_id) = ${callback.checkoutRequestId}
+             pay.provider_merchant_request_id, pay.expected_merchant_id, pay.provider_receipt_id,
+             pay.invoice_id, p.owner_id AS landlord_id
+      FROM public.payments pay
+      LEFT JOIN public.leases l ON l.id = pay.lease_id
+      LEFT JOIN public.units u ON u.id = l.unit_id
+      LEFT JOIN public.properties p ON p.id = u.property_id
+      WHERE COALESCE(pay.provider_checkout_id, pay.pesapal_order_tracking_id) = ${callback.checkoutRequestId}
       LIMIT 1
     `;
     if (!payment || payment.payment_source !== 'mpesa_stk') {
@@ -46,6 +50,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         operator_review_required = true, last_processing_error = 'Payment attempt not found',
         processing_attempts = processing_attempts + 1 WHERE id = ${event.id}`;
       return providerResponse(res, 404, 1, 'Payment not found');
+    }
+    if (payment.landlord_id) {
+      await sql`UPDATE public.external_payment_events
+        SET landlord_id = ${payment.landlord_id}
+        WHERE id = ${event.id}`;
     }
 
     let query;

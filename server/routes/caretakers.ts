@@ -383,25 +383,29 @@ router.post("/invitations", async (req: any, res: any, next: any) => {
       }
 
       if (existingUserRecord) {
-        await supabase.from("users").update({ status: "active" }).eq("id", authUserId);
+        const { error } = await supabase.from("users").update({ status: "active" }).eq("id", authUserId);
+        if (error) return res.status(500).json({ error: "Account setup failed" });
       } else {
-        await supabase.from("users").insert({
+        const { error } = await supabase.from("users").insert({
           id: authUserId, email: invitation.email, first_name: invitation.first_name, last_name: invitation.last_name,
           role: "caretaker", created_by: invitation.landlord_id, status: "active",
         });
+        if (error) return res.status(500).json({ error: "Account setup failed" });
       }
 
       if (invitation.property_id || invitation.unit_id) {
-        await supabase.from("caretaker_assignments").insert([{
+        const { error } = await supabase.from("caretaker_assignments").insert([{
           caretaker_id: authUserId, landlord_id: invitation.landlord_id,
           property_id: invitation.property_id || null, unit_id: invitation.unit_id || null,
           status: "active", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
         }]);
+        if (error) return res.status(500).json({ error: "Account assignment failed" });
       }
-      await supabase.from("user_context_memberships").upsert({
+      const { error: membershipError } = await supabase.from("user_context_memberships").upsert({
         user_id: authUserId, context_owner_id: invitation.landlord_id, role: "caretaker",
         status: "active", authority_source: "invitation", updated_at: new Date().toISOString(),
       }, { onConflict: "user_id,context_owner_id,role" });
+      if (membershipError) return res.status(500).json({ error: "Account context setup failed" });
 
       await supabase.from("caretaker_invitations").update({
         invitation_accepted_at: new Date().toISOString(), status: "accepted",
