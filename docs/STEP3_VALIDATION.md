@@ -3,7 +3,7 @@
 ## Current release
 
 - Branch: `codex/staging-step3-fixes`
-- Current commit: `412c749` (`Record hosted landlord validation`)
+- Current commit: `d95b6b6` (`Record hosted Step 3 role validation`)
 - Staging project: `landee-staging` (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`)
 - Staging URL: https://landee-staging.vercel.app
 - Staging Supabase project: `mcclctunrpyhumubpeyo`
