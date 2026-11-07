@@ -15,7 +15,7 @@ const identities = {
 
 if (!supabaseUrl) throw new Error('STAGING_SUPABASE_URL is required');
 const parsedUrl = new URL(supabaseUrl);
-if (!parsedUrl.hostname.startsWith(`${expectedProjectRef}.`)) {
+if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== `${expectedProjectRef}.supabase.co`) {
   throw new Error('STAGING_SUPABASE_URL must reference the isolated staging Supabase project');
 }
 if (!anonKey) throw new Error('STAGING_SUPABASE_ANON_KEY is required');

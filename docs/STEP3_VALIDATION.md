@@ -20,7 +20,7 @@ On 6 November 2026 the bootstrap was executed successfully against the staging p
 
 The authenticated staging browser subsequently passed genuine hosted UI checks for the seeded identities. Landlord A displayed the Step 3 portfolio, one overdue invoice, 50% occupancy (1/2 units), and the active Step 3 Tenant A lease; its Properties, Tenants, and Leases views showed only the authorised portfolio. Landlord B displayed only Property B/Unit B1 and Tenant B. Manager A displayed the authorised Landlord A totals (1 property, 1 active tenant, 50% occupancy, and 1 overdue invoice), rather than the manager's own empty portfolio. Property Caretaker A displayed one assigned property and Tenant A; Unit Caretaker A displayed the assigned Tenant A/unit scope. Tenant A displayed only Property A/Unit A1 and Tenant B displayed only Property B/Unit B1. These are hosted staging observations, not local handler tests.
 
-The operator subsequently completed the corrected authenticated API harness for all six required identities. Each run verified the expected trusted role, returned `200` for permitted list/profile reads applicable to that identity, and returned explicit `403` for the schema-valid foreign-property unit-create probe and the existing foreign/sibling-unit probe. The six sanitized results are recorded below; no credential, token, cookie, or response body containing secrets was retained.
+The operator subsequently completed the corrected authenticated API harness for the six primary matrix identities, with the separately recorded Unit Caretaker A run included in the same evidence table. Each run verified the expected trusted role, returned `200` for permitted list/profile reads applicable to that identity, and returned explicit `403` for the schema-valid foreign-property unit-create probe and the existing foreign/sibling-unit probe. No credential, token, cookie, or response body containing secrets was retained.
 
 On 7 November, the shared browser was re-authenticated as Unit Caretaker A (`0700000307`). Its hosted dashboard showed one assigned tenant and one assigned property; the Properties view showed only Step 3 Property A with one tenant/lease, and the Tenants view contained only Step3 Tenant A. The tenant-creation dialog was opened and cancelled without submitting a write. The later corrected API harness supplies the list/create-denial evidence for this identity; it does not cover a successful assigned-unit update. The Subscription view for the landlord session displayed “Subscriptions are not enabled yet”; hosted legacy-Free versus noneligible enforcement therefore remains unverified.
 
@@ -50,7 +50,7 @@ The guarded staging bootstrap and authenticated browser session are available on
 
 A guarded `npm run staging:validate-api` harness is now implemented in [validate-staging-api.ts](../scripts/validate-staging-api.ts). It accepts a session access token and optional Vercel SSO cookie through environment variables, performs read checks and a schema-valid unit-create authorization probe against a supplied foreign fixture property without creating data, never logs credentials, and fails closed when the staging URL or token is missing. It is ready for one run per synthetic identity once the authenticated browser can provide both values.
 
-The harness now accepts `STAGING_EXPECTED_ROLE` and verifies the trusted role returned by `/api/auth?action=user`. The earlier Landlord A `404/400/400` output was correctly rejected as authorization evidence because it represented a missing tenant profile and malformed probes. The corrected six-identity run completed with valid fixture inputs and explicit `403` authorization responses.
+The harness now accepts `STAGING_EXPECTED_ROLE` and verifies the trusted role returned by `/api/auth?action=user`. The earlier Landlord A `404/400/400` output was correctly rejected as authorization evidence because it represented a missing tenant profile and malformed probes. The corrected primary-identity runs and the separately recorded Unit Caretaker A run completed with valid fixture inputs and explicit `403` authorization responses.
 
 ### Corrected authenticated API matrix
 
@@ -60,6 +60,7 @@ The harness now accepts `STAGING_EXPECTED_ROLE` and verifies the trusted role re
 | Landlord B | `landlord` | `200` | `403` | `403` | Sanitized operator harness output |
 | Property Manager A | `property_manager` | `200` | `403` | `403` | Sanitized operator harness output |
 | Property Caretaker A | `caretaker` | `200` | `403` | `403` | Sanitized operator harness output |
+| Unit Caretaker A | `caretaker` | `200` | `403` | `403` | Sanitized operator harness output |
 | Tenant A | `tenant` | `200` | `403` | `403` | Sanitized operator harness output |
 | Tenant B | `tenant` | `200` | `403` | `403` | Sanitized operator harness output |
 
@@ -78,7 +79,7 @@ hosted UI observations and local handler/provider tests.
 | Callback verification, retry, duplicate idempotency | Local complete; hosted blocked | Provider was mocked locally; no live Daraja request |
 | Invoice reminder metadata | Local and staging query complete | Staging invoice `b0bab968-52df-4020-bd21-1daa58457e02` produced an email queue row with `jsonb_typeof(metadata) = 'object'` and `metadata->>'leaseId' = 'step3-lease-b'`; historical rows were not rewritten |
 | Partial/excess payments and reversals | Local complete | Disposable PostgreSQL financial-integrity tests |
-| Cross-landlord isolation and tenant restrictions | Local complete; hosted UI/API matrix passed; update coverage pending | Tenant A/B UI isolation passed, and all six corrected API runs returned expected role/read/403 results. Assigned-unit and portfolio update assertions remain pending |
+| Cross-landlord isolation and tenant restrictions | Local complete; hosted UI/API matrix passed; update coverage pending | Tenant A/B UI isolation passed, and the corrected API runs represented in the matrix returned expected role/read/403 results. Assigned-unit and portfolio update assertions remain pending |
 | Forged/revoked contexts | Local complete; hosted blocked | Local authorization tests; no staging token-revocation/request-forgery harness was executed |
 | Queue concurrency and recovery | Local complete | Disposable PostgreSQL claim/lease tests |
 | Invoice-generation idempotency and lease expiry | Staging database evidence complete; authenticated cron capture blocked | The November 2026 staging invoicing run generated one invoice, and the identical second run generated zero. Existing staging fixtures show `step3-expired-lease` as `expired/is_active=false` with `step3-expired-unit.is_occupied=false`, and `step3-active-lease` as `active/is_active=true` with its unit occupied. A fresh authenticated cron/API capture remains blocked by Vercel SSO. |
@@ -108,9 +109,9 @@ hosted UI observations and local handler/provider tests.
 - Before Step 4, obtain Daraja sandbox/approved credentials, designated test identities/devices, and decisions for callback evidence, reversals, and settlement. Prepare Google Play and RevenueCat test products plus a device for purchase, renewal, cancellation, expiry, and web entitlement-sync checks. None of these provider flows has passed yet.
 - Per-landlord Safaricom onboarding and settlement remains a separate design phase; merchant configuration, settlement ownership, reconciliation evidence, and provider capabilities require explicit decisions. No speculative settlement behavior is implemented.
 
-Step 3 is **not ready to close**. The six corrected authenticated API runs are complete, but independent staging RLS verification, assigned-unit update coverage, hosted callback recovery/duplicate evidence, subscription enforcement with the feature enabled, fresh authenticated cron capture, and full backup restoration remain release blockers. UI observations must not be promoted to API or RLS evidence.
+Step 3 is **not ready to close**. The corrected authenticated API runs represented in the matrix are complete, but independent staging RLS verification, assigned-unit update coverage, hosted callback recovery/duplicate evidence, subscription enforcement with the feature enabled, fresh authenticated cron capture, and full backup restoration remain release blockers. UI observations must not be promoted to API or RLS evidence.
 
-## Remaining authenticated API runs
+## Authenticated API harness instructions
 
 Run the harness once per identity with a fresh token and the same Vercel SSO cookie. Keep the environment variables in the local protected shell; never paste them into chat or commit them.
 
@@ -120,18 +121,9 @@ Run the harness once per identity with a fresh token and the same Vercel SSO coo
 | Landlord B | `0700000302` | `landlord` | `step3-unit-a2` |
 | Manager A | `0700000305` | `property_manager` | `step3-unit-b1` |
 | Property Caretaker A | `0700000306` | `caretaker` | `step3-unit-b1` |
+| Unit Caretaker A | `0700000307` | `caretaker` | `step3-unit-a2` |
 | Tenant A | `0700000303` | `tenant` | `step3-unit-b1` |
 | Tenant B | `0700000304` | `tenant` | `step3-unit-a2` |
-
-The highest-priority remaining runs are Property Manager A (`0700000305`, expected
-`property_manager`) and Tenant B (`0700000304`, expected `tenant`). Manager A
-must produce `200` for its authorised lists and explicit `403` responses for
-the foreign-property create and sibling-unit probes. Tenant B must produce
-`200` for its tenant profile and scoped reads, plus explicit `403` responses
-for both authorization probes. Landlord A's reported tenant-profile `404` is
-an expected missing-profile result, while its `400` create and sibling
-responses were invalid-request results; none is authorization evidence until
-the corrected harness produces explicit `403` responses.
 
 For each row, authenticate normally, export only the resulting access token and
 SSO cookie into the shell, set `STAGING_EXPECTED_ROLE`,
@@ -147,6 +139,9 @@ STAGING_CREATE_PROPERTY_ID=step3-property-b \
 STAGING_SIBLING_UNIT_ID=step3-unit-a2 \
 npm run staging:validate-api
 ```
+
+The values in this example are placeholders. Replace the expected role and
+fixture probe values with those for the intended identity before running it.
 
 Replace only the expected role and sibling fixture for each table row. Do not
 reuse a token after switching identity. Record the sanitized PASS/INFO lines and the identity/role, not the credential

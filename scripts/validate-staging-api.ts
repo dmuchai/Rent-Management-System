@@ -6,12 +6,16 @@ const vercelCookie = process.env.STAGING_VERCEL_COOKIE ?? '';
 const siblingUnitId = process.env.STAGING_SIBLING_UNIT_ID ?? '';
 const expectedRole = process.env.STAGING_EXPECTED_ROLE ?? '';
 const createPropertyId = process.env.STAGING_CREATE_PROPERTY_ID ?? '';
+const validRoles = new Set(['landlord', 'property_manager', 'caretaker', 'tenant']);
 
 if (!baseUrl || !/^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/.test(baseUrl)) {
   throw new Error('STAGING_BASE_URL must be an isolated https://*.vercel.app URL');
 }
 if (!accessToken) {
   throw new Error('STAGING_API_TOKEN is required; do not place it in source control');
+}
+if (!validRoles.has(expectedRole)) {
+  throw new Error('STAGING_EXPECTED_ROLE is required and must be landlord, property_manager, caretaker, or tenant');
 }
 
 const headers: Record<string, string> = { Accept: 'application/json' };
@@ -43,12 +47,21 @@ function expectAuthorizationDenied(label: string, response: { status: number; bo
   console.log(`PASS ${label}: HTTP 403 authorization denial`);
 }
 
+const profile = await request('/api/auth?action=user');
+expectStatus('authenticated role profile', profile.status, [200]);
+const role = profile.body && typeof profile.body === 'object' && 'role' in profile.body
+  ? (profile.body as { role?: unknown }).role
+  : undefined;
+assert.equal(role, expectedRole, `expected role ${expectedRole} but received ${String(role)}`);
+console.log(`PASS authenticated role profile: ${String(role)}`);
+
 const units = await request('/api/units');
 expectStatus('unit list', units.status, [200]);
 assert.ok(Array.isArray(units.body), 'unit list must return an array');
 
 const tenantList = await request('/api/tenants');
-expectStatus('tenant list', tenantList.status, [200, 403]);
+const expectedTenantListStatus = expectedRole === 'tenant' ? 403 : 200;
+expectStatus('tenant list', tenantList.status, [expectedTenantListStatus]);
 if (tenantList.status === 200) assert.ok(Array.isArray(tenantList.body), 'tenant list must return an array');
 
 const tenantProfile = await request('/api/tenants/me');
@@ -58,16 +71,6 @@ if (expectedRole === 'tenant') {
   console.log('INFO tenant profile: HTTP 404 means no tenant profile exists for this identity; it is not authorization evidence');
 } else {
   expectStatus('tenant profile for non-tenant identity', tenantProfile.status, [200]);
-}
-
-if (expectedRole) {
-  const profile = await request('/api/auth?action=user');
-  expectStatus('authenticated role profile', profile.status, [200]);
-  const role = profile.body && typeof profile.body === 'object' && 'role' in profile.body
-    ? (profile.body as { role?: unknown }).role
-    : undefined;
-  assert.equal(role, expectedRole, `expected role ${expectedRole} but received ${String(role)}`);
-  console.log(`PASS authenticated role profile: ${String(role)}`);
 }
 
 // Use a valid schema payload and a cross-portfolio property so any denial is
