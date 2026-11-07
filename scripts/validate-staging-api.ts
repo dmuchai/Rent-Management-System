@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 const baseUrl = process.env.STAGING_BASE_URL ?? '';
 const accessToken = process.env.STAGING_API_TOKEN ?? '';
 const vercelCookie = process.env.STAGING_VERCEL_COOKIE ?? '';
+const siblingUnitId = process.env.STAGING_SIBLING_UNIT_ID ?? '';
 
 if (!baseUrl || !/^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/.test(baseUrl)) {
   throw new Error('STAGING_BASE_URL must be an isolated https://*.vercel.app URL');
@@ -57,6 +58,15 @@ if (tenantCreate.status === 201) {
   throw new Error('Safety failure: validation request unexpectedly created a unit');
 }
 
+if (siblingUnitId) {
+  // PATCH is used only as a denial probe. An active fixture sibling must be
+  // rejected before restore validation and cannot be changed by this request.
+  const siblingRestore = await request(`/api/units/${encodeURIComponent(siblingUnitId)}`, {
+    method: 'PATCH',
+  });
+  expectStatus('sibling unit denial', siblingRestore.status, [400, 403, 404]);
+}
+
 console.log(JSON.stringify({
   baseUrl,
   checks: [
@@ -64,6 +74,7 @@ console.log(JSON.stringify({
     'tenant list',
     'tenant profile or role denial',
     'non-mutating unit creation role guard',
+    ...(siblingUnitId ? ['sibling unit denial'] : []),
   ],
   note: 'This harness validates the active identity only. Run once per synthetic staging identity and retain sanitized output.',
 }));
