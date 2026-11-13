@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -12,6 +12,7 @@ import TenantTable from "@/components/tenants/TenantTable";
 import MaintenanceRequestList from "@/components/maintenance/MaintenanceRequestList";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 
 type CaretakerSection = "overview" | "tenants" | "properties" | "maintenance" | "profile";
 
@@ -26,14 +27,27 @@ const CARETAKER_SECTIONS: ReadonlySet<CaretakerSection> = new Set<CaretakerSecti
 const isCaretakerSection = (value: string): value is CaretakerSection =>
   CARETAKER_SECTIONS.has(value as CaretakerSection);
 
+type UnitEditForm = {
+  unitNumber: string;
+  rentAmount: string;
+  bedrooms: string;
+  bathrooms: string;
+  size: string;
+  isOccupied: boolean;
+};
+
 export default function CaretakerDashboard() {
   const [activeSection, setActiveSection] = useState<CaretakerSection>("overview");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<UnitEditForm | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
 
   const sectionTitles: Record<CaretakerSection, string> = {
     overview: "Dashboard",
@@ -99,6 +113,71 @@ export default function CaretakerDashboard() {
     enabled: isAuthenticated,
     retry: false,
   });
+
+  // Fetch units scoped to caretaker assignments (backend filters by assignment)
+  const { data: assignedUnits = [], isLoading: unitsLoading } = useQuery({
+    queryKey: ["/api/units"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/units");
+      const result = await response.json();
+      return Array.isArray(result) ? result : [];
+    },
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  const startEdit = (unit: any) => {
+    setEditingUnitId(unit.id);
+    setEditForm({
+      unitNumber: unit.unitNumber ?? "",
+      rentAmount: unit.rentAmount != null ? String(unit.rentAmount) : "",
+      bedrooms: unit.bedrooms != null ? String(unit.bedrooms) : "",
+      bathrooms: unit.bathrooms != null ? String(unit.bathrooms) : "",
+      size: unit.size != null ? String(unit.size) : "",
+      isOccupied: Boolean(unit.isOccupied),
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingUnitId(null);
+    setEditForm(null);
+  };
+
+  const submitEdit = async (unit: any) => {
+    if (!editForm) return;
+    setEditSubmitting(true);
+    try {
+      const body = {
+        id: unit.id,
+        propertyId: unit.propertyId,
+        unitNumber: editForm.unitNumber,
+        rentAmount: editForm.rentAmount,
+        bedrooms: editForm.bedrooms !== "" ? Number(editForm.bedrooms) : null,
+        bathrooms: editForm.bathrooms !== "" ? Number(editForm.bathrooms) : null,
+        size: editForm.size !== "" ? Number(editForm.size) : null,
+        isOccupied: editForm.isOccupied,
+      };
+      const response = await apiRequest("PUT", "/api/units", body);
+      if (response.ok) {
+        toast({ title: "Unit updated", description: `Unit ${editForm.unitNumber} saved.` });
+        setEditingUnitId(null);
+        setEditForm(null);
+        await queryClient.invalidateQueries({ queryKey: ["/api/units"] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/caretakers/properties"] });
+      } else {
+        const err = await response.json().catch(() => ({}));
+        toast({
+          title: "Update failed",
+          description: err?.message ?? `Server returned ${response.status}`,
+          variant: "destructive",
+        });
+      }
+    } catch (e) {
+      toast({ title: "Update failed", description: String(e), variant: "destructive" });
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
 
   const propertySummaries = useMemo(() => {
     return assignedProperties.map((property: any) => {
@@ -280,10 +359,10 @@ export default function CaretakerDashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Assigned Properties</CardTitle>
-              <CardDescription>Properties and tenants you support.</CardDescription>
+              <CardDescription>Properties and units you support. Edit permitted fields on your assigned unit.</CardDescription>
             </CardHeader>
             <CardContent>
-              {propertiesLoading || leasesLoading ? (
+              {propertiesLoading || leasesLoading || unitsLoading ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map((item) => (
                     <Skeleton key={item} className="h-10 w-full" />
@@ -293,30 +372,168 @@ export default function CaretakerDashboard() {
                 <p className="text-sm text-muted-foreground">No properties assigned yet.</p>
               ) : (
                 <div className="space-y-4">
-                  {propertySummaries.map((property: any) => (
-                    <div key={property.id} className="rounded-lg border border-border p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium">{property.name}</p>
-                          <p className="text-xs text-muted-foreground">{property.address}</p>
+                  {propertySummaries.map((property: any) => {
+                    const propertyUnits = assignedUnits.filter(
+                      (u: any) => u.propertyId === property.id
+                    );
+                    return (
+                      <div key={property.id} className="rounded-lg border border-border p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium">{property.name}</p>
+                            <p className="text-xs text-muted-foreground">{property.address}</p>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {property.tenantCount} tenant{property.tenantCount === 1 ? "" : "s"} • {property.leaseCount} lease{property.leaseCount === 1 ? "" : "s"}
+                          </div>
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          {property.tenantCount} tenant{property.tenantCount === 1 ? "" : "s"} • {property.leaseCount} lease{property.leaseCount === 1 ? "" : "s"}
-                        </div>
+                        {property.tenantNames.length === 0 ? (
+                          <p className="mt-3 text-xs text-muted-foreground">No tenants linked to leases yet.</p>
+                        ) : (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {property.tenantNames.map((name: string) => (
+                              <span key={name} className="rounded-full bg-muted px-2 py-1 text-xs">
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {propertyUnits.length > 0 && (
+                          <div className="mt-4 space-y-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Assigned Units</p>
+                            {propertyUnits.map((unit: any) => (
+                              <div key={unit.id} className="rounded-md border border-border bg-muted/30 p-3" data-testid={`unit-row-${unit.id}`}>
+                                {editingUnitId === unit.id && editForm ? (
+                                  <form
+                                    id={`unit-edit-form-${unit.id}`}
+                                    data-testid={`unit-edit-form-${unit.id}`}
+                                    onSubmit={(e) => { e.preventDefault(); submitEdit(unit); }}
+                                    className="space-y-3"
+                                  >
+                                    <p className="text-xs font-medium">Edit Unit {unit.unitNumber}</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <label className="block text-xs text-muted-foreground mb-1" htmlFor={`unit-number-${unit.id}`}>Unit Number</label>
+                                        <input
+                                          id={`unit-number-${unit.id}`}
+                                          data-testid={`input-unit-number-${unit.id}`}
+                                          className="w-full rounded border bg-background px-2 py-1 text-sm"
+                                          value={editForm.unitNumber}
+                                          onChange={(e) => setEditForm((f) => f && ({ ...f, unitNumber: e.target.value }))}
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs text-muted-foreground mb-1" htmlFor={`rent-amount-${unit.id}`}>Rent Amount (KES)</label>
+                                        <input
+                                          id={`rent-amount-${unit.id}`}
+                                          data-testid={`input-rent-amount-${unit.id}`}
+                                          type="number"
+                                          min="1"
+                                          step="1"
+                                          className="w-full rounded border bg-background px-2 py-1 text-sm"
+                                          value={editForm.rentAmount}
+                                          onChange={(e) => setEditForm((f) => f && ({ ...f, rentAmount: e.target.value }))}
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs text-muted-foreground mb-1" htmlFor={`bedrooms-${unit.id}`}>Bedrooms</label>
+                                        <input
+                                          id={`bedrooms-${unit.id}`}
+                                          data-testid={`input-bedrooms-${unit.id}`}
+                                          type="number"
+                                          min="0"
+                                          className="w-full rounded border bg-background px-2 py-1 text-sm"
+                                          value={editForm.bedrooms}
+                                          onChange={(e) => setEditForm((f) => f && ({ ...f, bedrooms: e.target.value }))}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs text-muted-foreground mb-1" htmlFor={`bathrooms-${unit.id}`}>Bathrooms</label>
+                                        <input
+                                          id={`bathrooms-${unit.id}`}
+                                          data-testid={`input-bathrooms-${unit.id}`}
+                                          type="number"
+                                          min="0"
+                                          className="w-full rounded border bg-background px-2 py-1 text-sm"
+                                          value={editForm.bathrooms}
+                                          onChange={(e) => setEditForm((f) => f && ({ ...f, bathrooms: e.target.value }))}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs text-muted-foreground mb-1" htmlFor={`size-${unit.id}`}>Size (sq ft)</label>
+                                        <input
+                                          id={`size-${unit.id}`}
+                                          data-testid={`input-size-${unit.id}`}
+                                          type="number"
+                                          min="1"
+                                          step="0.01"
+                                          className="w-full rounded border bg-background px-2 py-1 text-sm"
+                                          value={editForm.size}
+                                          onChange={(e) => setEditForm((f) => f && ({ ...f, size: e.target.value }))}
+                                        />
+                                      </div>
+                                      <div className="flex items-center gap-2 pt-5">
+                                        <input
+                                          id={`is-occupied-${unit.id}`}
+                                          data-testid={`input-is-occupied-${unit.id}`}
+                                          type="checkbox"
+                                          checked={editForm.isOccupied}
+                                          onChange={(e) => setEditForm((f) => f && ({ ...f, isOccupied: e.target.checked }))}
+                                        />
+                                        <label className="text-xs text-muted-foreground" htmlFor={`is-occupied-${unit.id}`}>Occupied</label>
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-2 pt-1">
+                                      <Button
+                                        type="submit"
+                                        size="sm"
+                                        disabled={editSubmitting}
+                                        data-testid={`btn-save-unit-${unit.id}`}
+                                      >
+                                        {editSubmitting ? "Saving…" : "Save"}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={cancelEdit}
+                                        data-testid={`btn-cancel-unit-${unit.id}`}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </form>
+                                ) : (
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <p className="text-sm font-medium">Unit {unit.unitNumber}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        KES {Number(unit.rentAmount).toLocaleString()} / month
+                                        {" · "}
+                                        <span className={unit.isOccupied ? "text-chart-2" : "text-muted-foreground"}>
+                                          {unit.isOccupied ? "Occupied" : "Vacant"}
+                                        </span>
+                                      </p>
+                                    </div>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => startEdit(unit)}
+                                      data-testid={`btn-edit-unit-${unit.id}`}
+                                    >
+                                      Edit
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      {property.tenantNames.length === 0 ? (
-                        <p className="mt-3 text-xs text-muted-foreground">No tenants linked to leases yet.</p>
-                      ) : (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {property.tenantNames.map((name: string) => (
-                            <span key={name} className="rounded-full bg-muted px-2 py-1 text-xs">
-                              {name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
