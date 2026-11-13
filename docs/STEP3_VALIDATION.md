@@ -1,5 +1,94 @@
 # Step 3 validation — 13 November 2026
 
+## Post-review candidate — implementation `515ce90`
+
+This section supersedes the earlier `a372667` candidate gate below. The four
+reviewed commits were pushed normally to `codex/staging-step3-fixes`; Git
+deployments remain disabled for that branch, so the push did not move an alias
+or create a second candidate. The publishable history contains neither the
+local `.vscode/mcp.json` file nor the confidential implementation review, and
+the workstation-specific links in the repository instructions are relative.
+Both excluded files remain ignored local copies.
+
+- Implementation SHA: `515ce9015c0eff56d97c4de8f6713493113728a7`
+  (`Harden Step 3 staging candidate`).
+- Test-only CI follow-up: `eee1c3c04fd5bbc148a57ba49a99d742fef3ff98`
+  strips the `disposable=true` safety marker after validating the local test
+  URL, before PostgreSQL.js creates its connection. It does not change the
+  deployed application bundle or runtime behavior.
+- Protected candidate: `dpl_4gbigVKwTtPycVrxqRu4mMFxy8wd`, Ready at
+  `https://landee-staging-c691w721z-dmmuchai-1174s-projects.vercel.app`.
+- Deployment target: isolated Vercel project `landee-staging`
+  (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`), Node.js 26.x, created manually with
+  `--prod --skip-domain`. Vercel Authentication remains enabled.
+- Staging alias: unchanged on `dpl_2MVNEXsVLgdi7FGY8TrgVhJoutoH`.
+- Supabase target: staging project `mcclctunrpyhumubpeyo`; production remained
+  excluded. No persistent SQL was rerun.
+
+No GitHub pull request is attached to this branch, so there is no retrievable
+CodeRabbit thread to quote. The supplied review priorities were assessed
+against the current files rather than stale line numbers.
+
+### Review finding disposition
+
+| Finding | Disposition and evidence |
+|---|---|
+| Existing-account credentials changed by invitation acceptance | **Confirmed and fixed.** Tenant and caretaker acceptance now require a valid Supabase session whose Auth user ID and email match the invited existing account. Existing passwords and Auth metadata are never rewritten. New accounts alone accept a password; a newly created Auth user is removed if the database transaction fails. The browser flow sends an existing user through sign-in/account switching and returns to the invitation. |
+| Inactive assignment conflict and retry recovery | **Confirmed and fixed.** Exact-scope caretaker assignments are locked and reactivated; a second active/history row is not created merely because the matching row was inactive. Auth-only retry recovery remains supported after the account proves its identity. |
+| Image attach/delete race and failed replacement | **Confirmed and fixed.** A pending replacement no longer clears `properties.image_url`. Both Vercel and Express finalize/cleanup routes lock the property row before object validation, attachment, previous-object cleanup, or candidate deletion. Replayed finalization and concurrent cleanup cannot delete the newly referenced object. |
+| Native purchase identity / selected billing owner | **Confirmed and fixed.** RevenueCat is configured with the server-returned selected billing account ID, not the property manager's user ID. Identity changes use `Purchases.logIn`; `getAppUserID()` is checked on customer, purchase, and restore snapshots before state is accepted. |
+| Vercel/Express subscription owner scope | **Confirmed and fixed.** Both routes use the trusted `contextOwnerId`; hosted manager plan and usage match Landlord A. |
+| Unit-scoped caretaker gets property-wide create authority | **Inapplicable to the reviewed code; regression retained.** New-unit creation requires a property-level assignment in both entrypoints. A unit-specific assignment cannot authorize creation of a different unit. Assigned-unit update remains allowed while sibling update is denied. |
+| Stale response clears newer authority context | **Confirmed and fixed.** Each request captures its exact context. A rejected response clears/retries only when local storage still contains that same context; mutations are never replayed. |
+| Renewal/resubscription blocked | **Confirmed and fixed.** Only the exact active product/base-plan package is disabled. A cancelled-but-still-active package offers **Resume renewal** through Google Play management; expired subscriptions and alternate billing periods remain selectable. |
+| Storage policy crosses buckets | **Not present in staging/current package.** Staging has zero `storage.objects` policies and the approved private bucket remains server-mediated. The legacy `supabase-migration.sql` policies are explicitly bucket-scoped, so they do not cross buckets, but its authenticated-wide SELECT would make `property-images` non-private and that legacy script must not be applied. |
+
+### Verification evidence for `515ce90`
+
+| Check | Result |
+|---|---|
+| TypeScript and frontend production build on local Node 22 | **PASS**; only the existing mixed-import and bundle-size warnings |
+| Node 26.13 compatibility | **PASS**: TypeScript, 36 financial/authority/subscription tests, and private-image contract. `tsx` emitted only its own `module.register()` deprecation warning. CI now tests Node 22 and 26. |
+| Invoicing / queue recovery | **PASS — 27/27** on disposable PostgreSQL, including email and SMS failure/retry recovery through injected non-delivering transports; no provider request occurred |
+| Subscription | **PASS — 17/17** |
+| Financial/authority | **PASS — 19/19** |
+| Private-image and frontend Storage/Realtime contracts | **PASS** |
+| Hosted seven-identity matrix | **PASS — 7/7** against the exact candidate |
+| Hosted selected-owner, context error, and unit-scope probes | **PASS** |
+| Existing-account invitation proof/retry | **PASS**: unauthenticated acceptance returned `401`/`EXISTING_ACCOUNT_AUTH_REQUIRED`; authenticated acceptance returned `201` without changing credentials; fixture invitation was removed afterward |
+| Hosted private-image lifecycle | **PASS**: prepare, signed upload, byte validation, finalization, 90-second read, replacement cleanup, expiry, cross-owner denial, invalid input rejection, zero orphans, and cleanup |
+| Hosted cron boundary | **PASS**: five unauthenticated cron probes returned `401`; no job was run |
+| GitHub release checks for pushed SHA | **PASS** on test-only follow-up `eee1c3c`: Node 22 job `131961472718` and Node 26 job `131961473083` completed every type, route, financial, invoicing, subscription, account-deletion, KCB, and Vercel build step ([run `43447726023`](https://github.com/dmuchai/Rent-Management-System/actions/runs/43447726023)) |
+| Browser on exact candidate | **PARTIAL / IN PROGRESS**: Opera reached the candidate through Vercel Authentication and rendered the Landee sign-in page. The candidate-origin Landee login and role flows require the operator handoff; API results are not counted as browser evidence. |
+
+The reusable lifecycle runner is
+[`scripts/validate-staging-hosted.mjs`](../scripts/validate-staging-hosted.mjs)
+(`npm run staging:validate-hosted`). It requires an exact deployment ID,
+declared staging Supabase project reference, explicit
+`STAGING_ALLOW_MUTATION=true`, protected environment credentials, and a pinned
+authenticated Vercel CLI binary. Authentication retries are limited to
+network, `429`, and `5xx` failures; credential/authorization failures are not
+retried. Temporary headers and all synthetic invitation/image artifacts are
+removed in `finally` cleanup.
+
+### Remaining-gap gate table
+
+| Issue | Current evidence | Staging-promotion blocker? | Production blocker? | Next action |
+|---|---|---|---|---|
+| Hosted subscriptions disabled | `ENABLE_SUBSCRIPTIONS` and `VITE_ENABLE_SUBSCRIPTIONS` are absent; plan/identity logic is locally tested, but no Android/RevenueCat purchase occurred | **No for restricted non-billing staging; yes for claiming Step 3 subscription completion** | **Yes** | Configure only an approved RevenueCat/Google Play test environment and designated test device in a separate live-provider session |
+| Empty Realtime publication | Publication table count is `0`. Current consumers only invalidate API query caches for properties, tenants, leases, payments, invoices, and units. `VITE_ENABLE_REALTIME` now defaults off. | **No**; default-off polling/refetch behavior is safer than broad client RLS | **Only if Realtime is a release requirement** | Design a least-privilege server-mediated signal or table-specific policy/publication and run cross-owner payload tests; never add broad SELECT policies |
+| Legacy notification metadata / 14 open jobs | Open inventory: 11 email and 3 SMS. Current fixtures: 3 failed email (2 object metadata, 1 string) and 3 failed SMS (2 object, 1 string); historical: 8 pending email with string metadata. Three current jobs remain retry-eligible (2 email, 1 SMS); three are exhausted. Controlled non-delivery recovery passed locally. | **No while provider credentials remain absent and no replay is performed** | **Yes before enabling delivery workers/providers** | Quarantine and review by cohort; do not replay or rewrite historical jobs broadly |
+| 21 users lack active membership | All are historical/non-Step-3: caretaker 5, landlord 7, manager 3, tenant 6. Current Step 3 fixture gap is zero. | **No** under the documented persisted-role fallback | **Yes before removing fallback** | Reconcile each historical identity to an owner/role from authoritative relationships; do not grant memberships to every user |
+| Full isolated backup restore not performed | Rollback-only SQL rehearsal passed; that is not Auth/DB/Storage backup restoration | **No for this code-only staging candidate** | **Yes** | Restore a full backup into a new isolated project and verify Auth mappings, schema, RLS, triggers, indexes, data, and Storage |
+| Live provider and Android subscription checks outstanding | Controlled callback/queue suites passed; no real billing, notification, Daraja, or Android transaction was initiated | **No for restricted provider-disabled staging; yes for Step 3 completion** | **Yes** | Run separately with sandbox providers, designated identities/devices, and captured non-production settlement evidence |
+| Exact-candidate browser matrix | Vercel SSO/browser rendering passed; candidate-origin Landee session and role flows not yet complete | **Yes under the current alias-promotion gate** | **Yes** | Complete the authenticated Opera flows and record browser-only evidence separately from the API harness |
+
+Current recommendation remains **NO-GO for moving
+`landee-staging.vercel.app`** until the exact candidate's authenticated browser
+gate is completed. The Node 22/26 release matrix is green, but API/security
+results do not substitute for browser evidence. Production remains **NO-GO**
+for the additional blockers in the table.
+
 ## 13 November candidate freeze
 
 Staging isolation was re-verified before mutation. Supabase project
@@ -34,7 +123,7 @@ default-deny business tables; the database health advisor has no findings.
 | Subscription confirmation and buttons used different baselines | **Fixed.** [`shared/subscription/plans.ts`](../shared/subscription/plans.ts) supplies one transition-aware comparison baseline used by both plan buttons and confirmation logic in [`client/src/pages/subscription.tsx`](../client/src/pages/subscription.tsx). |
 | Trial eligibility inferred from `trialDays` | **Fixed.** Package metadata is described only as an introductory offer subject to Google Play eligibility. A trial-confirmed message is shown only when the returned customer snapshot is actually `trialing`. |
 | Only six fixture identities accounted for | **Fixed.** [`scripts/validate-staging-rls-fresh.ts`](../scripts/validate-staging-rls-fresh.ts) and [`scripts/validate-staging-rls.ts`](../scripts/validate-staging-rls.ts) include Unit Caretaker A. Fresh authentication, identity checks, JWT preflight, and default-deny probes passed for all seven identities. |
-| Caretaker invitation partial failure | **Fixed.** [`api/caretaker-invitations/index.ts`](../api/caretaker-invitations/index.ts) recovers an existing Auth-only user, updates credentials before the database transaction, and makes assignment creation retry-safe. [`server/routes/caretakers.ts`](../server/routes/caretakers.ts) mirrors resumable Auth lookup and idempotent database steps. |
+| Caretaker invitation partial failure | **Superseded by `515ce90`.** Existing-account credentials are no longer changed; acceptance requires proof of that existing account. New-account Auth creation is cleaned up on database failure, and exact inactive assignments are reactivated transactionally. |
 | Unit listing ignored `contextOwnerId`/ownership | **Fixed.** [`api/units/index.ts`](../api/units/index.ts) and [`server/routes/units.ts`](../server/routes/units.ts) scope landlord/manager listings to `contextOwnerId` and filter caretakers by property/unit assignment. Unit-specific caretakers cannot list or update sibling units. |
 
 ### Freeze checks
