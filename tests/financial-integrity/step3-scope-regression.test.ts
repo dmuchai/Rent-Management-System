@@ -166,3 +166,25 @@ test('manual payment replay claims only failed or review events', async () => {
   assert.match(replayRoute, /sql\.begin/);
   assert.match(replayRoute, /payment_audit_history/);
 });
+
+test('private property images are fetched through authenticated browser requests', async () => {
+  const hook = await readFile('client/src/hooks/useAuthenticatedImageUrl.ts', 'utf8');
+  const propertyCard = await readFile('client/src/components/properties/PropertyCard.tsx', 'utf8');
+  const tenantDashboard = await readFile('client/src/pages/dashboard/tenant.tsx', 'utf8');
+
+  assert.match(hook, /apiRequest\("GET", source\)/);
+  assert.match(hook, /URL\.createObjectURL\(blob\)/);
+  assert.match(propertyCard, /useAuthenticatedImageUrl\(property\.imageUrl, defaultImage, property\.updatedAt\)/);
+  assert.match(tenantDashboard, /useAuthenticatedImageUrl\(/);
+});
+
+test('manager invoice reads use the selected portfolio owner', async () => {
+  const invoices = await readFile('api/invoices/index.ts', 'utf8');
+  assert.match(invoices, /auth\.role !== 'property_manager'/);
+  assert.match(invoices, /i\.landlord_id = \$\{auth\.contextOwnerId\}/);
+});
+
+test('caretaker tenant tables do not request management invoices without leases', async () => {
+  const tenantTable = await readFile('client/src/components/tenants/TenantTable.tsx', 'utf8');
+  assert.match(tenantTable, /enabled: !readOnly && leases\.length > 0/);
+});

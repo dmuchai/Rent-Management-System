@@ -17,8 +17,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (auth.role !== 'landlord' && auth.role !== 'tenant') {
-    return res.status(403).json({ error: 'Only landlords and tenants can view invoices' });
+  if (auth.role !== 'landlord' && auth.role !== 'property_manager' && auth.role !== 'tenant') {
+    return res.status(403).json({ error: 'Only landlords, property managers, and tenants can view invoices' });
   }
 
   const requestedStatus = typeof req.query.status === 'string' ? req.query.status : undefined;
@@ -112,7 +112,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       LEFT JOIN public.leases l ON l.id = i.lease_id
       LEFT JOIN public.units u ON u.id = l.unit_id
       LEFT JOIN public.properties p ON p.id = u.property_id
-      WHERE ${auth.role === 'tenant' ? sql`t.user_id = ${auth.userId}` : sql`i.landlord_id = ${auth.userId}`}
+      WHERE ${auth.role === 'tenant' ? sql`t.user_id = ${auth.userId}` : sql`i.landlord_id = ${auth.contextOwnerId}`}
         AND i.invoice_type <> 'uat_validation'
         ${requestedStatus === 'outstanding'
           ? sql`AND i.status IN ('pending', 'partially_paid', 'overdue')`

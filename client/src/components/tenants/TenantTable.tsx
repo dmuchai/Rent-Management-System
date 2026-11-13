@@ -109,7 +109,7 @@ export default function TenantTable({
       const result = await response.json();
       return result.data || [];
     },
-    enabled: !readOnly,
+    enabled: !readOnly && leases.length > 0,
   });
 
   const invoicesByLease = useMemo(() => {

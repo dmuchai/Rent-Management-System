@@ -15,6 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useAuthenticatedImageUrl } from "@/hooks/useAuthenticatedImageUrl";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -301,6 +302,11 @@ export default function TenantDashboard() {
   const activeLease = leases.find((lease: any) => lease.status === "active" || lease.isActive === true) || null;
   const pendingLease = leases.find((lease: any) => lease.status === "pending_tenant_signature") || null;
   const displayLease = activeLease || pendingLease;
+  const defaultPropertyImage = "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300";
+  const propertyImage = useAuthenticatedImageUrl(
+    displayLease?.unit?.property?.imageUrl,
+    defaultPropertyImage,
+  );
 
   const { data: payments = [], isLoading: paymentsLoading } = useQuery({
     queryKey: ["/api/payments"],
@@ -553,13 +559,13 @@ export default function TenantDashboard() {
                               <motion.img
                                 whileHover={{ scale: 1.05 }}
                                 transition={{ duration: 0.4 }}
-                                src={displayLease.unit?.property?.imageUrl || "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300"}
+                                src={propertyImage}
                                 alt={displayLease.unit?.property?.name || "Property"}
                                 className="w-full h-48 object-cover"
                                 data-testid="img-property"
                                 onError={(e) => {
                                   const target = e.target as HTMLImageElement;
-                                  target.src = "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300";
+                                  target.src = defaultPropertyImage;
                                 }}
                               />
                             </div>

@@ -8,6 +8,7 @@ import { Archive, Home, MapPin, RotateCcw, TrendingUp, Edit } from "lucide-react
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuthenticatedImageUrl } from "@/hooks/useAuthenticatedImageUrl";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +34,7 @@ export default function PropertyCard({ property, occupancyRate = 0, occupiedCoun
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const defaultImage = "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&h=300";
+  const propertyImage = useAuthenticatedImageUrl(property.imageUrl, defaultImage, property.updatedAt);
 
   const deletePropertyMutation = useMutation({
     mutationFn: async () => {
@@ -81,7 +83,7 @@ export default function PropertyCard({ property, occupancyRate = 0, occupiedCoun
   return (
     <div className="bg-card rounded-xl border border-border overflow-hidden" data-testid={`property-card-${property.id}`}>
       <img 
-        src={property.imageUrl || defaultImage}
+        src={propertyImage}
         alt={property.name}
         className="w-full h-48 object-cover"
         data-testid={`property-image-${property.id}`}
