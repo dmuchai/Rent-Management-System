@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import {
   buildPlanLimitError,
   canAddManagementUser,
@@ -39,6 +40,13 @@ test('respects plan limits for properties, units, and management users', () => {
 test('uses one plan baseline for transition labels and purchase comparisons', () => {
   assert.equal(getPlanComparisonBaseline('enterprise', 'silver', true), 'silver');
   assert.equal(getPlanComparisonBaseline('bronze', 'silver', false), 'bronze');
+});
+
+test('hosted subscription totals use the selected owner context', async () => {
+  const route = await readFile('api/subscription.ts', 'utf8');
+  assert.match(route, /const ownerId = auth\.contextOwnerId/);
+  assert.match(route, /getEffectiveSubscriptionAccess\(ownerId\)/);
+  assert.match(route, /getOwnerUsageSnapshot\(sql, ownerId\)/);
 });
 
 test('resolves the minimum plan needed for a resource', () => {

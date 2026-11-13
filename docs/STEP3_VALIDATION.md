@@ -44,7 +44,7 @@ default-deny business tables; the database health advisor has no findings.
 | TypeScript and route entrypoints | **PASS** |
 | Financial-integrity regression | **PASS — 17/17** |
 | Invoicing/disposable PostgreSQL | **PASS — 26/26** |
-| Subscription, including four-unit legacy Free | **PASS — 15/15** |
+| Subscription, including four-unit legacy Free and manager owner-context totals | **PASS — 16/16** |
 | Account deletion | **PASS — 8/8** |
 | KCB controlled fixtures | **PASS — 28/28** |
 | Tenant payment validation | **PASS — 10/10** |
@@ -53,6 +53,10 @@ default-deny business tables; the database health advisor has no findings.
 | Vercel frontend build on local Node.js 22 | **PASS**; only existing bundle-size/import warnings |
 | Fresh staging RLS authentication/default-deny matrix | **PASS — 7/7**, read-only |
 | Hosted candidate/API/browser matrix | **PENDING** until the committed `--skip-domain` candidate is created |
+
+The manager subscription route also resolves plan and usage from
+`auth.contextOwnerId`, matching the selected portfolio used by its listings
+and dashboard totals.
 
 The React review checklist found no new component-structure, hook,
 accessibility, or TypeScript issue in the subscription changes. The legacy

@@ -12,9 +12,10 @@ export default requireAuth(async (_req: VercelRequest, res: VercelResponse, auth
   const sql = createDbConnection();
 
   try {
-    const access = await getEffectiveSubscriptionAccess(auth.userId);
+    const ownerId = auth.contextOwnerId;
+    const access = await getEffectiveSubscriptionAccess(ownerId);
     const billingAccount = access.billingAccount;
-    const usage = await getOwnerUsageSnapshot(sql, auth.userId);
+    const usage = await getOwnerUsageSnapshot(sql, ownerId);
     const planConfig = getPlanConfig(access.planCode);
 
     return res.status(200).json({
