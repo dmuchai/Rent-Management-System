@@ -34,6 +34,15 @@ function getPlanCycleLabel(billingPeriod: 'monthly' | 'annual' | 'unknown'): str
   return 'Billing period';
 }
 
+function isCurrentBillingPackage(
+  subscriptionPackage: SubscriptionPackageSummary,
+  productId: string | null | undefined,
+  basePlanId: string | null | undefined,
+): boolean {
+  if (!productId || subscriptionPackage.productId !== productId) return false;
+  return !basePlanId || !subscriptionPackage.basePlanId || subscriptionPackage.basePlanId === basePlanId;
+}
+
 export function SubscriptionContent({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -373,6 +382,18 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
             : null;
           const hasCurrentPlan = comparisonPlanCode === planCode;
           const planIsLower = getPlanConfig(comparisonPlanCode).upgradeOrder > planConfig.upgradeOrder;
+          const monthlyIsCurrent = Boolean(monthly && isCurrentBillingPackage(
+            monthly,
+            account?.billingAccount?.productId,
+            account?.billingAccount?.basePlanId,
+          ));
+          const annualIsCurrent = Boolean(annual && isCurrentBillingPackage(
+            annual,
+            account?.billingAccount?.productId,
+            account?.billingAccount?.basePlanId,
+          ));
+          const monthlyNeedsRenewal = monthlyIsCurrent && account?.access.premium && account.billingAccount?.willRenew === false;
+          const annualNeedsRenewal = annualIsCurrent && account?.access.premium && account.billingAccount?.willRenew === false;
 
           return (
             <Card key={planCode} className={hasCurrentPlan ? 'border-primary/60 shadow-md' : undefined}>
@@ -395,10 +416,10 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
                       </div>
                       <Button
                         size="sm"
-                        onClick={() => void handlePurchase(monthly)}
-                        disabled={isPurchasing || (hasCurrentPlan && !planIsLower)}
+                        onClick={() => void (monthlyNeedsRenewal ? handleManageSubscription() : handlePurchase(monthly))}
+                        disabled={isPurchasing || (monthlyIsCurrent && !monthlyNeedsRenewal)}
                       >
-                        {hasCurrentPlan && !planIsLower ? 'Active' : planIsLower ? 'Downgrade at renewal' : 'Choose'}
+                        {monthlyNeedsRenewal ? 'Resume renewal' : monthlyIsCurrent ? 'Active' : planIsLower ? 'Downgrade at renewal' : 'Choose'}
                       </Button>
                     </div>
                     {monthly.trialDays && (
@@ -419,10 +440,10 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => void handlePurchase(annual)}
-                        disabled={isPurchasing || (hasCurrentPlan && !planIsLower)}
+                        onClick={() => void (annualNeedsRenewal ? handleManageSubscription() : handlePurchase(annual))}
+                        disabled={isPurchasing || (annualIsCurrent && !annualNeedsRenewal)}
                       >
-                        {hasCurrentPlan && !planIsLower ? 'Active' : 'Choose'}
+                        {annualNeedsRenewal ? 'Resume renewal' : annualIsCurrent ? 'Active' : planIsLower ? 'Downgrade at renewal' : 'Choose'}
                       </Button>
                     </div>
                     {annualSavings !== null && (

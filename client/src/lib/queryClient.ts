@@ -4,22 +4,35 @@ import { supabase } from "./supabase";
 import { isAuthorityContextInvalidResponse } from "../../../shared/authority-context.js";
 
 const AUTH_CONTEXT_KEY = 'landee-auth-context:v1';
+type AuthorityContext = { role: string; contextOwnerId: string };
 
-function applyAuthorityContext(headers: Record<string, string>) {
-  if (typeof window === 'undefined') return;
+function readAuthorityContext(): AuthorityContext | null {
+  if (typeof window === 'undefined') return null;
   try {
     const context = JSON.parse(window.localStorage.getItem(AUTH_CONTEXT_KEY) || 'null');
-    if (context?.role && context?.contextOwnerId) {
-      headers['x-landee-context-role'] = context.role;
-      headers['x-landee-context-owner'] = context.contextOwnerId;
-    }
+    return context?.role && context?.contextOwnerId
+      ? { role: context.role, contextOwnerId: context.contextOwnerId }
+      : null;
   } catch {
     window.localStorage.removeItem(AUTH_CONTEXT_KEY);
+    return null;
   }
 }
 
-function clearAuthorityContext() {
-  if (typeof window !== 'undefined') window.localStorage.removeItem(AUTH_CONTEXT_KEY);
+function applyAuthorityContext(headers: Record<string, string>) {
+  const context = readAuthorityContext();
+  if (context) {
+    headers['x-landee-context-role'] = context.role;
+    headers['x-landee-context-owner'] = context.contextOwnerId;
+  }
+}
+
+function clearAuthorityContextIfMatches(expected: AuthorityContext | null): boolean {
+  if (!expected || typeof window === 'undefined') return false;
+  const current = readAuthorityContext();
+  if (current?.role !== expected.role || current.contextOwnerId !== expected.contextOwnerId) return false;
+  window.localStorage.removeItem(AUTH_CONTEXT_KEY);
+  return true;
 }
 
 async function hasInvalidAuthorityContext(res: Response): Promise<boolean> {
@@ -81,7 +94,7 @@ export async function apiRequest(
 
   const headers: Record<string, string> = {};
   applyAuthorityContext(headers);
-  const hadContext = Boolean(headers['x-landee-context-role'] && headers['x-landee-context-owner']);
+  const requestContext = readAuthorityContext();
   // Attach JSON header when sending a body
   if (data) {
     headers["Content-Type"] = "application/json";
@@ -115,8 +128,8 @@ export async function apiRequest(
   // Mutations are never replayed after context loss: the same request could
   // otherwise run under a different owner or role. Clear only a context that
   // the server explicitly rejected, then surface the original response.
-  if (hadContext && await hasInvalidAuthorityContext(res)) {
-    clearAuthorityContext();
+  if (requestContext && await hasInvalidAuthorityContext(res)) {
+    clearAuthorityContextIfMatches(requestContext);
   }
 
   await throwIfResNotOk(res);
@@ -135,7 +148,7 @@ export const getQueryFn: <T>(options: {
 
       const headers: Record<string, string> = {};
       applyAuthorityContext(headers);
-      const hadContext = Boolean(headers['x-landee-context-role'] && headers['x-landee-context-owner']);
+      const requestContext = readAuthorityContext();
       try {
         const token = await getAccessTokenWithRetry(5, 100);
         if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -147,8 +160,8 @@ export const getQueryFn: <T>(options: {
         headers,
         credentials: "include",
       });
-      if (hadContext && await hasInvalidAuthorityContext(res)) {
-        clearAuthorityContext();
+      if (requestContext && await hasInvalidAuthorityContext(res)
+        && clearAuthorityContextIfMatches(requestContext)) {
         delete headers['x-landee-context-role'];
         delete headers['x-landee-context-owner'];
         res = await fetch(fullUrl, { headers, credentials: "include" });

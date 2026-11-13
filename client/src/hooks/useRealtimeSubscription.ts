@@ -19,6 +19,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
+const REALTIME_ENABLED = import.meta.env.VITE_ENABLE_REALTIME === 'true';
+
 interface UseRealtimeSubscriptionOptions {
   tableName: string;
   queryKey: string[];
@@ -31,7 +33,7 @@ export function useRealtimeSubscription(
   options?: { enabled?: boolean }
 ) {
   const queryClient = useQueryClient();
-  const enabled = options?.enabled !== undefined ? options.enabled : true;
+  const enabled = REALTIME_ENABLED && (options?.enabled !== false);
 
   // Convert queryKey array to a stable string representation for dependencies
   // This avoids React's useMemo forEach error when array references change

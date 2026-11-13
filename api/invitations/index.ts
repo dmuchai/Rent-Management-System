@@ -9,6 +9,11 @@ import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { emailService } from '../_lib/emailService.js';
+import {
+  existingAccountAuthRequired,
+  findAuthUserByEmail,
+  requestProvesExistingAccount,
+} from '../../shared/invitation-auth.js';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -79,7 +84,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         firstName: tenant.first_name,
         lastName: tenant.last_name,
         email: tenant.email,
-        valid: true
+        valid: true,
+        existingAccount: Boolean(await findAuthUserByEmail(
+          createClient(supabaseUrl, supabaseServiceKey),
+          tenant.email,
+        )),
       });
 
     } catch (error) {
@@ -107,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const acceptInvitationSchema = z.object({
         token: z.string().min(1, 'Token is required'),
-        password: z.string().min(8, 'Password must be at least 8 characters'),
+        password: z.string().min(8, 'Password must be at least 8 characters').optional(),
       });
       
       const { token, password } = acceptInvitationSchema.parse(req.body);
@@ -160,38 +169,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      // Check if user already exists in Supabase auth
-      const { data: existingUsers } = await adminSupabase.auth.admin.listUsers();
-      const existingUser = existingUsers?.users?.find(u => u.email === tenant.email);
+      const existingUser = await findAuthUserByEmail(adminSupabase, tenant.email);
+
+      if (tenant.user_id && existingUser?.id && tenant.user_id !== existingUser.id) {
+        return res.status(409).json({
+          error: 'Account identity conflict',
+          message: 'This invitation is linked to a different account. Please contact support.',
+        });
+      }
+      if (tenant.user_id && !existingUser) {
+        return res.status(409).json({
+          error: 'Account identity conflict',
+          message: 'This invitation is linked to a missing authentication account. Please contact support.',
+        });
+      }
 
       let authUserId: string;
 
       if (existingUser) {
-        // User already exists - check if they're already linked to this tenant
-        if (tenant.user_id === existingUser.id) {
-          return res.status(400).json({
-            error: 'Account already created',
-            message: 'Your account has already been created. Please login instead.',
-            shouldLogin: true
-          });
+        if (!await requestProvesExistingAccount(adminSupabase, req, existingUser)) {
+          return res.status(401).json(existingAccountAuthRequired);
         }
-        
-        // User exists but not linked - update their password and link them
-        const { error: updateError } = await adminSupabase.auth.admin.updateUserById(
-          existingUser.id,
-          { password: password }
-        );
-
-        if (updateError) {
-          console.error('Failed to update user password:', updateError);
-          return res.status(500).json({
-            error: 'Account update failed',
-            message: 'Failed to update account. Please contact support.'
-          });
-        }
-
         authUserId = existingUser.id;
       } else {
+        if (!password) {
+          return res.status(400).json({
+            error: 'Password required',
+            message: 'Choose a password to create your account.',
+          });
+        }
         // Create new user
         const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
           email: tenant.email,
@@ -265,8 +271,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       return res.status(201).json({
-        message: 'Account created successfully',
-        requireLogin: true,
+        message: existingUser ? 'Invitation accepted successfully' : 'Account created successfully',
+        requireLogin: !existingUser,
         email: tenant.email
       });
 

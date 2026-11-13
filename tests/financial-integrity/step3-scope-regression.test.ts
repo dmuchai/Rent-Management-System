@@ -64,14 +64,30 @@ test('caretaker invitation acceptance can resume an orphaned Auth-user attempt',
   const vercelInvitation = await readFile('api/caretaker-invitations/index.ts', 'utf8');
   const expressInvitation = await readFile('server/routes/caretakers.ts', 'utf8');
   assert.match(vercelInvitation, /existingAuthUser/);
+  assert.match(vercelInvitation, /requestProvesExistingAccount/);
+  assert.doesNotMatch(vercelInvitation, /updateUserById/);
   assert.match(vercelInvitation, /ON CONFLICT DO NOTHING/);
-  assert.ok(
-    vercelInvitation.indexOf('updateUserById') < vercelInvitation.indexOf('await sql.begin'),
-    'existing Auth credentials must be updated before the database acceptance transaction',
-  );
+  assert.match(vercelInvitation, /FOR UPDATE/);
   assert.match(expressInvitation, /findAuthUserByEmail/);
-  assert.match(expressInvitation, /existingAssignment/);
-  assert.match(expressInvitation, /onConflict: 'id'/);
+  assert.match(expressInvitation, /requestProvesExistingAccount/);
+  assert.doesNotMatch(expressInvitation, /updateUserById/);
+  assert.match(expressInvitation, /sql\.begin/);
+  assert.match(expressInvitation, /FOR UPDATE/);
+});
+
+test('unit-scoped caretakers cannot create a different unit while property-scoped caretakers can', async () => {
+  const vercelUnits = await readFile('api/units/index.ts', 'utf8');
+  const expressUnits = await readFile('server/routes/units.ts', 'utf8');
+  assert.match(vercelUnits, /AND property_id = \$\{property\.id\} AND status = 'active'/);
+  assert.match(expressUnits, /!assignment\.unit_id && assignment\.property_id === unitData\.propertyId/);
+});
+
+test('stale authority responses cannot clear a newer selection', async () => {
+  const queryClient = await readFile('client/src/lib/queryClient.ts', 'utf8');
+  assert.match(queryClient, /clearAuthorityContextIfMatches/);
+  assert.match(queryClient, /current\?\.role !== expected\.role/);
+  assert.match(queryClient, /current\.contextOwnerId !== expected\.contextOwnerId/);
+  assert.doesNotMatch(queryClient, /function clearAuthorityContext\(\)/);
 });
 
 test('manual payment replay claims only failed or review events', async () => {

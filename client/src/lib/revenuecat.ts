@@ -109,6 +109,14 @@ function normalizeCustomerInfo(customerInfo: Record<string, any> | null | undefi
   };
 }
 
+async function withCurrentAppUserId(
+  sdk: NativePurchasesModule,
+  snapshot: SubscriptionCustomerSnapshot,
+): Promise<SubscriptionCustomerSnapshot> {
+  const { appUserID } = await sdk.Purchases.getAppUserID();
+  return { ...snapshot, appUserId: appUserID };
+}
+
 function normalizePackage(nativePackage: Record<string, any>): SubscriptionPackageSummary {
   const storeProduct = nativePackage.storeProduct ?? nativePackage.product ?? {};
   const productId = toStringValue(storeProduct.productIdentifier || storeProduct.identifier || nativePackage.productIdentifier || nativePackage.productId || null);
@@ -186,10 +194,14 @@ export function createRevenueCatService(): RevenueCatService {
     if (!sdk) return;
     if (configuredAppUserId === appUserId) return;
 
-    await sdk.Purchases.configure({
-      apiKey: import.meta.env.VITE_REVENUECAT_ANDROID_PUBLIC_SDK_KEY,
-      appUserID: appUserId,
-    });
+    if (configuredAppUserId) {
+      await sdk.Purchases.logIn({ appUserID: appUserId });
+    } else {
+      await sdk.Purchases.configure({
+        apiKey: import.meta.env.VITE_REVENUECAT_ANDROID_PUBLIC_SDK_KEY,
+        appUserID: appUserId,
+      });
+    }
     configuredAppUserId = appUserId;
   }
 
@@ -223,7 +235,7 @@ export function createRevenueCatService(): RevenueCatService {
     if (!sdk) return null;
 
     const { customerInfo } = await sdk.Purchases.getCustomerInfo();
-    return normalizeCustomerInfo(customerInfo as Record<string, any>);
+    return withCurrentAppUserId(sdk, normalizeCustomerInfo(customerInfo as Record<string, any>));
   }
 
   async function purchasePackage(subscriptionPackage: SubscriptionPackageSummary): Promise<SubscriptionCustomerSnapshot> {
@@ -245,7 +257,7 @@ export function createRevenueCatService(): RevenueCatService {
         },
       } : {}),
     });
-    return normalizeCustomerInfo(purchaseResult.customerInfo as Record<string, any>);
+    return withCurrentAppUserId(sdk, normalizeCustomerInfo(purchaseResult.customerInfo as Record<string, any>));
   }
 
   async function restorePurchases(): Promise<SubscriptionCustomerSnapshot> {
@@ -255,7 +267,7 @@ export function createRevenueCatService(): RevenueCatService {
     }
 
     const restoreResult = await sdk.Purchases.restorePurchases();
-    return normalizeCustomerInfo(restoreResult.customerInfo as Record<string, any>);
+    return withCurrentAppUserId(sdk, normalizeCustomerInfo(restoreResult.customerInfo as Record<string, any>));
   }
 
   async function openManageSubscriptions(productId?: string | null): Promise<void> {

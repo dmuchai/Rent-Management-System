@@ -77,6 +77,16 @@ export interface SubscriptionAccountSnapshot {
 
 const SubscriptionContext = createContext<SubscriptionContextValue | null>(null);
 
+function assertBillingIdentity(
+  snapshot: SubscriptionCustomerSnapshot | null,
+  expectedAppUserId: string | null,
+): SubscriptionCustomerSnapshot | null {
+  if (snapshot?.appUserId && snapshot.appUserId !== expectedAppUserId) {
+    throw new Error('RevenueCat returned a different billing account. Refresh your selected portfolio and try again.');
+  }
+  return snapshot;
+}
+
 function useSubscriptionApiSnapshot(enabled: boolean) {
   return useQuery<SubscriptionAccountSnapshot>({
     queryKey: ['/api/subscription'],
@@ -108,9 +118,10 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const nativePurchasesAvailable = serviceRef.current.isAvailable() && isBillingOwner;
   const { data: account, isLoading } = useSubscriptionApiSnapshot(Boolean(user?.id && isBillingOwner));
   const enabled = Boolean(account?.enabled);
+  const billingAppUserId = account?.enabled ? account.billingAccount?.revenuecatAppUserId || null : null;
 
   const refreshSubscription = async () => {
-    if (!nativePurchasesAvailable || !user?.id) {
+    if (!nativePurchasesAvailable || !user?.id || !billingAppUserId) {
       return;
     }
 
@@ -130,7 +141,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         }),
       ]);
 
-      setCustomerInfo(nextCustomerInfo);
+      setCustomerInfo(assertBillingIdentity(nextCustomerInfo, billingAppUserId));
       setOfferings(nextOfferings);
       setError(null);
       queryClient.setQueryData(['/api/subscription'], nextAccount);
@@ -150,7 +161,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (!user?.id) {
+      if (!user?.id || !billingAppUserId) {
         if (configuredUserIdRef.current) {
           await serviceRef.current.logOut().catch(() => undefined);
           configuredUserIdRef.current = null;
@@ -160,11 +171,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (configuredUserIdRef.current !== user.id) {
+      if (configuredUserIdRef.current !== billingAppUserId) {
         setIsConfiguring(true);
         try {
-          await serviceRef.current.configure(user.id);
-          configuredUserIdRef.current = user.id;
+          await serviceRef.current.configure(billingAppUserId);
+          configuredUserIdRef.current = billingAppUserId;
         } catch (configurationError) {
           setError(configurationError instanceof Error ? configurationError.message : 'Failed to configure RevenueCat');
         } finally {
@@ -186,7 +197,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     return () => {
       isActive = false;
     };
-  }, [nativePurchasesAvailable, user?.id]);
+  }, [nativePurchasesAvailable, user?.id, billingAppUserId]);
 
   useEffect(() => {
     if (!nativePurchasesAvailable) {
@@ -214,7 +225,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     });
 
     try {
-      const nextCustomerInfo = await serviceRef.current.purchasePackage(subscriptionPackage);
+      const nextCustomerInfo = assertBillingIdentity(
+        await serviceRef.current.purchasePackage(subscriptionPackage),
+        billingAppUserId,
+      );
+      if (!nextCustomerInfo) throw new Error('RevenueCat did not return subscription state');
       setCustomerInfo(nextCustomerInfo);
       trackEvent('purchase_completed', {
         plan: subscriptionPackage.planCode,
@@ -255,7 +270,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     trackEvent('restore_started');
 
     try {
-      const nextCustomerInfo = await serviceRef.current.restorePurchases();
+      const nextCustomerInfo = assertBillingIdentity(
+        await serviceRef.current.restorePurchases(),
+        billingAppUserId,
+      );
+      if (!nextCustomerInfo) throw new Error('RevenueCat did not return restored subscription state');
       setCustomerInfo(nextCustomerInfo);
       trackEvent('restore_completed');
       await refreshSubscription();

@@ -4,6 +4,11 @@ import { requireAuth, supabaseAdmin } from '../_lib/auth.js';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { emailService } from '../_lib/emailService.js';
+import {
+  existingAccountAuthRequired,
+  findAuthUserByEmail,
+  requestProvesExistingAccount,
+} from '../../shared/invitation-auth.js';
 
 const DEFAULT_EXPIRY_DAYS = 7;
 
@@ -97,7 +102,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         firstName: invitation.first_name,
         lastName: invitation.last_name,
         email: invitation.email,
-        valid: true
+        valid: true,
+        existingAccount: Boolean(await findAuthUserByEmail(supabaseAdmin, invitation.email)),
       });
     } catch (error) {
       console.error('Error verifying caretaker invitation:', error);
@@ -122,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const acceptSchema = z.object({
         token: z.string().min(1, 'Token is required'),
-        password: z.string().min(8, 'Password must be at least 8 characters'),
+        password: z.string().min(8, 'Password must be at least 8 characters').optional(),
       });
 
       const { token, password } = acceptSchema.parse(req.body);
@@ -172,58 +178,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const adminApi = supabaseAdmin.auth.admin;
-
-      const hasGetUserByEmail = (
-        api: typeof adminApi
-      ): api is typeof adminApi & {
-        getUserByEmail: (email: string) => Promise<{ data: { user: any | null } | null; error: any }>;
-      } => typeof (api as { getUserByEmail?: unknown }).getUserByEmail === 'function';
-
-      const hasListUsers = (
-        api: typeof adminApi
-      ): api is typeof adminApi & {
-        listUsers: (options?: { page?: number; perPage?: number }) => Promise<{ data: { users: any[] } | null; error: any }>;
-      } => typeof (api as { listUsers?: unknown }).listUsers === 'function';
-
-      let existingAuthUser: any | null = null;
-      let existingAuthError: any | null = null;
-
-      if (hasGetUserByEmail(adminApi)) {
-        const { data, error } = await adminApi.getUserByEmail(invitation.email);
-        existingAuthError = error;
-        existingAuthUser = data?.user ?? null;
-      } else if (hasListUsers(adminApi)) {
-        const perPage = 1000;
-        let page = 1;
-
-        while (true) {
-          const { data, error } = await adminApi.listUsers({ page, perPage });
-          if (error) {
-            existingAuthError = error;
-            break;
-          }
-
-          const users = data?.users || [];
-          existingAuthUser = users.find((user: any) => user.email === invitation.email) || null;
-
-          if (existingAuthUser || users.length < perPage) {
-            break;
-          }
-
-          page += 1;
-        }
-      } else {
-        return res.status(500).json({
-          error: 'Account lookup failed',
-          message: 'Admin API does not support user lookup by email. Please update the Supabase client.'
+      const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, invitation.email);
+      if (existingUserRecord?.id && existingAuthUser?.id && existingUserRecord.id !== existingAuthUser.id) {
+        return res.status(409).json({
+          error: 'Account identity conflict',
+          message: 'This invitation is linked to a different account. Please contact support.',
         });
       }
-
-      if (existingAuthError) {
-        return res.status(500).json({
-          error: 'Account lookup failed',
-          message: 'Failed to verify existing account. Please try again.'
+      if (existingUserRecord && !existingAuthUser) {
+        return res.status(409).json({
+          error: 'Account identity conflict',
+          message: 'This invitation is linked to a missing authentication account. Please contact support.',
         });
       }
 
@@ -232,17 +197,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (existingAuthUser) {
         authUserId = existingAuthUser.id;
-        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-          existingAuthUser.id,
-          { password, user_metadata: { first_name: invitation.first_name, last_name: invitation.last_name } }
-        );
-        if (updateError) {
-          return res.status(500).json({
-            error: 'Account update failed',
-            message: 'Failed to update account credentials. Please contact support.'
-          });
+        if (!await requestProvesExistingAccount(supabaseAdmin, req, existingAuthUser)) {
+          return res.status(401).json(existingAccountAuthRequired);
         }
       } else {
+        if (!password) {
+          return res.status(400).json({
+            error: 'Password required',
+            message: 'Choose a password to create your account.',
+          });
+        }
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: invitation.email,
           password,
@@ -284,17 +248,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `;
 
           if (invitation.property_id || invitation.unit_id) {
-            await tx`
-              INSERT INTO public.caretaker_assignments (caretaker_id, landlord_id, property_id, unit_id, status)
-              VALUES (
-                ${authUserId},
-                ${invitation.landlord_id},
-                ${invitation.property_id || null},
-                ${invitation.unit_id || null},
-                'active'
-              )
-              ON CONFLICT DO NOTHING
+            const [assignment] = await tx`
+              SELECT id
+              FROM public.caretaker_assignments
+              WHERE caretaker_id = ${authUserId}
+                AND landlord_id = ${invitation.landlord_id}
+                AND property_id IS NOT DISTINCT FROM ${invitation.property_id || null}
+                AND unit_id IS NOT DISTINCT FROM ${invitation.unit_id || null}
+              ORDER BY (status = 'active') DESC, updated_at DESC
+              LIMIT 1
+              FOR UPDATE
             `;
+            if (assignment) {
+              await tx`
+                UPDATE public.caretaker_assignments
+                SET status = 'active', updated_at = NOW()
+                WHERE id = ${assignment.id}
+              `;
+            } else {
+              await tx`
+                INSERT INTO public.caretaker_assignments
+                  (caretaker_id, landlord_id, property_id, unit_id, status)
+                VALUES (
+                  ${authUserId}, ${invitation.landlord_id},
+                  ${invitation.property_id || null}, ${invitation.unit_id || null}, 'active'
+                )
+                ON CONFLICT DO NOTHING
+              `;
+            }
           }
           await tx`
             INSERT INTO public.user_context_memberships
@@ -331,8 +312,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       return res.status(201).json({
-        message: 'Account created successfully',
-        requireLogin: true,
+        message: existingAuthUser ? 'Invitation accepted successfully' : 'Account created successfully',
+        requireLogin: !existingAuthUser,
         email: invitation.email
       });
     } catch (error) {

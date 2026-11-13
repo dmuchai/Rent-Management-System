@@ -44,9 +44,25 @@ test('uses one plan baseline for transition labels and purchase comparisons', ()
 
 test('hosted subscription totals use the selected owner context', async () => {
   const route = await readFile('api/subscription.ts', 'utf8');
+  const expressRoute = await readFile('server/routes/subscription.ts', 'utf8');
   assert.match(route, /const ownerId = auth\.contextOwnerId/);
   assert.match(route, /getEffectiveSubscriptionAccess\(ownerId\)/);
   assert.match(route, /getOwnerUsageSnapshot\(sql, ownerId\)/);
+  assert.match(expressRoute, /const ownerId = req\.user\.contextOwnerId/);
+  assert.doesNotMatch(expressRoute, /const ownerId = req\.user\.sub/);
+});
+
+test('native purchases use and validate the selected billing-owner identity', async () => {
+  const hook = await readFile('client/src/hooks/useSubscription.tsx', 'utf8');
+  const service = await readFile('client/src/lib/revenuecat.ts', 'utf8');
+  const page = await readFile('client/src/pages/subscription.tsx', 'utf8');
+  assert.match(hook, /billingAccount\?\.revenuecatAppUserId/);
+  assert.match(hook, /assertBillingIdentity/);
+  assert.doesNotMatch(hook, /configure\(user\.id\)/);
+  assert.match(service, /Purchases\.logIn/);
+  assert.match(service, /Purchases\.getAppUserID/);
+  assert.match(page, /Resume renewal/);
+  assert.match(page, /isCurrentBillingPackage/);
 });
 
 test('resolves the minimum plan needed for a resource', () => {

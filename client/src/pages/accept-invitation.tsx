@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, setAuthorityContext } from "@/lib/queryClient";
 import { Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { supabase } from "@/lib/supabase";
@@ -16,6 +16,7 @@ interface InvitationInfo {
   lastName: string;
   email: string;
   valid: boolean;
+  existingAccount: boolean;
 }
 
 export default function AcceptInvitation() {
@@ -31,6 +32,7 @@ export default function AcceptInvitation() {
   const searchParams = new URLSearchParams(window.location.search);
   const token = searchParams.get('token');
   const invitationType = searchParams.get('type') === 'caretaker' ? 'caretaker' : 'tenant';
+  const returnTo = `${window.location.pathname}${window.location.search}`;
 
   // Verify token and get tenant info
   const { data: invitationInfo, isLoading: isVerifying, error: verifyError } = useQuery<InvitationInfo>({
@@ -46,10 +48,30 @@ export default function AcceptInvitation() {
     enabled: !!token,
     retry: false,
   });
+  const { data: sessionEmail = null } = useQuery<string | null>({
+    queryKey: ['invitation-session-match', invitationInfo?.email],
+    enabled: Boolean(invitationInfo?.existingAccount && invitationInfo.email),
+    queryFn: async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session?.user.email?.toLowerCase() || null;
+    },
+    retry: false,
+  });
+  const signedInAsInvitedAccount = Boolean(
+    sessionEmail && sessionEmail === invitationInfo?.email.toLowerCase(),
+  );
+
+  const continueToExistingAccountLogin = async () => {
+    if (sessionEmail && !signedInAsInvitedAccount) {
+      await supabase.auth.signOut();
+      setAuthorityContext(null);
+    }
+    setLocation(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+  };
 
   // Accept invitation mutation
   const acceptMutation = useMutation({
-    mutationFn: async (data: { token: string; password: string }) => {
+    mutationFn: async (data: { token: string; password?: string }) => {
       const endpoint = invitationType === 'caretaker'
         ? "/api/caretaker-invitations?action=accept"
         : "/api/invitations?action=accept";
@@ -59,22 +81,23 @@ export default function AcceptInvitation() {
     },
     onSuccess: async (data: any) => {
       toast({
-        title: "Account Created! 🎉",
-        description: invitationType === 'caretaker'
-          ? "Welcome to Landee! Please login to access your caretaker dashboard..."
-          : "Welcome to Landee! Please login with your new password...",
+        title: data.requireLogin ? "Account Created! 🎉" : "Invitation Accepted",
+        description: data.requireLogin
+          ? "Welcome to Landee! Please sign in with your new password."
+          : "The workspace has been added to your existing account.",
         duration: 4000,
       });
 
-      // Redirect to login page
       setTimeout(() => {
-        setLocation("/login");
+        setLocation(data.requireLogin ? "/login" : "/dashboard");
       }, 2000);
     },
     onError: (error: any) => {
       // Check if the error indicates user should login
       const errorMessage = error.message || "Failed to create account";
-      const shouldLogin = errorMessage.includes('already been created') || errorMessage.includes('Please login');
+      const shouldLogin = errorMessage.includes('already been created')
+        || errorMessage.includes('Please login')
+        || errorMessage.includes('Existing account authentication required');
 
       toast({
         title: shouldLogin ? "Account Already Exists" : "Error",
@@ -85,7 +108,7 @@ export default function AcceptInvitation() {
       // If user should login, redirect after a moment
       if (shouldLogin) {
         setTimeout(() => {
-          setLocation("/login");
+          void continueToExistingAccountLogin();
         }, 3000);
       }
     },
@@ -93,6 +116,15 @@ export default function AcceptInvitation() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (invitationInfo?.existingAccount) {
+      if (!signedInAsInvitedAccount) {
+        void continueToExistingAccountLogin();
+        return;
+      }
+      acceptMutation.mutate({ token: token! });
+      return;
+    }
 
     // Validate passwords
     if (password.length < 8) {
@@ -154,6 +186,19 @@ export default function AcceptInvitation() {
     );
   }
 
+  if (isVerifying) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex items-center justify-center gap-2 p-8" role="status">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Verifying invitation...
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -170,7 +215,9 @@ export default function AcceptInvitation() {
 
         <Card className="shadow-xl">
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-2xl text-center">Create Your Account</CardTitle>
+            <CardTitle className="text-2xl text-center">
+              {invitationInfo?.existingAccount ? 'Accept Invitation' : 'Create Your Account'}
+            </CardTitle>
             <CardDescription className="text-center">
               {invitationType === 'caretaker'
                 ? "You've been invited to join Landee as a caretaker"
@@ -191,9 +238,24 @@ export default function AcceptInvitation() {
               </div>
             </div>
 
-            {/* Password Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
+            {invitationInfo?.existingAccount && !signedInAsInvitedAccount ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  This email already has a Landee account. Sign in to that account to accept the invitation; its password will not be changed.
+                </p>
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={() => void continueToExistingAccountLogin()}
+                >
+                  {sessionEmail ? 'Switch account to accept' : 'Sign in to accept'}
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {!invitationInfo?.existingAccount && (
+                  <>
+                    <div className="space-y-2">
                 <Label htmlFor="password">Create Password</Label>
                 <div className="relative">
                   <Input
@@ -220,9 +282,9 @@ export default function AcceptInvitation() {
                 <p className="text-xs text-muted-foreground">
                   Must be at least 8 characters
                 </p>
-              </div>
+                    </div>
 
-              <div className="space-y-2">
+                    <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
                 <div className="relative">
                   <Input
@@ -246,7 +308,9 @@ export default function AcceptInvitation() {
                     {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-              </div>
+                    </div>
+                  </>
+                )}
 
               <Button
                 type="submit"
@@ -257,13 +321,14 @@ export default function AcceptInvitation() {
                 {acceptMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating Account...
+                    {invitationInfo?.existingAccount ? 'Accepting Invitation...' : 'Creating Account...'}
                   </>
                 ) : (
-                  "Create Account & Sign In"
+                  invitationInfo?.existingAccount ? "Accept Invitation" : "Create Account & Sign In"
                 )}
               </Button>
-            </form>
+              </form>
+            )}
 
             {/* Benefits List */}
             <div className="pt-4 border-t">

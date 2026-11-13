@@ -49,12 +49,18 @@ assert.match(apiRoute, /auth\.role === "tenant" && auth\.contextOwnerId === prop
 assert.match(apiRoute, /auth\.role === "caretaker" && auth\.contextOwnerId === property\.owner_id/);
 assert.match(apiRoute, /previousPath/);
 assert.match(apiRoute, /remove\(\[path\]\)/);
+assert.match(apiRoute, /FOR UPDATE/);
+assert.ok(apiRoute.indexOf("FOR UPDATE") < apiRoute.indexOf(".info(path)"));
 assert.match(expressRoute, /createSignedUploadUrl/);
 assert.match(expressRoute, /createSignedUrl\(path, PROPERTY_IMAGE_SIGNED_URL_TTL_SECONDS\)/);
 assert.match(expressRoute, /\.info\(path\)/);
 assert.match(expressRoute, /\.download\(path\)/);
 assert.match(expressRoute, /canCaretakerViewProperty/);
 assert.match(expressRoute, /remove\(\[path\]\)/);
+assert.match(expressRoute, /FOR UPDATE/);
+assert.ok(expressRoute.indexOf("FOR UPDATE") < expressRoute.indexOf(".info(path)"));
+const propertyForm = await readFile("client/src/components/properties/PropertyForm.tsx", "utf8");
+assert.doesNotMatch(propertyForm, /pendingImage\s*\?\s*\{[^}]*imageUrl:\s*""/s);
 assert.doesNotMatch(apiRoute, /getPublicUrl/);
 assert.doesNotMatch(expressRoute, /getPublicUrl/);
 assert.doesNotMatch(apiRoute, /\["landlord", "property_manager", "caretaker"\]/);

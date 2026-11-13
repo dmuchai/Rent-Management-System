@@ -15,6 +15,7 @@ assert.doesNotMatch(propertyForm, /onError:[\s\S]*useEffect\(/);
 assert.match(vercelConfig, /"source": "\/api\/property-images\/:propertyId"[\s\S]*"destination": "\/api\/property-images\?propertyId=:propertyId"/);
 assert.doesNotMatch(realtimeHook, /console\.log\([^)]*payload/);
 assert.match(realtimeHook, /queryClient\.invalidateQueries/);
+assert.match(realtimeHook, /VITE_ENABLE_REALTIME === 'true'/);
 
 console.log('PASS frontend storage and realtime safety contract');
 console.log('INFO this is a source-level contract test; hosted bucket/publication tests require approved staging configuration');

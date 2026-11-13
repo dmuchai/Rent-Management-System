@@ -27,6 +27,8 @@ function isOwnedImagePath(path: string, userId: string, propertyId: string): boo
   }
 }
 
+class InvalidUploadedImageError extends Error {}
+
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   const sql = createDbConnection();
   try {
@@ -91,11 +93,25 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       if (!isOwnedImagePath(path, auth.userId, propertyId)) {
         return res.status(400).json({ message: "Invalid property image path" });
       }
-      if (decodePropertyImageReference(property.image_url, propertyId) === path) {
-        return res.status(409).json({ message: "Referenced property image cannot be deleted" });
-      }
-      const { error: removeError } = await supabaseAdmin.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
-      if (removeError) return res.status(502).json({ message: "Property image cleanup failed" });
+      let cleanupConflict = false;
+      let cleanupFailed = false;
+      await sql.begin(async (tx) => {
+        const [lockedProperty] = await tx`
+          SELECT owner_id, image_url FROM public.properties WHERE id = ${propertyId} FOR UPDATE
+        `;
+        if (!lockedProperty || !canManageProperty(auth, lockedProperty.owner_id)) {
+          cleanupConflict = true;
+          return;
+        }
+        if (decodePropertyImageReference(lockedProperty.image_url, propertyId) === path) {
+          cleanupConflict = true;
+          return;
+        }
+        const { error: removeError } = await supabaseAdmin.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
+        cleanupFailed = Boolean(removeError);
+      });
+      if (cleanupConflict) return res.status(409).json({ message: "Referenced property image cannot be deleted" });
+      if (cleanupFailed) return res.status(502).json({ message: "Property image cleanup failed" });
       return res.status(204).end();
     }
     if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
@@ -123,23 +139,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     if (!isOwnedImagePath(path, auth.userId, propertyId)) {
       return res.status(403).json({ message: "Invalid property image path" });
     }
-    const { data: objectInfo, error: objectInfoError } = await supabaseAdmin.storage
-      .from(PROPERTY_IMAGE_BUCKET).info(path);
-    if (objectInfoError || !objectInfo || !isValidPropertyImageObjectInfo(path, objectInfo)) {
-      await supabaseAdmin.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
-      return res.status(400).json({ message: "Uploaded property image is missing or invalid" });
-    }
-    const { data: objectBlob, error: objectDownloadError } = await supabaseAdmin.storage
-      .from(PROPERTY_IMAGE_BUCKET).download(path);
-    const signatureBytes = objectBlob
-      ? new Uint8Array(await objectBlob.slice(0, 12).arrayBuffer())
-      : new Uint8Array();
-    if (objectDownloadError || !isValidPropertyImageSignature(path, signatureBytes)) {
-      await supabaseAdmin.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
-      return res.status(400).json({ message: "Uploaded property image content is invalid" });
-    }
     const reference = propertyImageReference(path);
-    let previousPath: string | null = null;
     try {
       await sql.begin(async (tx) => {
         const [lockedProperty] = await tx`
@@ -148,7 +148,20 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         if (!lockedProperty || !canManageProperty(auth, lockedProperty.owner_id)) {
           throw new Error("Property image attachment authorization changed");
         }
-        previousPath = decodePropertyImageReference(lockedProperty.image_url, propertyId);
+        const { data: objectInfo, error: objectInfoError } = await supabaseAdmin.storage
+          .from(PROPERTY_IMAGE_BUCKET).info(path);
+        if (objectInfoError || !objectInfo || !isValidPropertyImageObjectInfo(path, objectInfo)) {
+          throw new InvalidUploadedImageError("Uploaded property image is missing or invalid");
+        }
+        const { data: objectBlob, error: objectDownloadError } = await supabaseAdmin.storage
+          .from(PROPERTY_IMAGE_BUCKET).download(path);
+        const signatureBytes = objectBlob
+          ? new Uint8Array(await objectBlob.slice(0, 12).arrayBuffer())
+          : new Uint8Array();
+        if (objectDownloadError || !isValidPropertyImageSignature(path, signatureBytes)) {
+          throw new InvalidUploadedImageError("Uploaded property image content is invalid");
+        }
+        const previousPath = decodePropertyImageReference(lockedProperty.image_url, propertyId);
         const [updated] = await tx`
           UPDATE public.properties
           SET image_url = ${reference}, updated_at = NOW()
@@ -156,14 +169,17 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           RETURNING id
         `;
         if (!updated) throw new Error("Property image attachment failed");
+        if (previousPath && previousPath !== path) {
+          const { error: cleanupError } = await supabaseAdmin.storage.from(PROPERTY_IMAGE_BUCKET).remove([previousPath]);
+          if (cleanupError) console.error("Previous property image cleanup failed", cleanupError.message);
+        }
       });
     } catch (error) {
       await supabaseAdmin.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
+      if (error instanceof InvalidUploadedImageError) {
+        return res.status(400).json({ message: error.message });
+      }
       throw error;
-    }
-    if (previousPath && previousPath !== path) {
-      const { error: cleanupError } = await supabaseAdmin.storage.from(PROPERTY_IMAGE_BUCKET).remove([previousPath]);
-      if (cleanupError) console.error("Previous property image cleanup failed", cleanupError.message);
     }
     return res.status(201).json({ imageUrl: `/api/property-images?propertyId=${encodeURIComponent(propertyId)}` });
   } finally {

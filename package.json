@@ -29,6 +29,7 @@
     "staging:validate-api": "tsx scripts/validate-staging-api.ts",
     "staging:validate-rls": "tsx scripts/validate-staging-rls.ts",
     "staging:validate-rls:fresh": "tsx scripts/validate-staging-rls-fresh.ts",
+    "staging:validate-hosted": "node scripts/validate-staging-hosted.mjs",
     "test:frontend-role-boundaries": "tsx scripts/validate-frontend-role-boundaries.ts",
     "test:frontend-storage-realtime": "tsx scripts/validate-frontend-storage-realtime.ts",
     "test:staging-storage-package": "tsx scripts/validate-staging-storage-package.ts",

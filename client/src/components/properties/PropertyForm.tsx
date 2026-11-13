@@ -130,7 +130,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
       const method = isEdit ? "PUT" : "POST";
       const { imageUrl, ...propertyData } = data;
       const payload = pendingImage
-        ? { ...propertyData, imageUrl: "" }
+        ? propertyData
         : imageUrl?.startsWith("/api/property-images")
           ? propertyData
           : { ...propertyData, imageUrl: imageUrl || "" };

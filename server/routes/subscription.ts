@@ -11,7 +11,10 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
     if (role && !["landlord", "property_manager"].includes(role)) {
       return res.status(403).json({ error: "Subscriptions belong to the landlord or property-management billing account" });
     }
-    const ownerId = req.user.sub;
+    const ownerId = req.user.contextOwnerId;
+    if (!ownerId) {
+      return res.status(401).json({ error: "No trusted billing-owner context is active" });
+    }
     const access = await getOwnerSubscriptionAccess(ownerId);
     const account = access.billingAccount;
     const { data: activeProperties, count: activePropertyCount } = await supabase

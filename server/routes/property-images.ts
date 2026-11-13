@@ -12,6 +12,7 @@ import {
   propertyImageReference,
 } from "../../shared/private-property-image";
 import { requirePropertyOwnership } from "../middleware/ownership";
+import { createDbConnection } from "../../api/_lib/db.js";
 
 const router = Router();
 
@@ -23,6 +24,8 @@ function isOwnedImagePath(path: string, userId: string, propertyId: string): boo
     return false;
   }
 }
+
+class InvalidUploadedImageError extends Error {}
 
 async function canCaretakerViewProperty(userId: string, ownerId: string, propertyId: string): Promise<boolean> {
   const { data: assignments, error } = await supabase.from("caretaker_assignments")
@@ -91,43 +94,48 @@ router.post("/:propertyId", isAuthenticated, requirePropertyOwnership, async (re
   }
   const path = typeof req.body?.path === "string" ? req.body.path : "";
   if (req.body?.action !== "complete" || !isOwnedImagePath(path, req.user.sub, propertyId)) return res.status(400).json({ message: "Invalid property image" });
-  const { data: objectInfo, error: objectInfoError } = await supabase.storage
-    .from(PROPERTY_IMAGE_BUCKET).info(path);
-  if (objectInfoError || !objectInfo || !isValidPropertyImageObjectInfo(path, objectInfo)) {
-    await supabase.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
-    return res.status(400).json({ message: "Uploaded property image is missing or invalid" });
-  }
-  const { data: objectBlob, error: objectDownloadError } = await supabase.storage
-    .from(PROPERTY_IMAGE_BUCKET).download(path);
-  const signatureBytes = objectBlob
-    ? new Uint8Array(await objectBlob.slice(0, 12).arrayBuffer())
-    : new Uint8Array();
-  if (objectDownloadError || !isValidPropertyImageSignature(path, signatureBytes)) {
-    await supabase.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
-    return res.status(400).json({ message: "Uploaded property image content is invalid" });
-  }
   const reference = propertyImageReference(path);
-  const { data: currentProperty, error: currentError } = await supabase.from("properties")
-    .select("owner_id, image_url").eq("id", propertyId).single();
-  if (currentError || !currentProperty || currentProperty.owner_id !== req.user.contextOwnerId) {
+  const sql = createDbConnection();
+  try {
+    await sql.begin(async (tx) => {
+      const [currentProperty] = await tx`
+        SELECT owner_id, image_url FROM public.properties WHERE id = ${propertyId} FOR UPDATE
+      `;
+      if (!currentProperty || currentProperty.owner_id !== req.user.contextOwnerId) {
+        throw new Error("Property image attachment authorization changed");
+      }
+      const { data: objectInfo, error: objectInfoError } = await supabase.storage
+        .from(PROPERTY_IMAGE_BUCKET).info(path);
+      if (objectInfoError || !objectInfo || !isValidPropertyImageObjectInfo(path, objectInfo)) {
+        throw new InvalidUploadedImageError("Uploaded property image is missing or invalid");
+      }
+      const { data: objectBlob, error: objectDownloadError } = await supabase.storage
+        .from(PROPERTY_IMAGE_BUCKET).download(path);
+      const signatureBytes = objectBlob
+        ? new Uint8Array(await objectBlob.slice(0, 12).arrayBuffer())
+        : new Uint8Array();
+      if (objectDownloadError || !isValidPropertyImageSignature(path, signatureBytes)) {
+        throw new InvalidUploadedImageError("Uploaded property image content is invalid");
+      }
+      const previousPath = decodePropertyImageReference(currentProperty.image_url, propertyId);
+      const [updated] = await tx`
+        UPDATE public.properties SET image_url = ${reference}, updated_at = NOW()
+        WHERE id = ${propertyId} AND owner_id = ${currentProperty.owner_id}
+        RETURNING id
+      `;
+      if (!updated) throw new Error("Property image attachment failed");
+      if (previousPath && previousPath !== path) {
+        const { error: cleanupError } = await supabase.storage.from(PROPERTY_IMAGE_BUCKET).remove([previousPath]);
+        if (cleanupError) console.error("Previous property image cleanup failed", cleanupError.message);
+      }
+    });
+  } catch (error) {
     await supabase.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
-    return res.status(403).json({ message: "Access denied" });
-  }
-  const previousPath = decodePropertyImageReference(currentProperty.image_url, propertyId);
-  const update = supabase.from("properties")
-    .update({ image_url: reference, updated_at: new Date().toISOString() })
-    .eq("id", propertyId)
-    .eq("owner_id", currentProperty.owner_id);
-  const { data: updated, error: updateError } = currentProperty.image_url === null
-    ? await update.is("image_url", null).select("id")
-    : await update.eq("image_url", currentProperty.image_url).select("id");
-  if (updateError || !updated?.length) {
-    await supabase.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
-    return res.status(500).json({ message: "Property image attachment failed" });
-  }
-  if (previousPath && previousPath !== path) {
-    const { error: cleanupError } = await supabase.storage.from(PROPERTY_IMAGE_BUCKET).remove([previousPath]);
-    if (cleanupError) console.error("Previous property image cleanup failed", cleanupError.message);
+    return res.status(error instanceof InvalidUploadedImageError ? 400 : 500).json({
+      message: error instanceof InvalidUploadedImageError ? error.message : "Property image attachment failed",
+    });
+  } finally {
+    await sql.end();
   }
   return res.status(201).json({ imageUrl: `/api/property-images?propertyId=${encodeURIComponent(propertyId)}` });
 });
@@ -137,13 +145,27 @@ router.delete("/:propertyId", isAuthenticated, requirePropertyOwnership, async (
   if (!isOwnedImagePath(path, req.user.sub, req.params.propertyId)) {
     return res.status(400).json({ message: "Invalid property image path" });
   }
-  const { data: property } = await supabase.from("properties").select("image_url")
-    .eq("id", req.params.propertyId).single();
-  if (decodePropertyImageReference(property?.image_url, req.params.propertyId) === path) {
-    return res.status(409).json({ message: "Referenced property image cannot be deleted" });
+  const sql = createDbConnection();
+  let conflict = false;
+  let cleanupFailed = false;
+  try {
+    await sql.begin(async (tx) => {
+      const [property] = await tx`
+        SELECT owner_id, image_url FROM public.properties WHERE id = ${req.params.propertyId} FOR UPDATE
+      `;
+      if (!property || property.owner_id !== req.user.contextOwnerId
+        || decodePropertyImageReference(property.image_url, req.params.propertyId) === path) {
+        conflict = true;
+        return;
+      }
+      const { error } = await supabase.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
+      cleanupFailed = Boolean(error);
+    });
+  } finally {
+    await sql.end();
   }
-  const { error } = await supabase.storage.from(PROPERTY_IMAGE_BUCKET).remove([path]);
-  if (error) return res.status(502).json({ message: "Property image cleanup failed" });
+  if (conflict) return res.status(409).json({ message: "Referenced property image cannot be deleted" });
+  if (cleanupFailed) return res.status(502).json({ message: "Property image cleanup failed" });
   return res.status(204).end();
 });
 

@@ -5,6 +5,48 @@ import { claimEmailJobs } from './queueClaims.js';
 
 const emailService = new EmailService();
 
+export async function processClaimedEmails(
+    sql: any,
+    pendingEmails: any[],
+    claimToken: string,
+    sendEmail: (message: { to: string; subject: string; html: string; text?: string }) => Promise<unknown>,
+) {
+    const logPrefix = `[Email Worker]`;
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const email of pendingEmails) {
+        try {
+            await sendEmail({
+                to: email.to,
+                subject: email.subject,
+                html: email.html_content,
+                text: email.text_content || undefined
+            });
+            await sql`
+                UPDATE public.email_queue
+                SET status = 'sent', sent_at = NOW(), claim_token = NULL,
+                    lease_expires_at = NULL, updated_at = NOW()
+                WHERE id = ${email.id} AND claim_token = ${claimToken}
+            `;
+            successCount++;
+            console.log(`${logPrefix} SUCCESS: ${email.id}`);
+        } catch (error: any) {
+            failCount++;
+            console.error(`${logPrefix} ERROR for ${email.id}:`, error.message);
+            await sql`
+                UPDATE public.email_queue
+                SET status = 'failed', retry_count = retry_count + 1,
+                    last_error = ${error.message || String(error)},
+                    available_at = NOW() + (LEAST(retry_count + 1, 5) * INTERVAL '5 minutes'),
+                    claim_token = NULL, lease_expires_at = NULL, updated_at = NOW()
+                WHERE id = ${email.id} AND claim_token = ${claimToken}
+            `;
+        }
+    }
+    return { processed: pendingEmails.length, success: successCount, failed: failCount };
+}
+
 /**
  * Processes a batch of pending emails from the queue.
  * This is designed for Vercel Serverless Functions using raw SQL.
@@ -26,49 +68,12 @@ export async function processEmailQueue(batchSize = 20) {
 
         console.log(`${logPrefix} Processing ${pendingEmails.length} emails...`);
 
-        let successCount = 0;
-        let failCount = 0;
-
-        for (const email of pendingEmails) {
-            try {
-                await emailService.sendEmail({
-                    to: email.to,
-                    subject: email.subject,
-                    html: email.html_content,
-                    text: email.text_content || undefined
-                });
-
-                // Mark as sent
-                await sql`
-                    UPDATE public.email_queue
-                    SET status = 'sent', sent_at = NOW(), claim_token = NULL,
-                        lease_expires_at = NULL, updated_at = NOW()
-                    WHERE id = ${email.id} AND claim_token = ${claimToken}
-                `;
-
-                successCount++;
-                console.log(`${logPrefix} SUCCESS: ${email.id}`);
-            } catch (error: any) {
-                failCount++;
-                console.error(`${logPrefix} ERROR for ${email.id}:`, error.message);
-
-                await sql`
-                    UPDATE public.email_queue
-                    SET status = 'failed', 
-                        retry_count = retry_count + 1,
-                        last_error = ${error.message || String(error)},
-                        available_at = NOW() + (LEAST(retry_count + 1, 5) * INTERVAL '5 minutes'),
-                        claim_token = NULL, lease_expires_at = NULL, updated_at = NOW()
-                    WHERE id = ${email.id} AND claim_token = ${claimToken}
-                `;
-            }
-        }
-
-        return {
-            processed: pendingEmails.length,
-            success: successCount,
-            failed: failCount
-        };
+        return processClaimedEmails(
+            sql,
+            pendingEmails,
+            claimToken,
+            (message) => emailService.sendEmail(message),
+        );
     } catch (error) {
         console.error(`${logPrefix} FATAL QUEUE ERROR:`, error);
         throw error;

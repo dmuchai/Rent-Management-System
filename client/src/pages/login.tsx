@@ -24,14 +24,18 @@ export default function Login() {
     username: "",
     password: "",
   });
+  const requestedReturnTo = new URLSearchParams(window.location.search).get('returnTo');
+  const returnTo = requestedReturnTo?.startsWith('/') && !requestedReturnTo.startsWith('//')
+    ? requestedReturnTo
+    : '/dashboard';
   // Auth guard: redirect authenticated users to dashboard
   useEffect(() => {
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-          console.log('[Login] User already authenticated, redirecting to dashboard');
-          setLocation("/dashboard");
+          console.log('[Login] User already authenticated, redirecting');
+          setLocation(returnTo);
         }
       } catch (error) {
         console.error('[Login] Failed to check session:', error);
@@ -39,7 +43,7 @@ export default function Login() {
       }
     };
     checkSession();
-  }, [setLocation]);
+  }, [returnTo, setLocation]);
 
   // Check for OAuth errors and success messages in URL on mount
   useEffect(() => {
@@ -109,9 +113,8 @@ export default function Login() {
       console.log('[Login] Waiting for query refetch...');
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Redirect to dashboard
-      console.log('[Login] Redirecting to /dashboard');
-      setLocation("/dashboard");
+      console.log('[Login] Redirecting after sign-in');
+      setLocation(returnTo);
 
       // Verify redirect happened
       setTimeout(() => {

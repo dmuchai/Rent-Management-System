@@ -10,7 +10,9 @@ import { Readable } from 'node:stream';
 import { allocateBankEvent, oldestInvoiceAllocations, normalizedPayerPhone, reverseBankAllocations } from '../../api/_lib/bankAllocation.js';
 import { handleBankWebhook } from '../../api/webhooks/banks/_lib/handleBankWebhook.js';
 import { lockAndCountActiveUnits } from '../../api/_lib/unitLimits.js';
-import { claimEmailJobs } from '../../api/_lib/queueClaims.js';
+import { claimEmailJobs, claimSmsJobs } from '../../api/_lib/queueClaims.js';
+import { processClaimedEmails } from '../../api/_lib/emailWorker.js';
+import { processClaimedSms } from '../../api/_lib/smsWorker.js';
 import { postExternalPaymentEvent } from '../../api/_lib/paymentPosting.js';
 import { buildInvoiceReminderMetadata } from '../../api/_lib/invoicingWorker.js';
 
@@ -104,10 +106,11 @@ before(async () => {
       payment_source varchar, status payment_status, description text, updated_at timestamp);
     CREATE TABLE email_queue (id varchar PRIMARY KEY DEFAULT gen_random_uuid()::text, "to" varchar,
       subject varchar, html_content text, text_content text, metadata jsonb,
-      status varchar DEFAULT 'pending', retry_count integer DEFAULT 0,
+      status varchar DEFAULT 'pending', retry_count integer DEFAULT 0, last_error text,
       created_at timestamp DEFAULT now(), updated_at timestamp DEFAULT now());
     CREATE TABLE sms_queue (id varchar PRIMARY KEY DEFAULT gen_random_uuid()::text, "to" varchar,
       message text, metadata jsonb, status varchar DEFAULT 'pending', retry_count integer DEFAULT 0,
+      last_error text,
       created_at timestamp DEFAULT now(), updated_at timestamp DEFAULT now());
     INSERT INTO users (id, role, created_by) VALUES
       ('migration-owner', 'landlord', NULL), ('migration-tenant', 'tenant', NULL),
@@ -353,6 +356,35 @@ test('concurrent queue workers claim each message once and recover expired claim
   await sql`UPDATE email_queue SET lease_expires_at = NOW() - INTERVAL '1 minute' WHERE id = 'mail-a'`;
   const recovered = await claimEmailJobs(sql, 1, '00000000-0000-0000-0000-000000000003');
   assert.equal(recovered[0].id, 'mail-a');
+});
+
+test('notification retry state recovers with controlled non-delivering transports', async () => {
+  await sql`INSERT INTO email_queue (id, "to", subject, html_content) VALUES ('mail-controlled', 'nobody@example.test', 'Controlled', 'Controlled')`;
+  await sql`INSERT INTO sms_queue (id, "to", message) VALUES ('00000000-0000-4000-8000-000000000001', '0711000001', 'Controlled')`;
+  const emailClaim = '00000000-0000-4000-8000-000000000002';
+  const smsClaim = '00000000-0000-4000-8000-000000000003';
+  const [emails, messages] = await Promise.all([
+    claimEmailJobs(sql, 1, emailClaim),
+    claimSmsJobs(sql, 1, smsClaim),
+  ]);
+  let deliveryAttempts = 0;
+  const nonDeliveringTransport = async () => {
+    deliveryAttempts += 1;
+    throw new Error('controlled non-delivery');
+  };
+  assert.deepEqual(await processClaimedEmails(sql, emails, emailClaim, nonDeliveringTransport), {
+    processed: 1, success: 0, failed: 1,
+  });
+  assert.deepEqual(await processClaimedSms(sql, messages, smsClaim, nonDeliveringTransport), {
+    processed: 1, success: 0, failed: 1,
+  });
+  assert.equal(deliveryAttempts, 2);
+  const [state] = await sql`SELECT
+    (SELECT status FROM email_queue WHERE id = 'mail-controlled') AS email_status,
+    (SELECT retry_count FROM email_queue WHERE id = 'mail-controlled')::int AS email_retries,
+    (SELECT status FROM sms_queue WHERE id = '00000000-0000-4000-8000-000000000001') AS sms_status,
+    (SELECT retry_count FROM sms_queue WHERE id = '00000000-0000-4000-8000-000000000001')::int AS sms_retries`;
+  assert.deepEqual(state, { email_status: 'failed', email_retries: 1, sms_status: 'failed', sms_retries: 1 });
 });
 
 test('shared posting keeps receipts, balances, excess and replay state consistent', async () => {
