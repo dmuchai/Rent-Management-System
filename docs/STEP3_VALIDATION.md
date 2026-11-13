@@ -52,7 +52,8 @@ default-deny business tables; the database health advisor has no findings.
 | Private-image, frontend Storage/Realtime, role-boundary, and Storage-package contracts | **PASS** |
 | Vercel frontend build on local Node.js 22 | **PASS**; only existing bundle-size/import warnings |
 | Fresh staging RLS authentication/default-deny matrix | **PASS — 7/7**, read-only |
-| Hosted candidate/API/browser matrix | **PENDING** until the committed `--skip-domain` candidate is created |
+| Hosted candidate API/security matrix | **PASS** on the exact `--skip-domain` candidate for all seven identities; see the final staging gate below |
+| Fresh authenticated browser matrix on the candidate | **NOT RUN**; the shared Opera connector was not connected, so no browser-session claim is made |
 
 The manager subscription route also resolves plan and usage from
 `auth.contextOwnerId`, matching the selected portfolio used by its listings
@@ -63,15 +64,93 @@ accessibility, or TypeScript issue in the subscription changes. The legacy
 Free plan remains capped at four active units across the whole owner
 portfolio; serialized create/restore checks remain in place.
 
+## 13 November final staging gate
+
+### Exact candidate
+
+- Implementation commit: `a372667eb5fd573c95b94485e11f9a3c1c5e1587`
+  (`Fix manager subscription owner context`), including the preceding
+  `0db7e90d8547e6e57d486e001b9d209ddab2358d` Step 3 commit.
+- Candidate deployment: `dpl_2kpaMLoZiggc2pgPmxgJcVaYFdHF`, Ready at
+  `https://landee-staging-3lb33s00n-dmmuchai-1174s-projects.vercel.app`.
+- The candidate was built on Node.js 26.x in the isolated
+  `landee-staging` Vercel project with `--skip-domain`. Its Vercel Git metadata
+  matches `a372667eb5fd573c95b94485e11f9a3c1c5e1587`.
+- `https://landee-staging.vercel.app` was **not promoted** and still resolves
+  to the prior Ready deployment `dpl_2MVNEXsVLgdi7FGY8TrgVhJoutoH`.
+- Vercel Authentication remains enabled for all deployments. The single
+  temporary automation bypass used by the validation harness was revoked;
+  zero automation bypasses remain. During cleanup inspection its value was
+  surfaced as a JSON field name in local tool output, so it was treated as
+  exposed and revoked immediately. It was not written to the repository or a
+  commit.
+
+### Hosted candidate evidence
+
+| Check | Result |
+|---|---|
+| Seven-identity authentication and authority matrix | **PASS — 7/7**: Landlord A/B, Property Manager A, Property Caretaker A, Unit Caretaker A, Tenant A/B |
+| Portfolio/unit list isolation | **PASS**: landlords and manager saw only their owner context; Property Caretaker A saw A1/A2; Unit Caretaker A saw only A1; tenant management-list attempts returned 403 |
+| Cross-portfolio and sibling writes | **PASS**: every schema-valid foreign unit-create and restore probe returned 403; assigned A1 update returned 200 and sibling A2 update returned 403 |
+| Forged authority context and invalid token | **PASS**: an invalid selected authority returned 401 with `AUTHORITY_CONTEXT_INVALID`; a generic invalid token returned 401 without that recovery code |
+| Manager subscription owner context | **PASS**: plan and usage matched Landlord A rather than the manager's empty portfolio |
+| Existing-user caretaker invitation recovery | **PASS**: acceptance returned 201, the invitation was accepted and token-cleared, and the assignment remained single/idempotent |
+| Private Storage | **PASS**: signed upload/finalization, stable private reference, authorized 90-second signed reads, cross-owner denial, MIME/size/byte-signature rejection, replacement cleanup, signed-URL expiry, and orphan inventory all behaved as required |
+| Cron boundary | **PASS**: all five cron routes returned 401 without the cron secret; no job or provider delivery was triggered |
+| Candidate runtime/request logs | **PASS**: zero HTTP 5xx responses. All 15 error-level records were the expected denied/not-found unit probes on A1/A2/B1; unexpected error count was zero |
+| Post-test financial/authority audit | **PASS**: invoice mismatch, matched-without-receipt, receipt-conflict, and duplicate-external-event counts were all zero; all Step 3 fixture memberships are scoped |
+| Post-test cleanup | **PASS**: the original property image reference was restored, all test object paths were removed, the private bucket contains zero objects, and orphan inventory is zero |
+
+The private `property-images` bucket is the only persistent Supabase Storage
+change. It remains restricted to 5 MiB JPEG/PNG/WebP/GIF objects with zero
+client policies and zero objects. No production Supabase or Vercel resource
+was queried for mutation or changed. The hosted run used only synthetic
+staging identities and fixtures; it did not send a real payment, email, or
+SMS and did not delete account or financial history.
+
+### Approval decision
+
+**NO-GO for promotion of the staging alias.** The exact candidate passed the
+API/security and private-Storage matrix, but the original instruction requires
+the existing staging domain to remain unchanged whenever a required hosted
+check cannot run. The remaining blockers are:
+
+1. A fresh authenticated browser run against the exact candidate was not
+   possible because the shared browser connector was not connected. The API
+   harness is not represented as browser evidence.
+2. `ENABLE_SUBSCRIPTIONS` and `VITE_ENABLE_SUBSCRIPTIONS` are absent, so hosted
+   legacy-Free/noneligible purchase and write enforcement remains disabled and
+   unverified.
+3. The staging Realtime publication contains zero tables. No hosted Realtime
+   change-delivery claim can be made until a least-privilege publication design
+   is explicitly approved.
+4. Email/SMS/payment provider credentials are intentionally absent. Local
+   callback, retry, duplicate, reversal, queue concurrency, and controlled
+   transport suites passed, but live-provider delivery was not attempted.
+   Staging retains 21 historical email rows with malformed metadata (1 failed,
+   8 pending, 12 sent) and 1 failed SMS row with malformed metadata. The
+   current Step 3 email row has object metadata. Two email rows and one SMS row
+   are recoverable under the current retry rules; the open queues contain 11
+   email and 3 SMS rows. Remediation or replay needs a separate explicit
+   decision before provider credentials are introduced.
+5. No complete backup was restored and verified in an isolated environment.
+   The rollback-only schema rehearsal is not backup-restoration evidence.
+
+No Vercel rollback is required because the domain was never moved. If Storage
+rollback is later approved, first reconfirm both object and stable-reference
+counts are zero, then remove only the empty staging bucket. Never delete the
+bucket while an object or database reference exists. Production approval and
+deployment remain **NO-GO**.
+
 ## Current release
 
 - Branch: `codex/staging-step3-fixes`
-- Current commit: `7815256` (`Clarify staging RLS fixture diagnosis`), with uncommitted validation-harness/documentation changes
+- Exact tested implementation commit: `a372667eb5fd573c95b94485e11f9a3c1c5e1587` (`Fix manager subscription owner context`)
 - Staging project: `landee-staging` (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`)
 - Staging URL: https://landee-staging.vercel.app
 - Staging Supabase project: `mcclctunrpyhumubpeyo`
 - Live Supabase project remains excluded from mutations: `emdahodfztpfdjkrbnqz`
-- Continuation validation date: 9 November 2026 (EAT)
+- Final candidate validation date: 13 November 2026 (EAT)
 
 ## 9 November continuation review
 
