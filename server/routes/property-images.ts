@@ -9,6 +9,7 @@ import {
   isValidPropertyImageObjectInfo,
   isValidPropertyImageSignature,
   newPropertyImagePath,
+  propertyImageContentTypeForPath,
   propertyImageReference,
 } from "../../shared/private-property-image";
 import { requirePropertyOwnership } from "../middleware/ownership";
@@ -70,10 +71,30 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
     || !signed.pathname.startsWith(`/storage/v1/object/sign/${PROPERTY_IMAGE_BUCKET}/`)) {
     return res.status(502).json({ message: "Invalid storage response" });
   }
+  const expectedContentType = propertyImageContentTypeForPath(path);
+  const imageResponse = await fetch(data.signedUrl, {
+    redirect: "error",
+    signal: AbortSignal.timeout(10_000),
+  });
+  const receivedContentType = imageResponse.headers.get("content-type")?.split(";", 1)[0].toLowerCase();
+  const contentLength = Number(imageResponse.headers.get("content-length"));
+  if (!imageResponse.ok
+    || !expectedContentType
+    || receivedContentType !== expectedContentType
+    || (Number.isFinite(contentLength) && contentLength > PROPERTY_IMAGE_MAX_BYTES)) {
+    return res.status(502).json({ message: "Image read failed" });
+  }
+  const imageBytes = Buffer.from(await imageResponse.arrayBuffer());
+  if (imageBytes.length === 0 || imageBytes.length > PROPERTY_IMAGE_MAX_BYTES
+    || !isValidPropertyImageSignature(path, imageBytes.subarray(0, 12))) {
+    return res.status(502).json({ message: "Image read failed" });
+  }
   res.setHeader("Cache-Control", "private, no-store, max-age=0");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("X-Content-Type-Options", "nosniff");
-  return res.redirect(302, data.signedUrl);
+  res.setHeader("Content-Type", expectedContentType);
+  res.setHeader("Content-Length", String(imageBytes.length));
+  return res.status(200).send(imageBytes);
 });
 
 router.post("/:propertyId", isAuthenticated, requirePropertyOwnership, async (req: any, res: any) => {

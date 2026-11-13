@@ -171,11 +171,19 @@ test('private property images are fetched through authenticated browser requests
   const hook = await readFile('client/src/hooks/useAuthenticatedImageUrl.ts', 'utf8');
   const propertyCard = await readFile('client/src/components/properties/PropertyCard.tsx', 'utf8');
   const tenantDashboard = await readFile('client/src/pages/dashboard/tenant.tsx', 'utf8');
+  const vercelImageRoute = await readFile('api/property-images/index.ts', 'utf8');
+  const expressImageRoute = await readFile('server/routes/property-images.ts', 'utf8');
 
   assert.match(hook, /apiRequest\("GET", source\)/);
   assert.match(hook, /URL\.createObjectURL\(blob\)/);
   assert.match(propertyCard, /useAuthenticatedImageUrl\(property\.imageUrl, defaultImage, property\.updatedAt\)/);
   assert.match(tenantDashboard, /useAuthenticatedImageUrl\(/);
+  for (const route of [vercelImageRoute, expressImageRoute]) {
+    assert.match(route, /createSignedUrl\(path, PROPERTY_IMAGE_SIGNED_URL_TTL_SECONDS\)/);
+    assert.match(route, /fetch\(data\.signedUrl/);
+    assert.match(route, /isValidPropertyImageSignature/);
+    assert.doesNotMatch(route, /res\.redirect\(302, data\.signedUrl\)/);
+  }
 });
 
 test('manager invoice reads use the selected portfolio owner', async () => {
