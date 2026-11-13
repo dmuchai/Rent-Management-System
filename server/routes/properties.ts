@@ -14,8 +14,10 @@ const router = Router();
 
 router.get("/", isAuthenticated, async (req: any, res: any) => {
   try {
-    const userId = req.user.sub;
-    const properties = await supabaseStorage.getPropertiesByOwnerId(userId) || [];
+    if (req.user.appRole !== "landlord" && req.user.appRole !== "property_manager") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    const properties = await supabaseStorage.getPropertiesByOwnerId(req.user.contextOwnerId) || [];
     res.json(properties);
   } catch {
     res.status(500).json({ message: "Failed to fetch properties" });

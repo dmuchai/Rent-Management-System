@@ -155,10 +155,13 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
     // Handle /api/properties - list all or create new
     if (req.method === 'GET') {
+        if (auth.role !== 'landlord' && auth.role !== 'property_manager') {
+          return res.status(403).json({ message: 'Access denied' });
+        }
         // Use raw SQL to get properties
         const userProperties = await sql`
           SELECT * FROM public.properties 
-          WHERE owner_id = ${auth.userId}
+          WHERE owner_id = ${auth.contextOwnerId}
           ORDER BY archived_at NULLS FIRST, created_at DESC
         `;
 

@@ -192,6 +192,18 @@ test('manager invoice reads use the selected portfolio owner', async () => {
   assert.match(invoices, /i\.landlord_id = \$\{auth\.contextOwnerId\}/);
 });
 
+test('property listings use the selected portfolio owner and reject non-management roles', async () => {
+  const vercelProperties = await readFile('api/properties/index.ts', 'utf8');
+  const expressProperties = await readFile('server/routes/properties.ts', 'utf8');
+  for (const source of [vercelProperties, expressProperties]) {
+    assert.match(source, /property_manager/);
+    assert.match(source, /contextOwnerId/);
+    assert.match(source, /status\(403\)/);
+  }
+  assert.doesNotMatch(vercelProperties, /WHERE owner_id = \$\{auth\.userId\}[\s\S]{0,120}ORDER BY archived_at/);
+  assert.doesNotMatch(expressProperties, /getPropertiesByOwnerId\(userId\)/);
+});
+
 test('caretaker tenant tables do not request management invoices without leases', async () => {
   const tenantTable = await readFile('client/src/components/tenants/TenantTable.tsx', 'utf8');
   assert.match(tenantTable, /enabled: !readOnly && leases\.length > 0/);
