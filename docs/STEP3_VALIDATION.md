@@ -1,5 +1,81 @@
 # Step 3 validation — 13 November 2026
 
+## Final protected-browser checkpoint — implementation `cc41572`
+
+This checkpoint supersedes the candidate and approval decisions in the
+historical sections below. Production remained excluded throughout.
+
+- Final implementation SHA: `cc41572be10a886583cd14ae7f00ad2ef839bade`
+  (`Scope manager property listings to selected owner`). The preceding focused
+  fixes are `600c599` (same-origin authenticated private-image reads),
+  `bc1bf77` (manager invoices, authenticated image rendering, and caretaker
+  invoice-query noise), and `f1f782e` (fail-closed staging RLS validator
+  execution).
+- GitHub release checks: **PASS** for the final SHA
+  ([run `43472140324`](https://github.com/dmuchai/Rent-Management-System/actions/runs/43472140324)).
+- Protected candidate: `dpl_8ywXhHNuDFmz4wAJECWCxW1X3BN6`, Ready at
+  `https://landee-staging-jdp7aifts-dmmuchai-1174s-projects.vercel.app`.
+  It was built from a clean detached worktree at the exact SHA in isolated
+  Vercel project `landee-staging` (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`), under
+  Node.js 26, with `--prod --skip-domain`. Vercel Authentication remains
+  enabled and the temporary candidate-specific browser share link was revoked.
+- Staging alias: **unchanged** on
+  `dpl_2MVNEXsVLgdi7FGY8TrgVhJoutoH`; the final candidate was not promoted.
+- Supabase target: isolated staging project `mcclctunrpyhumubpeyo`. No SQL,
+  policy, bucket, schema, Realtime, or production configuration change was made
+  in this checkpoint. No additional Supabase Storage change is awaiting
+  approval for this candidate: it used the already-approved private
+  `property-images` bucket with server-mediated authorization and no client
+  object policies.
+
+### Final exact-candidate evidence
+
+| Check | Result |
+|---|---|
+| Local type and route validation | **PASS** — `npm run check`, route-entrypoint check, and `git diff --check` |
+| Financial/authority regression | **PASS — 29/29**, including selected-owner properties/invoices, mutation non-replay, authenticated image reads, and caretaker invoice-query suppression |
+| Frontend production build | **PASS**; only the existing mixed-import and bundle-size warnings |
+| Seven-role browser identity matrix | **PASS — 7/7** in separate browser contexts: Landlord A/B, Manager A, Property Caretaker A, Unit Caretaker A, and Tenant A/B |
+| Browser scope | **PASS** for the fixture-supported property, tenant, and lease views; foreign Property/Tenant A/B data did not render |
+| Selected-owner manager | **PASS** for Property A, Tenant A, and Lease A after property listing was corrected to use the trusted `contextOwnerId` |
+| Subscription-disabled UI | **PASS**; the disabled-feature message rendered and no purchase/restore control was claimed or exercised |
+| Authority recovery | **PASS**; one deliberately invalid-context `PUT /api/properties` returned 401, the rejected context was cleared, the mutation was not replayed, and the property name was unchanged |
+| Private image browser lifecycle | **PASS**; two signed uploads finalized, both same-origin authenticated reads rendered as object URLs (280 px then 1024 px), and replacement changed the rendered object |
+| Existing-account caretaker invitation | **PASS**; no password field was shown, acceptance succeeded, and the same existing password re-authenticated the user |
+| Cleanup | **PASS**; the invitation row was absent, property image reference and authority fixtures were restored, the current object was removed, and read-only inventory found zero unexpected browser-upload objects |
+| Console/network inspection | **PASS with expected probe noise only**; the invalid-context test produced the intended property 401 and a secondary private-image 401 during the same rejected-context reload. Later image reads succeeded. The only other messages were the pre-existing browser warning about setting `X-Frame-Options` in a meta element. |
+
+The private-image endpoint still creates a 90-second signed Storage read after
+the property authorization check, validates its Supabase origin/path, then
+proxies validated image bytes through the authenticated same-origin route. It
+does not expose the bearer URL to the browser. The exact hosted upload/render/
+replacement result confirms the Node.js 26 runtime path.
+
+All browser writes were confined to the controlled staging fixture. Cleanup
+restored the prior image reference, membership, and assignment, deleted the
+synthetic invitation, removed the current uploaded object, and confirmed no
+replacement orphan remained. No credential, access token, signed URL, or
+temporary Vercel bypass value was printed or committed.
+
+### Remaining browser gates and decision
+
+1. Manager A has only one active authority membership, so the authority
+   selector is intentionally not rendered. A controlled second-owner manager
+   fixture is still required to test an actual UI context switch; this result
+   is recorded as **fixture-blocked**, not passed.
+2. The caretaker dashboard exposes assigned reads but no unit-edit control.
+   Therefore the required Unit Caretaker A successful assigned-unit update and
+   sibling-unit denial cannot be exercised through the actual UI. Existing
+   hosted API authorization evidence is supplementary and does not replace the
+   requested browser proof.
+
+**Decision: NO-GO for moving `landee-staging.vercel.app`.** The final protected
+candidate and all available browser/security journeys are green, but the two
+required UI gates above are not complete. The exact Vercel action awaiting
+approval is promotion of `dpl_8ywXhHNuDFmz4wAJECWCxW1X3BN6` to the staging
+alias only after those gates pass. No Supabase change, persistent SQL, or
+production action is authorized or required for that promotion decision.
+
 ## CodeRabbit follow-up candidate — implementation `ed27861`
 
 This checkpoint supersedes the implementation/candidate identifiers below.
