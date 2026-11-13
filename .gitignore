@@ -63,3 +63,4 @@ android/app/src/main/java/com/rentmanagement/app/*
 # Supabase local files
 supabase/
 .vscode/
+docs/reviews/*_Implementation_Review_*.md

@@ -16,29 +16,32 @@ export async function enqueuePaymentOutbox(tx: any, paymentId: string) {
   const receipt = details.provider_receipt_id ? ` Receipt ${details.provider_receipt_id}.` : '';
   const tenantText = `Payment of KES ${details.amount} received for ${details.property_name}, unit ${details.unit_number}.${receipt}`;
   const landlordText = `Payment of KES ${details.amount} received from ${details.tenant_name} for ${details.property_name}, unit ${details.unit_number}.${receipt}`;
+  const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[character] || character));
 
   if (details.tenant_email) await tx`
     INSERT INTO public.email_queue ("to", subject, html_content, text_content, metadata, idempotency_key)
-    VALUES (${details.tenant_email}, 'Rent payment received', ${`<p>${tenantText}</p>`}, ${tenantText},
-      ${JSON.stringify({ type: 'payment_confirmation', paymentId, recipient: 'tenant' })}::jsonb,
+    VALUES (${details.tenant_email}, 'Rent payment received', ${`<p>${escapeHtml(tenantText)}</p>`}, ${tenantText},
+      ${tx.json({ type: 'payment_confirmation', paymentId, recipient: 'tenant' })},
       ${`payment:${paymentId}:email:tenant`})
     ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`;
   if (details.landlord_email) await tx`
     INSERT INTO public.email_queue ("to", subject, html_content, text_content, metadata, idempotency_key)
-    VALUES (${details.landlord_email}, 'Rent payment received', ${`<p>${landlordText}</p>`}, ${landlordText},
-      ${JSON.stringify({ type: 'payment_confirmation', paymentId, recipient: 'landlord' })}::jsonb,
+    VALUES (${details.landlord_email}, 'Rent payment received', ${`<p>${escapeHtml(landlordText)}</p>`}, ${landlordText},
+      ${tx.json({ type: 'payment_confirmation', paymentId, recipient: 'landlord' })},
       ${`payment:${paymentId}:email:landlord`})
     ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`;
   if (details.tenant_phone) await tx`
     INSERT INTO public.sms_queue ("to", message, metadata, idempotency_key)
     VALUES (${details.tenant_phone}, ${tenantText},
-      ${JSON.stringify({ type: 'payment_confirmation', paymentId, recipient: 'tenant' })}::jsonb,
+      ${tx.json({ type: 'payment_confirmation', paymentId, recipient: 'tenant' })},
       ${`payment:${paymentId}:sms:tenant`})
     ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`;
   if (details.landlord_phone) await tx`
     INSERT INTO public.sms_queue ("to", message, metadata, idempotency_key)
     VALUES (${details.landlord_phone}, ${landlordText},
-      ${JSON.stringify({ type: 'payment_confirmation', paymentId, recipient: 'landlord' })}::jsonb,
+      ${tx.json({ type: 'payment_confirmation', paymentId, recipient: 'landlord' })},
       ${`payment:${paymentId}:sms:landlord`})
     ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`;
 }

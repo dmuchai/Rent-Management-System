@@ -2,26 +2,49 @@ import { Router } from "express";
 import { isAuthenticated, supabase } from "../supabaseAuth";
 import { supabaseStorage } from "../storageInstance";
 import { insertUnitSchema } from "../../shared/schema";
-import { ensurePropertyOwnership, requireUnitOwnership } from "../middleware/ownership";
 import { z } from "zod";
 import { buildPlanLimitError, canAddUnit } from "../../shared/subscription/index.js";
 import { getOwnerSubscriptionAccess } from "../utils/subscriptionAccess";
+import { createDbConnection } from "../../api/_lib/db.js";
+import { lockAndCountActiveUnits } from "../../api/_lib/unitLimits.js";
+import { hasScopedUnitAccess } from "../../api/_lib/leasePolicy.js";
 
 const router = Router();
+
+async function getCaretakerAssignments(req: any) {
+  if (req.user.appRole !== 'caretaker') return [];
+  const { data, error } = await supabase.from('caretaker_assignments')
+    .select('property_id, unit_id')
+    .eq('caretaker_id', req.user.sub)
+    .eq('landlord_id', req.user.contextOwnerId)
+    .eq('status', 'active');
+  if (error) throw error;
+  return data || [];
+}
 
 // GET /api/units?propertyId=
 router.get("/", isAuthenticated, async (req: any, res: any) => {
   try {
     const propertyId = req.query.propertyId as string | undefined;
     let units: any[];
+    const ownerId = req.user.contextOwnerId;
+    if (!['landlord', 'property_manager', 'caretaker'].includes(req.user.appRole)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
     if (propertyId) {
-      if (!(await ensurePropertyOwnership(req, res, propertyId))) {
-        return;
-      }
+      const { data: property } = await supabase.from('properties').select('id, owner_id').eq('id', propertyId).maybeSingle();
+      if (!property) return res.status(404).json({ message: 'Property not found' });
+      if (property.owner_id !== ownerId) return res.status(403).json({ message: 'Access denied' });
       units = await supabaseStorage.getUnitsByPropertyId(propertyId);
+      const assignments = await getCaretakerAssignments(req);
+      if (req.user.appRole === 'caretaker') {
+        units = units.filter((unit: any) => hasScopedUnitAccess(
+          { userId: req.user.sub, role: req.user.appRole, contextOwnerId: ownerId },
+          ownerId, unit.id, unit.propertyId || unit.property_id, assignments,
+        ));
+      }
     } else {
-      const ownerId = req.user.sub;
       const { data: properties, error: propertiesError } = await supabase
         .from("properties")
         .select("id")
@@ -52,6 +75,13 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
         createdAt: unit.created_at,
         updatedAt: unit.updated_at,
       }));
+      const assignments = await getCaretakerAssignments(req);
+      if (req.user.appRole === 'caretaker') {
+        units = units.filter((unit: any) => hasScopedUnitAccess(
+          { userId: req.user.sub, role: req.user.appRole, contextOwnerId: ownerId },
+          ownerId, unit.id, unit.propertyId, assignments,
+        ));
+      }
     }
 
     res.json(units || []);
@@ -67,10 +97,17 @@ router.post("/", isAuthenticated, async (req: any, res: any) => {
     if (!["landlord", "property_manager", "caretaker"].includes(req.user.appRole)) {
       return res.status(403).json({ message: "Only landlords, property managers, and caretakers can create units" });
     }
-    if (!(await ensurePropertyOwnership(req, res, unitData.propertyId))) {
-      return;
-    }
     const ownerId = req.user.contextOwnerId;
+    const { data: property } = await supabase.from('properties').select('id, owner_id')
+      .eq('id', unitData.propertyId).maybeSingle();
+    if (!property) return res.status(404).json({ message: 'Property not found' });
+    if (property.owner_id !== ownerId) return res.status(403).json({ message: 'Access denied' });
+    if (req.user.appRole === 'caretaker') {
+      const assignments = await getCaretakerAssignments(req);
+      const hasPropertyAssignment = assignments.some((assignment: any) =>
+        !assignment.unit_id && assignment.property_id === unitData.propertyId);
+      if (!hasPropertyAssignment) return res.status(403).json({ message: 'Access denied' });
+    }
     const { planCode } = await getOwnerSubscriptionAccess(ownerId);
     const { data: ownerProperties } = await supabase.from("properties").select("id").eq("owner_id", ownerId).is("archived_at", null);
     const propertyIds = (ownerProperties || []).map((property: any) => property.id);
@@ -95,11 +132,26 @@ router.post("/", isAuthenticated, async (req: any, res: any) => {
 });
 
 // PUT /api/units/:id
-router.put("/:id", isAuthenticated, requireUnitOwnership, async (req: any, res: any) => {
+router.put("/:id", isAuthenticated, async (req: any, res: any) => {
   try {
     const unitData = insertUnitSchema.partial().parse(req.body);
-    if (unitData.propertyId && !(await ensurePropertyOwnership(req, res, unitData.propertyId))) {
-      return;
+    const ownerId = req.user.contextOwnerId;
+    if (!['landlord', 'property_manager', 'caretaker'].includes(req.user.appRole)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    const { data: currentUnit } = await supabase.from('units').select('id, property_id').eq('id', req.params.id).maybeSingle();
+    if (!currentUnit) return res.status(404).json({ message: 'Unit not found' });
+    const { data: currentProperty } = await supabase.from('properties').select('owner_id').eq('id', currentUnit.property_id).maybeSingle();
+    if (!currentProperty || currentProperty.owner_id !== ownerId) return res.status(403).json({ message: 'Access denied' });
+    if (unitData.propertyId && unitData.propertyId !== currentUnit.property_id) {
+      return res.status(403).json({ message: 'Moving units between properties is not supported here' });
+    }
+    if (req.user.appRole === 'caretaker') {
+      const assignments = await getCaretakerAssignments(req);
+      const actor = { userId: req.user.sub, role: req.user.appRole, contextOwnerId: ownerId };
+      if (!hasScopedUnitAccess(actor, ownerId, currentUnit.id, currentUnit.property_id, assignments)) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
     }
     const unit = await supabaseStorage.updateUnit(req.params.id, unitData);
     res.json(unit);
@@ -112,26 +164,63 @@ router.put("/:id", isAuthenticated, requireUnitOwnership, async (req: any, res: 
 });
 
 // DELETE /api/units/:id
-router.patch('/:id', isAuthenticated, requireUnitOwnership, async (req: any, res: any) => {
+router.patch('/:id', isAuthenticated, async (req: any, res: any) => {
+  const sql = createDbConnection();
   try {
     const ownerId = req.user.contextOwnerId;
+    if (!['landlord', 'property_manager', 'caretaker'].includes(req.user.appRole)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
     const access = await getOwnerSubscriptionAccess(ownerId);
-    const { data: properties, error: propertyError } = await supabase.from('properties').select('id').eq('owner_id', ownerId).is('archived_at', null);
-    if (propertyError) throw propertyError;
-    const ids = (properties || []).map((p: any) => p.id);
-    const usage = ids.length ? await supabase.from('units').select('id', { count: 'exact', head: true }).in('property_id', ids).is('archived_at', null) : { count: 0, error: null };
-    if (usage.error) throw usage.error;
-    if (!canAddUnit(access.planCode, usage.count || 0)) return res.status(409).json(buildPlanLimitError(access.planCode, 'active_units', usage.count || 0));
-    const { data: restored, error } = await supabase.from('units').update({ archived_at: null, updated_at: new Date().toISOString() }).eq('id', req.params.id).in('property_id', ids).select('id');
-    if (error) throw error;
-    if (!restored?.length) return res.status(400).json({ message: 'Unit cannot be restored' });
-    return res.json({ message: 'Unit restored successfully' });
+    const result = await sql.begin(async (tx) => {
+      const activeUnits = await lockAndCountActiveUnits(tx, ownerId);
+      const [unit] = await tx`SELECT u.id, u.property_id, u.archived_at, p.owner_id
+        FROM public.units u JOIN public.properties p ON p.id = u.property_id
+        WHERE u.id = ${req.params.id} FOR UPDATE OF u, p`;
+      if (!unit) return { status: 404, body: { message: 'Unit not found' } };
+      if (unit.owner_id !== ownerId) return { status: 403, body: { message: 'Access denied' } };
+      if (unit.archived_at === null) return { status: 400, body: { message: 'Unit is already active' } };
+      if (req.user.appRole === 'caretaker') {
+        const assignments = await tx`SELECT property_id, unit_id FROM public.caretaker_assignments
+          WHERE caretaker_id = ${req.user.sub} AND landlord_id = ${ownerId} AND status = 'active'`;
+        const actor = { userId: req.user.sub, role: req.user.appRole, contextOwnerId: ownerId };
+        if (!hasScopedUnitAccess(actor, unit.owner_id, unit.id, unit.property_id, assignments)) {
+          return { status: 403, body: { message: 'Access denied' } };
+        }
+      }
+      if (!canAddUnit(access.planCode, activeUnits)) {
+        return { status: 409, body: buildPlanLimitError(access.planCode, 'active_units', activeUnits) };
+      }
+      await tx`UPDATE public.units SET archived_at = NULL, updated_at = NOW() WHERE id = ${unit.id}`;
+      await tx`UPDATE public.properties SET total_units = (
+        SELECT COUNT(*)::int FROM public.units WHERE property_id = ${unit.property_id} AND archived_at IS NULL
+      ) WHERE id = ${unit.property_id}`;
+      return { status: 200, body: { message: 'Unit restored successfully', id: unit.id, propertyId: unit.property_id } };
+    });
+    return res.status(result.status).json(result.body);
   } catch {
     return res.status(500).json({ message: 'Failed to restore unit' });
+  } finally {
+    await sql.end();
   }
 });
-router.delete("/:id", isAuthenticated, requireUnitOwnership, async (req: any, res: any) => {
+router.delete("/:id", isAuthenticated, async (req: any, res: any) => {
   try {
+    const ownerId = req.user.contextOwnerId;
+    if (!['landlord', 'property_manager', 'caretaker'].includes(req.user.appRole)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+    const { data: unit } = await supabase.from('units').select('id, property_id').eq('id', req.params.id).maybeSingle();
+    if (!unit) return res.status(404).json({ message: 'Unit not found' });
+    const { data: property } = await supabase.from('properties').select('owner_id').eq('id', unit.property_id).maybeSingle();
+    if (!property || property.owner_id !== ownerId) return res.status(403).json({ message: 'Access denied' });
+    if (req.user.appRole === 'caretaker') {
+      const assignments = await getCaretakerAssignments(req);
+      const actor = { userId: req.user.sub, role: req.user.appRole, contextOwnerId: ownerId };
+      if (!hasScopedUnitAccess(actor, ownerId, unit.id, unit.property_id, assignments)) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+    }
     const { error } = await supabase
       .from("units")
       .update({ archived_at: new Date().toISOString(), updated_at: new Date().toISOString() })

@@ -7,7 +7,11 @@
  * Make sure your server is running (npm run dev) before running this test.
  */
 
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = process.env.API_BASE_URL || 'http://127.0.0.1:5000';
+const parsedBaseUrl = new URL(BASE_URL);
+if (!['localhost', '127.0.0.1', '[::1]'].includes(parsedBaseUrl.hostname)) {
+  throw new Error('test:api only permits an isolated loopback server');
+}
 
 // Mock JWT token for testing (you'll need a real one from Supabase Auth)
 const MOCK_TOKEN = 'your_jwt_token_here';
@@ -48,6 +52,7 @@ const testEndpoints = async () => {
     }
   ];
 
+  let failed = 0;
   for (const test of tests) {
     try {
       console.log(`🔄 Testing: ${test.name}`);
@@ -63,21 +68,21 @@ const testEndpoints = async () => {
       
       if (status === 401) {
         console.log(`⚠️  ${test.name}: Authentication required (expected)`);
-      } else if (status >= 200 && status < 300) {
-        console.log(`✅ ${test.name}: Success (${status})`);
       } else {
-        console.log(`❌ ${test.name}: Failed (${status} ${statusText})`);
+        failed += 1;
+        console.log(`❌ ${test.name}: Expected 401 from the isolated auth-boundary smoke test, received ${status} ${statusText}`);
       }
 
     } catch (error) {
+      failed += 1;
       console.log(`❌ ${test.name}: Network error -`, error.message);
     }
   }
 
   console.log('\n📝 Test Summary:');
-  console.log('- If you see "Authentication required", your routes are working!');
-  console.log('- Set up a real JWT token from Supabase Auth to test authenticated endpoints');
-  console.log('- Make sure your server is running with: npm run dev');
+  console.log(`- ${tests.length - failed}/${tests.length} isolated auth-boundary probes returned the expected 401.`);
+  console.log('- This smoke test does not validate authenticated endpoint behavior.');
+  if (failed) process.exitCode = 1;
 };
 
 testEndpoints();

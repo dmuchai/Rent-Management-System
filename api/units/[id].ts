@@ -5,6 +5,7 @@ import { createDbConnection } from '../_lib/db.js';
 import { getEffectiveSubscriptionAccess, createPlanLimitError } from '../_lib/subscription.js';
 import { canAddUnit, type PlanCode } from '../../shared/subscription/index.js';
 import { lockAndCountActiveUnits } from '../_lib/unitLimits.js';
+import { hasScopedUnitAccess } from '../_lib/leasePolicy.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   // Validate method before creating DB connection
@@ -25,13 +26,17 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     }
 
     const unitId: string = unitIdParam;
-
-    planCode = (await getEffectiveSubscriptionAccess(auth.userId)).planCode;
+    if (!['landlord', 'property_manager', 'caretaker'].includes(auth.role)) {
+      return res.status(403).json({ error: 'Access denied', details: null });
+    }
+    const portfolioOwnerId = auth.contextOwnerId;
+    planCode = (await getEffectiveSubscriptionAccess(portfolioOwnerId)).planCode;
 
     // Use a transaction to ensure consistency
     const result = await sql.begin(async (tx) => {
-      // Verify the unit belongs to this landlord's property
-      // Lock BOTH the unit row and the property row to prevent concurrent deletions
+      if (req.method === 'PATCH') {
+        activeUnitCount = await lockAndCountActiveUnits(tx, portfolioOwnerId);
+      }
       const [unit] = await tx`
         SELECT u.id, u.property_id, p.owner_id
         FROM public.units u
@@ -44,8 +49,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         throw new Error('UNIT_NOT_FOUND');
       }
       
-      if (unit.owner_id !== auth.userId) {
+      if (unit.owner_id !== portfolioOwnerId) {
         throw new Error('UNAUTHORIZED');
+      }
+      if (auth.role === 'caretaker') {
+        const assignments = await tx`
+          SELECT property_id, unit_id FROM public.caretaker_assignments
+          WHERE caretaker_id = ${auth.userId}
+            AND landlord_id = ${portfolioOwnerId}
+            AND status = 'active'
+        `;
+        if (!hasScopedUnitAccess(auth, unit.owner_id, unit.id, unit.property_id, assignments)) {
+          throw new Error('UNAUTHORIZED');
+        }
       }
       
       const propertyId = unit.property_id;
@@ -73,7 +89,6 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           throw new Error('UNIT_NOT_ARCHIVED');
         }
 
-        activeUnitCount = await lockAndCountActiveUnits(tx, auth.contextOwnerId);
         if (!canAddUnit(planCode, activeUnitCount)) {
           throw new Error('PLAN_LIMIT_REACHED');
         }

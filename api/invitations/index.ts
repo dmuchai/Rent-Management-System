@@ -120,7 +120,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           email,
           invitation_sent_at,
           account_status,
-          user_id
+          user_id,
+          landlord_id
         FROM public.tenants
         WHERE invitation_token = ${token}
         AND account_status IN ('invited', 'pending_invitation')
@@ -134,6 +135,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const tenant = tenants[0];
+      if (!tenant.landlord_id) {
+        return res.status(403).json({
+          error: 'Invalid invitation',
+          message: 'This invitation is not linked to an active landlord context.'
+        });
+      }
 
       if (!tenant.invitation_sent_at) {
         return res.status(410).json({ 

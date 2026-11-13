@@ -2,9 +2,9 @@ import postgres from 'postgres';
 import { createClient } from '@supabase/supabase-js';
 
 const expectedProjectRef = 'mcclctunrpyhumubpeyo';
-const stagingUrl = process.env.STAGING_SUPABASE_URL || process.env.SUPABASE_URL;
-const serviceRoleKey = process.env.STAGING_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-const databaseUrl = process.env.STAGING_DATABASE_URL || process.env.DATABASE_URL;
+const stagingUrl = process.env.STAGING_SUPABASE_URL;
+const serviceRoleKey = process.env.STAGING_SUPABASE_SERVICE_ROLE_KEY;
+const databaseUrl = process.env.STAGING_DATABASE_URL;
 const password = process.env.STAGING_TEST_PASSWORD;
 
 function required(name: string, value: string | undefined): string {
@@ -14,14 +14,21 @@ function required(name: string, value: string | undefined): string {
 
 function assertStagingUrl(url: string) {
   const parsed = new URL(url);
-  if (parsed.hostname !== `${expectedProjectRef}.supabase.co`) {
+  if (parsed.protocol !== 'https:' || parsed.hostname !== `${expectedProjectRef}.supabase.co`) {
     throw new Error(`Refusing non-staging Supabase URL: ${parsed.hostname}`);
   }
+}
 
-  function assertStagingDatabase(url: string) {
-    if (!url.includes(expectedProjectRef)) {
-      throw new Error(`Refusing database URL without staging project ref ${expectedProjectRef}`);
-    }
+function assertStagingDatabase(url: string) {
+  const parsed = new URL(url);
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    throw new Error(`Refusing non-PostgreSQL staging database URL`);
+  }
+  const isDirectStaging = parsed.hostname === `db.${expectedProjectRef}.supabase.co`;
+  const isStagingPooler = parsed.hostname.endsWith('.pooler.supabase.com')
+    && parsed.username === `postgres.${expectedProjectRef}`;
+  if (!isDirectStaging && !isStagingPooler) {
+    throw new Error(`Refusing non-staging database host: ${parsed.hostname}`);
   }
 }
 

@@ -22,7 +22,7 @@ interface SubscriptionContextValue {
   offerings: SubscriptionOfferingSummary | null;
   customerInfo: SubscriptionCustomerSnapshot | null;
   error: string | null;
-  purchasePackage: (subscriptionPackage: SubscriptionPackageSummary) => Promise<boolean>;
+  purchasePackage: (subscriptionPackage: SubscriptionPackageSummary) => Promise<SubscriptionCustomerSnapshot | null>;
   restorePurchases: () => Promise<void>;
   manageSubscription: () => Promise<void>;
   refreshSubscription: () => Promise<void>;
@@ -228,14 +228,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         });
       }
       await refreshSubscription();
-      return true;
+      return nextCustomerInfo;
     } catch (purchaseError) {
       if (serviceRef.current.isPurchaseCancelled(purchaseError)) {
         trackEvent('purchase_cancelled', {
           plan: subscriptionPackage.planCode,
           productId: subscriptionPackage.productId,
         });
-        return false;
+        return null;
       }
 
       trackEvent('purchase_failed', {

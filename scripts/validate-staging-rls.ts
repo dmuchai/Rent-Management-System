@@ -9,6 +9,7 @@ const identities = {
   landlordB: process.env.STAGING_RLS_TOKEN_LANDLORD_B ?? '',
   managerA: process.env.STAGING_RLS_TOKEN_MANAGER_A ?? '',
   propertyCaretakerA: process.env.STAGING_RLS_TOKEN_PROPERTY_CARETAKER_A ?? '',
+  unitCaretakerA: process.env.STAGING_RLS_TOKEN_UNIT_CARETAKER_A ?? '',
   tenantA: process.env.STAGING_RLS_TOKEN_TENANT_A ?? '',
   tenantB: process.env.STAGING_RLS_TOKEN_TENANT_B ?? '',
 };
@@ -19,13 +20,51 @@ if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== `${expectedProject
   throw new Error('STAGING_SUPABASE_URL must reference the isolated staging Supabase project');
 }
 if (!anonKey) throw new Error('STAGING_SUPABASE_ANON_KEY is required');
-const missing = Object.entries(identities).filter(([, token]) => !token).map(([name]) => name);
-if (missing.length) {
-  throw new Error(`Missing client-context staging tokens: ${missing.join(', ')}`);
+const minimumRemainingSeconds = Number.parseInt(process.env.STAGING_RLS_MIN_REMAINING_SECONDS ?? '300', 10);
+if (!Number.isInteger(minimumRemainingSeconds) || minimumRemainingSeconds < 60) {
+  throw new Error('STAGING_RLS_MIN_REMAINING_SECONDS must be an integer of at least 60 seconds');
 }
 
 type Json = Record<string, unknown> | unknown[] | string | number | boolean | null;
 type Result = { status: number; body: Json };
+type TokenStatus = 'VALID' | 'EXPIRED' | 'MISSING' | 'INVALID';
+type TokenClaims = { iss?: unknown; exp?: unknown };
+
+function decodeClaims(token: string): TokenClaims | null {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(parts[1].length / 4) * 4, '=');
+    const claims = JSON.parse(Buffer.from(payload, 'base64').toString('utf8')) as unknown;
+    return claims && typeof claims === 'object' ? claims as TokenClaims : null;
+  } catch {
+    return null;
+  }
+}
+
+async function preflightToken(token: string): Promise<TokenStatus> {
+  if (!token) return 'MISSING';
+  const claims = decodeClaims(token);
+  if (!claims || claims.iss !== `${supabaseUrl}/auth/v1` || typeof claims.exp !== 'number') return 'INVALID';
+  const remaining = claims.exp - Math.floor(Date.now() / 1000);
+  if (remaining <= 0) return 'EXPIRED';
+  if (remaining < minimumRemainingSeconds) return 'INVALID';
+
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401) return 'INVALID';
+  return response.ok ? 'VALID' : 'INVALID';
+}
+
+const tokenStatuses = await Promise.all(
+  Object.entries(identities).map(async ([name, token]) => [name, await preflightToken(token)] as const),
+);
+for (const [name, status] of tokenStatuses) console.log(`PREFLIGHT ${name}: ${status}`);
+const invalidTokens = tokenStatuses.filter(([, status]) => status !== 'VALID');
+if (invalidTokens.length) {
+  throw new Error(`Client-context JWT preflight failed for: ${invalidTokens.map(([name, status]) => `${name} (${status})`).join(', ')}`);
+}
 
 async function request(identity: keyof typeof identities, table: string, query: string): Promise<Result> {
   const response = await fetch(`${supabaseUrl}/rest/v1/${table}?${query}`, {
@@ -55,86 +94,43 @@ function pass(label: string) {
   console.log(`PASS ${label}`);
 }
 
-function assertNoForeignRows(label: string, result: Result) {
+function assertDefaultDeny(label: string, result: Result) {
+  if (result.status === 401 || result.status === 403) {
+    pass(`${label} (HTTP ${result.status})`);
+    return;
+  }
   const found = rows(result, label);
-  assert.equal(found.length, 0, `${label}: foreign rows were visible through client-context RLS`);
-  pass(label);
+  assert.equal(found.length, 0, `${label}: rows were visible through a direct client query`);
+  pass(`${label} (HTTP 200, 0 rows)`);
 }
 
-const landlordProperties = rows(
+assertDefaultDeny(
+  'Landlord A direct business-table access is denied',
   await request('landlordA', 'properties', 'select=id,owner_id&id=eq.step3-property-a'),
-  'Landlord A own properties',
 );
-assert.ok(
-  landlordProperties.length > 0,
-  'Landlord A fixture property is not visible under this JWT; confirm fixture existence with staging metadata before attributing this to a missing record',
-);
-pass('Landlord A can read own properties');
-
-const landlordBProperties = rows(
+assertDefaultDeny(
+  'Landlord B direct business-table access is denied',
   await request('landlordB', 'properties', 'select=id,owner_id&id=eq.step3-property-b'),
-  'Landlord B own properties',
 );
-assert.ok(
-  landlordBProperties.length > 0,
-  'Landlord B fixture property is not visible under this JWT; confirm fixture existence with staging metadata before attributing this to a missing record',
-);
-pass('Landlord B can read own properties');
-
-assertNoForeignRows(
-  'Landlord A cannot read Landlord B properties',
-  await request('landlordA', 'properties', 'select=id&id=eq.step3-property-b'),
-);
-assertNoForeignRows(
-  'Landlord B cannot read Landlord A properties',
-  await request('landlordB', 'properties', 'select=id&id=eq.step3-property-a'),
-);
-
-const managerProperties = rows(
+assertDefaultDeny(
+  'Property Manager A direct property access is denied',
   await request('managerA', 'properties', 'select=id,owner_id'),
-  'Property Manager A property read',
 );
-assert.ok(
-  managerProperties.length > 0,
-  'Property Manager A has no visible assigned property; confirm assignment and RLS policy state with staging metadata',
-);
-assert.ok(
-  managerProperties.every((property) => property.owner_id === 'step3-landlord-a'),
-  'Property Manager A can read a property outside the assigned portfolio',
-);
-pass('Property Manager A is limited to the assigned portfolio');
-
-const caretakerUnits = rows(
+assertDefaultDeny(
+  'Property Caretaker A direct unit access is denied',
   await request('propertyCaretakerA', 'units', 'select=id,property_id'),
-  'Property Caretaker A unit read',
 );
-assert.ok(
-  caretakerUnits.length > 0,
-  'Property Caretaker A has no visible assigned unit; confirm assignment and RLS policy state with staging metadata',
+assertDefaultDeny(
+  'Unit Caretaker A direct unit access is denied',
+  await request('unitCaretakerA', 'units', 'select=id,property_id'),
 );
-pass('Property Caretaker A can read assigned units');
-
-assertNoForeignRows(
-  'Property Caretaker A cannot read Landlord B units',
-  await request('propertyCaretakerA', 'units', 'select=id&property_id=eq.step3-property-b'),
-);
-
-const tenantRows = rows(
+assertDefaultDeny(
+  'Tenant A direct profile access is denied',
   await request('tenantA', 'tenants', 'select=id,user_id&id=eq.step3-tenant-record-a'),
-  'Tenant A own profile read',
 );
-assert.ok(
-  tenantRows.length > 0,
-  'Tenant A fixture profile is not visible under this JWT; confirm fixture existence with staging metadata before attributing this to a missing record',
-);
-pass('Tenant A can read own tenant profile');
-assertNoForeignRows(
-  'Tenant A cannot read Tenant B profile',
-  await request('tenantA', 'tenants', 'select=id&id=eq.step3-tenant-record-b'),
-);
-assertNoForeignRows(
-  'Tenant B cannot read Tenant A profile',
-  await request('tenantB', 'tenants', 'select=id&id=eq.step3-tenant-record-a'),
+assertDefaultDeny(
+  'Tenant B direct profile access is denied',
+  await request('tenantB', 'tenants', 'select=id,user_id&id=eq.step3-tenant-record-b'),
 );
 
 for (const identity of Object.keys(identities) as (keyof typeof identities)[]) {
@@ -143,12 +139,12 @@ for (const identity of Object.keys(identities) as (keyof typeof identities)[]) {
     pass(`${identity} membership table is not exposed to the client role`);
     continue;
   }
-  assertNoForeignRows(`${identity} membership rows are not broadly exposed`, memberships);
+  assertDefaultDeny(`${identity} membership table is not exposed to the client role`, memberships);
 }
 
 console.log(JSON.stringify({
   projectRef: expectedProjectRef,
-  checks: 'client-context RLS reads and cross-portfolio isolation',
+  checks: 'client-context default-deny checks for server-owned business tables',
   writes: 'none',
-  note: 'HTTP 200 empty results were classified only after confirming fixtures through authorized identities.',
+  note: 'Business data is served through the authenticated Express/Vercel API; direct REST access is expected to remain denied.',
 }));

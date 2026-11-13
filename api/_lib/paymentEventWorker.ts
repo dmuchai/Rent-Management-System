@@ -24,7 +24,10 @@ export async function processPaymentEvents(batchSize = 20) {
     for (const event of events) {
       try {
         if (event.event_type === 'mpesa_c2b') {
-          const payload = event.raw_payload as any;
+          const payload = typeof event.raw_payload === 'string'
+            ? JSON.parse(event.raw_payload)
+            : event.raw_payload;
+          if (!payload || typeof payload !== 'object') throw new Error('Invalid C2B payload');
           const timestamp = new Date(event.transaction_time);
           const result = await reconcilePayment(sql, {
             id: event.id, transactionId: event.external_transaction_id,

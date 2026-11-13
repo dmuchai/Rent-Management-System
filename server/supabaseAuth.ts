@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { Express, RequestHandler } from 'express';
 import { requiresManagementSubscription, READ_ONLY_SUBSCRIPTION_ERROR } from '../shared/subscription/write-policy.js';
 import { selectTrustedAuthority } from '../api/_lib/authority.js';
+import { authorityContextInvalidPayload } from '../shared/authority-context.js';
 
 declare global {
   namespace Express {
@@ -91,10 +92,12 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
       return res.status(503).json({ message: 'Unable to verify account context' });
     }
     const activeMemberships = (memberships || []).filter((membership: any) => membership.status === 'active');
+    const requestedRole = req.headers['x-landee-context-role']?.toString();
+    const requestedOwner = req.headers['x-landee-context-owner']?.toString();
     let authority = activeMemberships.length ? selectTrustedAuthority(
       activeMemberships,
-      req.headers['x-landee-context-role']?.toString(),
-      req.headers['x-landee-context-owner']?.toString(),
+      requestedRole,
+      requestedOwner,
     ) : null;
     if (!authority && !memberships?.length && userData?.role) {
       let contextOwnerId = userData.role === 'tenant'
@@ -111,6 +114,10 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
         contextOwnerId = tenant?.landlord_id || null;
       }
       authority = contextOwnerId ? { role: userData.role, context_owner_id: contextOwnerId } : null;
+    }
+    if ((requestedRole || requestedOwner)
+      && (authority?.role !== requestedRole || authority?.context_owner_id !== requestedOwner)) {
+      return res.status(401).json(authorityContextInvalidPayload());
     }
     if (!authority?.role || !authority.context_owner_id) {
       return res.status(403).json({ message: 'No trusted account context is available' });

@@ -1,6 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { API_BASE_URL } from "./config";
 import { supabase } from "./supabase";
+import { isAuthorityContextInvalidResponse } from "../../../shared/authority-context.js";
 
 const AUTH_CONTEXT_KEY = 'landee-auth-context:v1';
 
@@ -19,6 +20,15 @@ function applyAuthorityContext(headers: Record<string, string>) {
 
 function clearAuthorityContext() {
   if (typeof window !== 'undefined') window.localStorage.removeItem(AUTH_CONTEXT_KEY);
+}
+
+async function hasInvalidAuthorityContext(res: Response): Promise<boolean> {
+  if (res.status !== 401) return false;
+  try {
+    return isAuthorityContextInvalidResponse(res.status, await res.clone().json());
+  } catch {
+    return false;
+  }
 }
 
 export function setAuthorityContext(context: { role: string; contextOwnerId: string } | null) {
@@ -102,11 +112,11 @@ export async function apiRequest(
     credentials: "include",
   });
   let res = await request();
-  if (hadContext && (res.status === 401 || res.status === 403)) {
+  // Mutations are never replayed after context loss: the same request could
+  // otherwise run under a different owner or role. Clear only a context that
+  // the server explicitly rejected, then surface the original response.
+  if (hadContext && await hasInvalidAuthorityContext(res)) {
     clearAuthorityContext();
-    delete headers['x-landee-context-role'];
-    delete headers['x-landee-context-owner'];
-    res = await request();
   }
 
   await throwIfResNotOk(res);
@@ -137,7 +147,7 @@ export const getQueryFn: <T>(options: {
         headers,
         credentials: "include",
       });
-      if (hadContext && (res.status === 401 || res.status === 403)) {
+      if (hadContext && await hasInvalidAuthorityContext(res)) {
         clearAuthorityContext();
         delete headers['x-landee-context-role'];
         delete headers['x-landee-context-owner'];

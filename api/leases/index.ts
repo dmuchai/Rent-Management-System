@@ -3,6 +3,7 @@ import { requireAuth } from '../_lib/auth.js';
 import { createDbConnection } from '../_lib/db.js';
 import { z } from 'zod';
 import { canEditLeaseStatus, hasScopedUnitAccess } from '../_lib/leasePolicy.js';
+import { propertyImageApiUrl } from '../../shared/private-property-image.js';
 
 // Consolidated handler for Leases
 // Route: /api/leases/[[...route]]
@@ -128,7 +129,7 @@ async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: a
                 name: lease.property_name,
                 address: lease.property_address,
                 propertyType: lease.property_type,
-                imageUrl: lease.property_image,
+                imageUrl: propertyImageApiUrl(lease.property_image, lease.property_id) || lease.property_image,
             }
         },
         property: {
@@ -136,7 +137,7 @@ async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: a
             name: lease.property_name,
             address: lease.property_address,
             propertyType: lease.property_type,
-            imageUrl: lease.property_image,
+            imageUrl: propertyImageApiUrl(lease.property_image, lease.property_id) || lease.property_image,
         }
     }));
 

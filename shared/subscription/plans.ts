@@ -159,6 +159,14 @@ export function normalizePlanCode(planCode: string | null | undefined): PlanCode
   return LEGACY_PLAN_ALIASES[normalized] ?? 'free';
 }
 
+export function getPlanComparisonBaseline(
+  effectivePlanCode: string | null | undefined,
+  storedPlanCode: string | null | undefined,
+  transitionActive: boolean,
+): PlanCode {
+  return normalizePlanCode(transitionActive ? storedPlanCode : effectivePlanCode);
+}
+
 export function isPaidStatus(status: SubscriptionStatus): boolean {
   return status === 'trialing' || status === 'active' || status === 'grace_period';
 }

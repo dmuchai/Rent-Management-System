@@ -27,6 +27,17 @@ async function getManagementUserCount(ownerUserId: string): Promise<number> {
 
 const router = Router();
 
+async function findAuthUserByEmail(email: string) {
+  const perPage = 1000;
+  for (let page = 1; ; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+    const users = data?.users || [];
+    const match = users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
+    if (match || users.length < perPage) return match || null;
+  }
+}
+
 // POST /api/caretakers/assign
 router.post("/assign", isAuthenticated, async (req: any, res: any) => {
   try {
@@ -363,7 +374,16 @@ router.post("/invitations", async (req: any, res: any, next: any) => {
       const { data: existingUserRecord } = await supabase
         .from("users").select("id, role").eq("email", invitation.email).maybeSingle();
 
-      let authUserId = existingUserRecord?.id as string | undefined;
+      if (existingUserRecord?.role && existingUserRecord.role !== 'caretaker') {
+        return res.status(400).json({ error: 'Account already exists', message: `This email is already registered as a ${existingUserRecord.role}.` });
+      }
+
+      const existingAuthUser = await findAuthUserByEmail(invitation.email);
+      if (existingUserRecord?.id && existingAuthUser?.id && existingUserRecord.id !== existingAuthUser.id) {
+        return res.status(409).json({ error: 'Account identity conflict', message: 'Please contact support to recover this invitation.' });
+      }
+
+      let authUserId = (existingUserRecord?.id || existingAuthUser?.id) as string | undefined;
 
       if (authUserId) {
         const { error: updateError } = await supabase.auth.admin.updateUserById(authUserId, {
@@ -386,20 +406,32 @@ router.post("/invitations", async (req: any, res: any, next: any) => {
         const { error } = await supabase.from("users").update({ status: "active" }).eq("id", authUserId);
         if (error) return res.status(500).json({ error: "Account setup failed" });
       } else {
-        const { error } = await supabase.from("users").insert({
+        const { error } = await supabase.from("users").upsert({
           id: authUserId, email: invitation.email, first_name: invitation.first_name, last_name: invitation.last_name,
           role: "caretaker", created_by: invitation.landlord_id, status: "active",
-        });
+        }, { onConflict: 'id' });
         if (error) return res.status(500).json({ error: "Account setup failed" });
       }
 
       if (invitation.property_id || invitation.unit_id) {
-        const { error } = await supabase.from("caretaker_assignments").insert([{
-          caretaker_id: authUserId, landlord_id: invitation.landlord_id,
-          property_id: invitation.property_id || null, unit_id: invitation.unit_id || null,
-          status: "active", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-        }]);
-        if (error) return res.status(500).json({ error: "Account assignment failed" });
+        let assignmentQuery = supabase.from('caretaker_assignments').select('id')
+          .eq('caretaker_id', authUserId).eq('landlord_id', invitation.landlord_id).eq('status', 'active');
+        assignmentQuery = invitation.property_id
+          ? assignmentQuery.eq('property_id', invitation.property_id)
+          : assignmentQuery.is('property_id', null);
+        assignmentQuery = invitation.unit_id
+          ? assignmentQuery.eq('unit_id', invitation.unit_id)
+          : assignmentQuery.is('unit_id', null);
+        const { data: existingAssignment, error: assignmentLookupError } = await assignmentQuery.maybeSingle();
+        if (assignmentLookupError) return res.status(500).json({ error: 'Account assignment failed' });
+        if (!existingAssignment) {
+          const { error } = await supabase.from("caretaker_assignments").insert([{
+            caretaker_id: authUserId, landlord_id: invitation.landlord_id,
+            property_id: invitation.property_id || null, unit_id: invitation.unit_id || null,
+            status: "active", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          }]);
+          if (error) return res.status(500).json({ error: "Account assignment failed" });
+        }
       }
       const { error: membershipError } = await supabase.from("user_context_memberships").upsert({
         user_id: authUserId, context_owner_id: invitation.landlord_id, role: "caretaker",
@@ -407,10 +439,11 @@ router.post("/invitations", async (req: any, res: any, next: any) => {
       }, { onConflict: "user_id,context_owner_id,role" });
       if (membershipError) return res.status(500).json({ error: "Account context setup failed" });
 
-      await supabase.from("caretaker_invitations").update({
+      const { error: invitationUpdateError } = await supabase.from("caretaker_invitations").update({
         invitation_accepted_at: new Date().toISOString(), status: "accepted",
         invitation_token: null, updated_at: new Date().toISOString(),
       }).eq("id", invitation.id);
+      if (invitationUpdateError) return res.status(500).json({ error: 'Invitation finalization failed' });
 
       return res.status(201).json({ message: "Account created successfully", requireLogin: true, email: invitation.email });
     } catch (error) {

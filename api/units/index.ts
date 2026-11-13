@@ -7,6 +7,7 @@ import { insertUnitSchema } from '../../shared/schema.js';
 import { z } from 'zod';
 import { canAddUnit } from '../../shared/subscription/index.js';
 import { lockAndCountActiveUnits } from '../_lib/unitLimits.js';
+import { hasScopedUnitAccess } from '../_lib/leasePolicy.js';
 
 export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth) => {
   const sql = createDbConnection();
@@ -15,20 +16,30 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
     const { propertyId } = req.query;
 
     if (req.method === 'GET' && propertyId && typeof propertyId === 'string') {
+      if (!['landlord', 'property_manager', 'caretaker'].includes(auth.role)) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
       // Get units for a specific property
       const properties = await sql`
-        SELECT * FROM public.properties WHERE id = ${propertyId}
+        SELECT id, owner_id FROM public.properties WHERE id = ${propertyId}
       `;
 
       if (properties.length === 0) {
         return res.status(404).json({ message: 'Property not found' });
-      } else if (properties[0].owner_id !== auth.userId) {
+      } else if (properties[0].owner_id !== auth.contextOwnerId) {
         return res.status(403).json({ message: 'Access denied' });
       } else {
-        const propertyUnits = await sql`
+        let propertyUnits = [...await sql`
           SELECT * FROM public.units WHERE property_id = ${propertyId}
           ORDER BY archived_at NULLS FIRST, unit_number ASC
-        `;
+        `];
+        if (auth.role === 'caretaker') {
+          const assignments = await sql`SELECT property_id, unit_id FROM public.caretaker_assignments
+            WHERE caretaker_id = ${auth.userId} AND landlord_id = ${auth.contextOwnerId} AND status = 'active'`;
+          propertyUnits = propertyUnits.filter((unit) => hasScopedUnitAccess(
+            auth, properties[0].owner_id, unit.id, unit.property_id, assignments,
+          ));
+        }
         // Transform to camelCase for frontend
         const transformedUnits = propertyUnits.map(unit => ({
           id: unit.id,
@@ -46,14 +57,24 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(200).json(transformedUnits);
       }
     } else if (req.method === 'GET') {
+      if (!['landlord', 'property_manager', 'caretaker'].includes(auth.role)) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
       // Get all units for all user's properties
-      const allUnits = await sql`
+      let allUnits = [...await sql`
         SELECT u.*
         FROM public.units u
         INNER JOIN public.properties p ON u.property_id = p.id
-        WHERE p.owner_id = ${auth.userId}
+        WHERE p.owner_id = ${auth.contextOwnerId}
         ORDER BY u.archived_at NULLS FIRST, u.created_at DESC
-      `;
+      `];
+      if (auth.role === 'caretaker') {
+        const assignments = await sql`SELECT property_id, unit_id FROM public.caretaker_assignments
+          WHERE caretaker_id = ${auth.userId} AND landlord_id = ${auth.contextOwnerId} AND status = 'active'`;
+        allUnits = allUnits.filter((unit) => hasScopedUnitAccess(
+          auth, auth.contextOwnerId, unit.id, unit.property_id, assignments,
+        ));
+      }
       // Transform to camelCase for frontend
       const transformedUnits = allUnits.map(unit => ({
         id: unit.id,
@@ -146,6 +167,9 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       };
       return res.status(201).json(transformedUnit);
     } else if (req.method === 'PUT') {
+      if (!['landlord', 'property_manager', 'caretaker'].includes(auth.role)) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
       const unitUpdateSchema = z.object({
         id: z.string().min(1, 'Unit ID is required'),
         propertyId: z.string().min(1, 'Property is required'),
@@ -171,7 +195,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(404).json({ message: 'Unit not found' });
       }
 
-      if (existingUnits[0].owner_id !== auth.userId) {
+      if (existingUnits[0].owner_id !== auth.contextOwnerId) {
         return res.status(403).json({ message: 'Access denied' });
       }
 
@@ -182,8 +206,19 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
       if (properties.length === 0) {
         return res.status(404).json({ message: 'Property not found' });
-      } else if (properties[0].owner_id !== auth.userId) {
+      } else if (properties[0].owner_id !== auth.contextOwnerId) {
         return res.status(403).json({ message: 'Access denied' });
+      }
+
+      if (auth.role === 'caretaker') {
+        const assignments = await sql`SELECT property_id, unit_id FROM public.caretaker_assignments
+          WHERE caretaker_id = ${auth.userId} AND landlord_id = ${auth.contextOwnerId} AND status = 'active'`;
+        const canEditCurrentUnit = hasScopedUnitAccess(
+          auth, existingUnits[0].owner_id, existingUnits[0].id, existingUnits[0].property_id, assignments,
+        );
+        if (!canEditCurrentUnit || unitData.propertyId !== existingUnits[0].property_id) {
+          return res.status(403).json({ message: 'Access denied' });
+        }
       }
 
       const [updatedUnit] = await sql`

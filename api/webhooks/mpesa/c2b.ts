@@ -70,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ) VALUES (
         'mpesa_c2b', 'safaricom', ${channel?.landlord_id || null}, ${channel?.id || null},
         ${callback.TransID}, ${callback.TransAmount}, ${callback.MSISDN}, ${callback.BillRefNumber},
-        ${timestamp}, ${JSON.stringify(callback)}::jsonb,
+        ${timestamp}, ${sql.json(callback as Record<string, string | number>)},
         ${channel ? 'unmatched' : 'pending_review'}, ${channel ? 'received' : 'review'}, true, ${!channel}
       )
       ON CONFLICT ON CONSTRAINT uq_external_payment_events_provider_txn
@@ -93,9 +93,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ ResultCode: 0, ResultDesc: 'Payment captured for review' });
     }
 
-    await sql`UPDATE public.external_payment_events SET processing_status = 'processing',
+    const [claimed] = await sql`UPDATE public.external_payment_events SET processing_status = 'processing',
       processing_started_at = NOW() WHERE id = ${event.id}
-      AND processing_status IN ('received', 'retry', 'processing')`;
+      AND processing_status IN ('received', 'retry')
+      RETURNING id`;
+    if (!claimed) return res.status(200).json({ ResultCode: 0, ResultDesc: 'Payment already claimed' });
     try {
       const result = await reconcilePayment(sql, {
         id: event.id,

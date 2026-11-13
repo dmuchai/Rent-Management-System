@@ -634,6 +634,7 @@ export default async function handler(
       const user = await getUserFromAuthHeader(req);
       if (!user) return res.status(401).json({ error: "Unauthorized" });
       const authority = await verifyAuth(req);
+      if (authority && 'code' in authority) return res.status(401).json(authority);
 
       const admin = getAdminClient();
 
@@ -860,7 +861,7 @@ export default async function handler(
         authoritySource = 'administrator';
       } else if (role === 'tenant') {
         const { data: tenantLink } = await admin.from('tenants').select('landlord_id')
-          .or(`user_id.eq.${user.id},email.eq.${user.email}`).not('landlord_id', 'is', null).limit(1).maybeSingle();
+          .eq('user_id', user.id).not('landlord_id', 'is', null).limit(1).maybeSingle();
         if (!tenantLink?.landlord_id) {
           return res.status(403).json({ error: 'A landlord invitation is required for tenant access' });
         }

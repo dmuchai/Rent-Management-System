@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useSubscription } from '@/hooks/useSubscription';
 import { trackEvent } from '@/lib/analytics';
-import { getPlanConfig, type PlanCode } from '../../../shared/subscription/index.js';
+import { getPlanComparisonBaseline, getPlanConfig, type PlanCode } from '../../../shared/subscription/index.js';
 import type { SubscriptionPackageSummary } from '@/lib/revenuecat';
 import { useLocation } from 'wouter';
 import { apiRequest } from '@/lib/queryClient';
@@ -54,6 +54,11 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
   }, [account?.access.planCode, account?.access.subscriptionStatus]);
 
   const currentPlanCode = (account?.access.planCode || 'inactive') as PlanCode;
+  const comparisonPlanCode = getPlanComparisonBaseline(
+    account?.access.planCode,
+    account?.access.storedPlanCode,
+    Boolean(account?.access.transitionActive),
+  );
   const currentPlanConfig = getPlanConfig(currentPlanCode);
   const trialDaysRemaining = useMemo(() => {
     if (account?.access.subscriptionStatus !== 'trialing' || !account.billingAccount?.trialEndsAt) return null;
@@ -98,15 +103,14 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
     try {
       const completed = await purchasePackage(subscriptionPackage);
       if (!completed) return;
-      const previousPlan = currentPlanCode;
-      const isDowngrade = getPlanConfig(previousPlan).upgradeOrder
+      const isDowngrade = getPlanConfig(comparisonPlanCode).upgradeOrder
         > getPlanConfig(subscriptionPackage.planCode as PlanCode).upgradeOrder;
       toast({
         title: 'Subscription confirmed',
         description: isDowngrade
           ? 'Google Play confirmed your downgrade. It will take effect at renewal; your current access continues until then.'
-          : subscriptionPackage.trialDays
-            ? `Google Play confirmed your ${subscriptionPackage.trialDays}-day trial.`
+          : completed.subscriptionStatus === 'trialing'
+            ? 'Google Play confirmed your trial and renewal terms.'
             : 'Google Play confirmed your subscription upgrade.',
       });
       await refreshSubscription();
@@ -367,10 +371,7 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
           const annualSavings = monthlyPrice && annualPrice
             ? Math.max(0, Math.round(((monthlyPrice * 12 - annualPrice) / (monthlyPrice * 12)) * 100))
             : null;
-          const hasCurrentPlan = currentPlanCode === planCode;
-          const comparisonPlanCode = account?.access.transitionActive
-            ? (account.access.storedPlanCode as PlanCode)
-            : currentPlanCode;
+          const hasCurrentPlan = comparisonPlanCode === planCode;
           const planIsLower = getPlanConfig(comparisonPlanCode).upgradeOrder > planConfig.upgradeOrder;
 
           return (
@@ -397,12 +398,12 @@ export function SubscriptionContent({ embedded = false }: { embedded?: boolean }
                         onClick={() => void handlePurchase(monthly)}
                         disabled={isPurchasing || (hasCurrentPlan && !planIsLower)}
                       >
-                        {hasCurrentPlan && !planIsLower ? 'Active' : monthly.trialDays ? `Start ${monthly.trialDays}-day trial` : planIsLower ? 'Downgrade at renewal' : 'Choose'}
+                        {hasCurrentPlan && !planIsLower ? 'Active' : planIsLower ? 'Downgrade at renewal' : 'Choose'}
                       </Button>
                     </div>
                     {monthly.trialDays && (
                       <p className="mt-3 text-xs text-muted-foreground">
-                        {monthly.trialDays}-day trial available. After the trial, it renews at {formatMoney(monthly.priceString)} per month unless cancelled. Google Play confirms eligibility and the exact charge date before purchase.
+                        This package includes a {monthly.trialDays}-day introductory trial for eligible accounts. Google Play confirms eligibility, renewal price, and the exact charge date before purchase.
                       </p>
                     )}
                   </div>

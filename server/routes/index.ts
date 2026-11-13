@@ -18,6 +18,7 @@ import cronRouter from "./cron";
 import adminRouter from "./admin";
 import exportRouter from "./export";
 import subscriptionRouter from "./subscription";
+import propertyImagesRouter from "./property-images";
 
 export async function registerRoutes(app: Express): Promise<void> {
   // Setup Supabase auth middleware
@@ -34,6 +35,7 @@ export async function registerRoutes(app: Express): Promise<void> {
 
   // Properties & Units
   app.use("/api/properties", propertiesRouter);
+  app.use("/api/property-images", propertyImagesRouter);
   app.use("/api/units", unitsRouter);
 
   // Tenants

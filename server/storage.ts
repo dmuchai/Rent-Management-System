@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseAuth";
+import { propertyImageApiUrl } from "../shared/private-property-image";
 
 export class SupabaseStorage {
   // Unit operations
@@ -950,7 +951,7 @@ export class SupabaseStorage {
           propertyType: property.property_type,
           totalUnits: property.total_units,
           description: property.description,
-          imageUrl: property.image_url,
+          imageUrl: propertyImageApiUrl(property.image_url, property.id) || property.image_url,
           archivedAt: property.archived_at,
           createdAt: property.created_at,
           updatedAt: property.updated_at,
@@ -986,7 +987,7 @@ export class SupabaseStorage {
       propertyType: data.property_type,
       totalUnits: data.total_units,
       description: data.description,
-      imageUrl: data.image_url,
+      imageUrl: propertyImageApiUrl(data.image_url, data.id) || data.image_url,
       archivedAt: data.archived_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,

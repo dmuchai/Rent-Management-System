@@ -46,12 +46,16 @@ const directory = mkdtempSync(join(tmpdir(), 'landee-allocation-test-'));
 const bin = process.env.PG_BINDIR || '/usr/lib/postgresql/16/bin';
 let sql: ReturnType<typeof postgres>;
 let started = false;
+function assertDisposableDatabaseUrl(value: string) {
+  const parsed = new URL(value);
+  if (!['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)
+    || parsed.searchParams.get('disposable') !== 'true') {
+    throw new Error('TEST_DATABASE_URL must be an explicitly disposable local PostgreSQL instance');
+  }
+}
 before(async () => {
   if (externalDatabaseUrl) {
-    const parsed = new URL(externalDatabaseUrl);
-    if (!['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)) {
-      throw new Error('TEST_DATABASE_URL must point to a disposable local PostgreSQL instance');
-    }
+    assertDisposableDatabaseUrl(externalDatabaseUrl);
     sql = postgres(externalDatabaseUrl, { max: 5, onnotice: () => {} });
   } else {
     execFileSync(join(bin, 'initdb'), ['-D', join(directory, 'db'), '-A', 'trust', '--no-locale'], { stdio: 'ignore' });

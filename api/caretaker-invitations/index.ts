@@ -229,10 +229,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       let authUserId: string;
       let createdAuthUserId: string | null = null;
-      const shouldUpdateExistingAuth = Boolean(existingAuthUser);
 
       if (existingAuthUser) {
         authUserId = existingAuthUser.id;
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+          existingAuthUser.id,
+          { password, user_metadata: { first_name: invitation.first_name, last_name: invitation.last_name } }
+        );
+        if (updateError) {
+          return res.status(500).json({
+            error: 'Account update failed',
+            message: 'Failed to update account credentials. Please contact support.'
+          });
+        }
       } else {
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: invitation.email,
@@ -284,6 +293,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 ${invitation.unit_id || null},
                 'active'
               )
+              ON CONFLICT DO NOTHING
             `;
           }
           await tx`
@@ -318,50 +328,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           error: 'Account creation failed',
           message: 'Failed to complete account setup. Please try again.'
         });
-      }
-
-      if (shouldUpdateExistingAuth && existingAuthUser) {
-        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-          existingAuthUser.id,
-          { password, user_metadata: { first_name: invitation.first_name, last_name: invitation.last_name } }
-        );
-
-        if (updateError) {
-          try {
-            await sql.begin(async (tx: any) => {
-              await tx`
-                DELETE FROM public.caretaker_assignments
-                WHERE caretaker_id = ${authUserId}
-                  AND landlord_id = ${invitation.landlord_id}
-                  AND property_id IS NOT DISTINCT FROM ${invitation.property_id || null}
-                  AND unit_id IS NOT DISTINCT FROM ${invitation.unit_id || null}
-              `;
-
-              if (!existingUserRecord) {
-                await tx`
-                  DELETE FROM public.users WHERE id = ${authUserId}
-                `;
-              }
-
-              await tx`
-                UPDATE public.caretaker_invitations
-                SET
-                  invitation_accepted_at = NULL,
-                  status = ${invitation.status},
-                  invitation_token = ${invitation.invitation_token},
-                  updated_at = NOW()
-                WHERE id = ${invitation.id}
-              `;
-            });
-          } catch (rollbackError) {
-            console.error('Failed to rollback caretaker invitation after auth update error:', rollbackError);
-          }
-
-          return res.status(500).json({
-            error: 'Account update failed',
-            message: 'Failed to update account credentials. Please contact support.'
-          });
-        }
       }
 
       return res.status(201).json({

@@ -66,15 +66,11 @@ export function useRealtimeSubscription(
             schema: 'public',
             table: tableName,
           },
-          (payload) => {
+          () => {
             try {
-              console.log(`[Realtime] Change detected in ${tableName}:`, payload.eventType);
-              console.log('[Realtime] Payload:', payload);
-              
               // Invalidate queries using the parsed queryKeys
               queryClient.invalidateQueries({ queryKey: parsedQueryKeys });
-              
-              console.log(`[Realtime] Invalidated query key: [${parsedQueryKeys.join(', ')}]`);
+              console.log(`[Realtime] Change received for ${tableName}; invalidated ${parsedQueryKeys.length} query key(s)`);
             } catch (error) {
               console.error('[Realtime] Error in subscription callback:', error);
               console.error('[Realtime] Error stack:', error instanceof Error ? error.stack : 'No stack trace');

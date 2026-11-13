@@ -6,6 +6,7 @@ import { getEffectiveSubscriptionAccess, createPlanLimitError } from '../_lib/su
 import { insertPropertySchema } from '../../shared/schema.js';
 import { z } from 'zod';
 import { canAddProperty } from '../../shared/subscription/index.js';
+import { propertyImageApiUrl } from '../../shared/private-property-image.js';
 
 // Update schema: omit `ownerId` so clients cannot overwrite ownership
 // during property updates. Use `.partial()` on this schema for PATCH-like
@@ -56,7 +57,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           propertyType: propertyResult[0].property_type,
           totalUnits: propertyResult[0].total_units,
           description: propertyResult[0].description,
-          imageUrl: propertyResult[0].image_url,
+          imageUrl: propertyImageApiUrl(propertyResult[0].image_url, propertyResult[0].id) || propertyResult[0].image_url,
           ownerId: propertyResult[0].owner_id,
           createdAt: propertyResult[0].created_at,
           updatedAt: propertyResult[0].updated_at,
@@ -122,7 +123,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           propertyType: updatedProperty.property_type,
           totalUnits: updatedProperty.total_units,
           description: updatedProperty.description,
-          imageUrl: updatedProperty.image_url,
+          imageUrl: propertyImageApiUrl(updatedProperty.image_url, updatedProperty.id) || updatedProperty.image_url,
           ownerId: updatedProperty.owner_id,
           createdAt: updatedProperty.created_at,
           updatedAt: updatedProperty.updated_at
@@ -169,7 +170,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           propertyType: prop.property_type,
           totalUnits: prop.total_units,
           description: prop.description,
-          imageUrl: prop.image_url,
+          imageUrl: propertyImageApiUrl(prop.image_url, prop.id) || prop.image_url,
           ownerId: prop.owner_id,
           createdAt: prop.created_at,
           updatedAt: prop.updated_at,
@@ -237,7 +238,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           propertyType: createdProperty.property_type,
           totalUnits: createdProperty.total_units,
           description: createdProperty.description,
-          imageUrl: createdProperty.image_url,
+          imageUrl: propertyImageApiUrl(createdProperty.image_url, createdProperty.id) || createdProperty.image_url,
           ownerId: createdProperty.owner_id,
           createdAt: createdProperty.created_at,
           updatedAt: createdProperty.updated_at

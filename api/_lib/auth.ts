@@ -4,6 +4,10 @@ import { createClient, type User } from '@supabase/supabase-js';
 import { getEffectiveSubscriptionAccess, isSubscriptionsEnabled } from './subscription.js';
 import { requiresManagementSubscription, READ_ONLY_SUBSCRIPTION_ERROR } from '../../shared/subscription/write-policy.js';
 import { selectTrustedAuthority } from './authority.js';
+import {
+  authorityContextInvalidPayload,
+  type AuthorityContextInvalidPayload,
+} from '../../shared/authority-context.js';
 export { selectTrustedAuthority } from './authority.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -21,8 +25,13 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 });
 
 export type TrustedAuth = { userId: string; user: User; role: string; contextOwnerId: string };
+type AuthVerificationResult = TrustedAuth | AuthorityContextInvalidPayload | null;
 
-export async function verifyAuth(req: VercelRequest): Promise<TrustedAuth | null> {
+function isAuthorityContextFailure(result: AuthVerificationResult): result is AuthorityContextInvalidPayload {
+  return Boolean(result && 'code' in result);
+}
+
+export async function verifyAuth(req: VercelRequest): Promise<AuthVerificationResult> {
   // Get token from httpOnly cookie set by auth-callback
   let authToken = req.cookies['supabase-auth-token'];
 
@@ -112,6 +121,11 @@ export async function verifyAuth(req: VercelRequest): Promise<TrustedAuth | null
               ? userData.created_by : user.id;
           }
         }
+
+        if ((requestedRole || requestedOwner)
+          && (role !== requestedRole || contextOwnerId !== requestedOwner)) {
+          return authorityContextInvalidPayload();
+        }
       }
     } catch (error) {
       console.error('❌ Exception while syncing user role:', error);
@@ -157,6 +171,10 @@ export function requireAuth(
     }
 
     const auth = await verifyAuth(req);
+
+    if (isAuthorityContextFailure(auth)) {
+      return res.status(401).json(auth);
+    }
 
     if (!auth) {
       return res.status(401).json({ error: 'Unauthorized' });

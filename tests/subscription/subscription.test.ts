@@ -7,6 +7,7 @@ import {
   canAddUnit,
   getMinimumPlanForLimit,
   getEffectivePlanCode,
+  getPlanComparisonBaseline,
   hasFeature,
   FEATURE_KEYS,
   PLAN_CODES,
@@ -33,6 +34,11 @@ test('respects plan limits for properties, units, and management users', () => {
   assert.equal(canAddUnit('free', 4), false);
   assert.equal(canAddManagementUser('bronze', 1), true);
   assert.equal(canAddManagementUser('bronze', 200), true);
+});
+
+test('uses one plan baseline for transition labels and purchase comparisons', () => {
+  assert.equal(getPlanComparisonBaseline('enterprise', 'silver', true), 'silver');
+  assert.equal(getPlanComparisonBaseline('bronze', 'silver', false), 'bronze');
 });
 
 test('resolves the minimum plan needed for a resource', () => {

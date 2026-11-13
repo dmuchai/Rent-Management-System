@@ -34,6 +34,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/property-images/:propertyId",
+      "destination": "/api/property-images?propertyId=:propertyId"
+    },
+    {
       "source": "/api/units/:id",
       "destination": "/api/units/[id]"
     },

@@ -4,9 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { insertPropertySchema, type InsertProperty } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { supabase } from "@/lib/supabase";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +38,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
   const queryClient = useQueryClient();
   const isEdit = !!property;
   const [uploading, setUploading] = useState(false);
+  const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(property?.imageUrl || null);
 
   const form = useForm<InsertProperty>({
@@ -51,9 +52,20 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
     },
   });
 
+  useEffect(() => () => {
+    if (imagePreview?.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+  }, [imagePreview]);
+
   // Reset form when property changes or dialog opens
   useEffect(() => {
+    if (!open) {
+      if (imagePreview?.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+      setPendingImage(null);
+      setImagePreview(null);
+      return;
+    }
     if (open) {
+      if (imagePreview?.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
       form.reset({
         name: property?.name || "",
         address: property?.address || "",
@@ -62,39 +74,29 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
         imageUrl: property?.imageUrl || "",
       });
       setImagePreview(property?.imageUrl || null);
+      setPendingImage(null);
     }
   }, [property, open, form]);
 
   const handleImageUpload = async (file: File) => {
     try {
-      setUploading(true);
-      
-      // Generate unique filename
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `property-images/${fileName}`;
-      
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('property-images')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-      
-      if (error) throw error;
-      
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('property-images')
-        .getPublicUrl(filePath);
-      
-      form.setValue('imageUrl', publicUrl);
-      setImagePreview(publicUrl);
+      const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+      if (!allowedTypes.has(file.type)) {
+        throw new Error("Unsupported image type. Use JPEG, PNG, WebP, or GIF.");
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error("Image must be 5 MB or smaller.");
+      }
+
+      setPendingImage(file);
+      setImagePreview((previous) => {
+        if (previous?.startsWith("blob:")) URL.revokeObjectURL(previous);
+        return URL.createObjectURL(file);
+      });
       
       toast({
-        title: "Success",
-        description: "Image uploaded successfully",
+        title: "Image selected",
+        description: "The image will be uploaded when you save the property.",
       });
     } catch (error: any) {
       console.error('Error uploading image:', error);
@@ -111,39 +113,81 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
           : "Failed to upload image",
         variant: "destructive",
       });
-    } finally {
-      setUploading(false);
     }
   };
 
   const handleImageRemove = () => {
+    if (imagePreview?.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+    setPendingImage(null);
     form.setValue('imageUrl', '');
     setImagePreview(null);
   };
 
   const mutation = useMutation({
+    onMutate: () => setUploading(true),
     mutationFn: async (data: InsertProperty) => {
       const url = isEdit ? `/api/properties?id=${property.id}` : "/api/properties";
       const method = isEdit ? "PUT" : "POST";
-      const response = await apiRequest(method, url, data);
-      console.log('API response:', response);
-      return response;
+      const { imageUrl, ...propertyData } = data;
+      const payload = pendingImage
+        ? { ...propertyData, imageUrl: "" }
+        : imageUrl?.startsWith("/api/property-images")
+          ? propertyData
+          : { ...propertyData, imageUrl: imageUrl || "" };
+      const response = await apiRequest(method, url, payload);
+      const savedProperty = await response.json();
+      if (pendingImage) {
+        const propertyId = savedProperty.id || property?.id;
+        if (!propertyId) throw new Error("Property ID is required before uploading an image");
+        let path: string | undefined;
+        try {
+          const prepareResponse = await apiRequest("POST", `/api/property-images/${encodeURIComponent(propertyId)}`, {
+            action: "prepare",
+            contentType: pendingImage.type,
+            size: pendingImage.size,
+          });
+          const prepared = await prepareResponse.json();
+          if (typeof prepared.path !== "string" || typeof prepared.token !== "string") {
+            throw new Error("Private image upload preparation failed");
+          }
+          path = prepared.path;
+          const { error: uploadError } = await supabase.storage
+            .from("property-images")
+            .uploadToSignedUrl(prepared.path, prepared.token, pendingImage);
+          if (uploadError) throw new Error("Private image upload failed");
+          const imageResponse = await apiRequest(
+            "POST",
+            `/api/property-images/${encodeURIComponent(propertyId)}`,
+            { action: "complete", path },
+          );
+          const imageData = await imageResponse.json();
+          savedProperty.imageUrl = imageData.imageUrl;
+        } catch (error) {
+          if (path) {
+            await apiRequest("DELETE", `/api/property-images/${encodeURIComponent(propertyId)}`, { path }).catch(() => undefined);
+          }
+          console.error("Property saved but image upload failed", error);
+          return { ...savedProperty, imageUploadFailed: true };
+        }
+      }
+      return savedProperty;
     },
-    onSuccess: () => {
+    onSuccess: (savedProperty) => {
       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      toast({
-        title: "Success",
-        description: isEdit 
-          ? "Property updated successfully" 
-          : "Property created! Now add units with rent amounts by clicking 'View Details'",
-      });
+      toast(savedProperty.imageUploadFailed
+        ? { title: "Property saved", description: "The property was saved, but the image could not be uploaded. You can try again when editing it.", variant: "destructive" }
+        : { title: "Success", description: isEdit ? "Property updated successfully" : "Property created! Now add units with rent amounts by clicking 'View Details'" });
       onOpenChange(false);
+      setPendingImage(null);
+      if (imagePreview?.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+      setImagePreview(null);
       // Only reset form for new properties, not edits
       if (!isEdit) {
         form.reset();
       }
     },
+    onSettled: () => setUploading(false),
     onError: (error) => {
       if (isUnauthorizedError(error)) {
         toast({
@@ -151,6 +195,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
           description: "You are logged out. Logging in again...",
           variant: "destructive",
         });
+
         setTimeout(() => {
           window.location.href = "/login";
         }, 500);
@@ -298,7 +343,7 @@ export default function PropertyForm({ open, onOpenChange, property }: PropertyF
                             </p>
                             <Input
                               type="file"
-                              accept="image/*"
+                              accept="image/jpeg,image/png,image/webp,image/gif"
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) handleImageUpload(file);

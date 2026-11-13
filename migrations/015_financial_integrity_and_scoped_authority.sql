@@ -115,6 +115,12 @@ FROM public.properties p WHERE p.owner_id IS NOT NULL
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.user_context_memberships(user_id, context_owner_id, role, authority_source)
+SELECT u.id, u.id, 'landlord', 'legacy_backfill'
+FROM public.users u
+WHERE u.role = 'landlord'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.user_context_memberships(user_id, context_owner_id, role, authority_source)
 SELECT DISTINCT t.user_id, t.landlord_id, 'tenant', 'tenant_link'
 FROM public.tenants t WHERE t.user_id IS NOT NULL AND t.landlord_id IS NOT NULL
 ON CONFLICT DO NOTHING;
