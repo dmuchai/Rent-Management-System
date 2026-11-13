@@ -1,5 +1,70 @@
 # Step 3 validation — 13 November 2026
 
+## CodeRabbit follow-up candidate — implementation `ed27861`
+
+This checkpoint supersedes the implementation/candidate identifiers below.
+The Comments-tab findings were re-read from the local CodeRabbit review cache
+and verified against the current branch before changes were made.
+
+- Implementation SHA: `ed278613b5548cb7c59eb1c79cc44f1237886a30`
+  (`Address remaining CodeRabbit review comments`).
+- GitHub release checks: **PASS** for Node.js 22 and 26, including type,
+  route-entrypoint, financial, invoicing, subscription, account-deletion, KCB,
+  and Vercel build checks
+  ([run `43458621630`](https://github.com/dmuchai/Rent-Management-System/actions/runs/43458621630)).
+- Protected candidate: `dpl_7rwxPYrojrTES4Qf5zRmfWaCRq5T`, Ready at
+  `https://landee-staging-apfjgf7bo-dmmuchai-1174s-projects.vercel.app`.
+- Deployment target: verified Vercel team `dmmuchai-1174s-projects`, isolated
+  project `landee-staging` (`prj_LqYUx67llEO5sE2nVrBUsLjynH75`), Node.js
+  26.x, deployed manually with `--prod --skip-domain` from a clean checkout at
+  the implementation SHA.
+- Staging alias: **unchanged** on
+  `dpl_2MVNEXsVLgdi7FGY8TrgVhJoutoH`. Production remained excluded.
+- Supabase target: staging project `mcclctunrpyhumubpeyo`; no SQL, bucket,
+  policy, schema, or persistent Storage change was made in this follow-up.
+
+### Review disposition
+
+| Finding | Disposition and evidence |
+|---|---|
+| Successful staging lists checked only response shape | **Fixed.** The API harness now binds each run to one of all seven fixture identities and asserts permitted and forbidden unit/tenant IDs. Property Caretaker A and Unit Caretaker A have distinct expected scopes. Authorization probes reject subscription-gate responses and require the intended route guard. |
+| Selected-owner manager could not list portfolio leases | **Fixed.** Both Vercel and Express lease/tenant entrypoints use trusted `contextOwnerId` for property managers. The exact hosted candidate returned only `step3-lease-a` and `step3-tenant-record-a` for Manager A. |
+| Authority fallback could mix rejected and cached portfolio state | **Fixed.** Stale responses clear only the still-matching authority, clear the TanStack cache, and reload; reads are not replayed into a query key created for another authority and mutations are never replayed. |
+| Bootstrap could reset an existing invoice or collide with an existing user | **Fixed.** The controlled invoice insert preserves existing payment state, Auth enumeration is paginated once, and conflicting public identities fail closed before fixture upsert. |
+| Existing Storage policy could expose a new bucket | **Fixed in the unapplied package.** Both SQL files now stop if *any* `storage.objects` policy exists and list every policy for inspection. Staging already has the previously approved private bucket, so no persistent SQL was rerun for this guard-only package change. |
+| Cron authentication and read-only diagnostic drift | **Fixed.** All five cron handlers use the shared fail-closed helper; the local financial diagnostic also sets PostgreSQL `default_transaction_read_only`. |
+| Read-only subscription feature rules drifted between servers | **Fixed.** The blocked-feature rule is defined once in the shared plan module and used by both API implementations. |
+| Documentation and landing claims were stale or unverifiable | **Fixed.** Release commands and Node matrix match CI, and unsupported security/mobile/backup/cancellation claims were replaced by implementation-backed capability text. |
+
+The authenticated onboarding flow intentionally continues to return
+`role: null` and `contextOwnerId: null` for a new user with no authority so the
+role-selection screen remains reachable. It was verified and left unchanged;
+rejecting that state as unauthenticated would be a regression.
+
+### Verification evidence for `ed27861`
+
+| Check | Result |
+|---|---|
+| TypeScript, route entrypoints, and Vercel build | **PASS** locally and in CI |
+| Financial/authority regression | **PASS — 25/25** on Node.js 22 and 26 |
+| Subscription | **PASS — 17/17** on Node.js 22 and 26 |
+| Invoicing / account deletion / KCB | **PASS — 27/27, 8/8, and 28/28** |
+| Node.js 26.13 compatibility | **PASS**; `tsx` emits a dependency deprecation warning for `module.register()`, not a runtime failure |
+| Hosted identity and authorization matrix | **PASS — 7/7** with exact unit, tenant, and lease fixture scopes |
+| Hosted selected-owner/context checks | **PASS** for manager subscription totals, invalid selected authority versus generic 401, and assigned-versus-sibling caretaker updates |
+| Existing-account invitation | **PASS**; authentication proof, transaction completion, active assignment, and fixture cleanup verified |
+| Private image lifecycle | **PASS**; prepare, signed upload, byte validation, finalize, 90-second signed read, replace, expiry, cross-owner denial, invalid input rejection, zero orphaned objects, and cleanup |
+| Cron boundary | **PASS**; all five unauthenticated requests returned 401 and no job ran |
+
+The hosted runner reported that all writes were limited to synthetic staging
+fixtures, restored the property image, and removed test objects and the test
+invitation. No credentials were printed or committed.
+
+**Decision: NO-GO for moving `landee-staging.vercel.app` in this checkpoint.**
+The code/API/Storage candidate is green, but the previously documented
+authenticated interactive browser matrix and console/network inspection remain
+the alias-promotion gate. Production remains NO-GO and out of scope.
+
 ## Post-review candidate — implementation `515ce90`
 
 This section supersedes the earlier `a372667` candidate gate below. The four
