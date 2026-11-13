@@ -11,6 +11,7 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
   try {
     const userId = req.user.sub;
     const role = req.user.appRole;
+    const contextOwnerId = req.user.contextOwnerId || userId;
     let leases: any[] = [];
 
     if (role === "tenant") {
@@ -46,7 +47,7 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
         })
       );
     } else {
-      leases = await supabaseStorage.getLeasesByOwnerId(userId);
+      leases = await supabaseStorage.getLeasesByOwnerId(contextOwnerId);
     }
 
     res.json(leases);
@@ -60,6 +61,7 @@ router.post("/", isAuthenticated, async (req: any, res: any) => {
   try {
     const userId = req.user.sub;
     const role = req.user.appRole;
+    const contextOwnerId = req.user.contextOwnerId || userId;
 
     if (role === "tenant") return res.status(403).json({ message: "Tenants cannot create leases" });
 
@@ -81,7 +83,7 @@ router.post("/", isAuthenticated, async (req: any, res: any) => {
     if (!property) return res.status(404).json({ message: "Property not found" });
 
     const owner = property.ownerId || (property as any).owner_id;
-    if (role !== "caretaker" && owner !== userId) {
+    if (role !== "caretaker" && owner !== contextOwnerId) {
       return res.status(403).json({ message: "Unauthorized: Unit does not belong to you" });
     }
 

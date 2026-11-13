@@ -35,6 +35,16 @@ function clearAuthorityContextIfMatches(expected: AuthorityContext | null): bool
   return true;
 }
 
+function synchronizeAuthorityFallback(expected: AuthorityContext | null): boolean {
+  if (!clearAuthorityContextIfMatches(expected)) return false;
+  // Never allow a response resolved under the server's fallback authority to
+  // populate a query key created for the rejected authority. A full cache
+  // reset and reload keeps displayed auth state and resource data in sync.
+  queryClient.clear();
+  if (typeof window !== 'undefined') window.location.reload();
+  return true;
+}
+
 async function hasInvalidAuthorityContext(res: Response): Promise<boolean> {
   if (res.status !== 401) return false;
   try {
@@ -129,7 +139,7 @@ export async function apiRequest(
   // otherwise run under a different owner or role. Clear only a context that
   // the server explicitly rejected, then surface the original response.
   if (requestContext && await hasInvalidAuthorityContext(res)) {
-    clearAuthorityContextIfMatches(requestContext);
+    synchronizeAuthorityFallback(requestContext);
   }
 
   await throwIfResNotOk(res);
@@ -160,11 +170,8 @@ export const getQueryFn: <T>(options: {
         headers,
         credentials: "include",
       });
-      if (requestContext && await hasInvalidAuthorityContext(res)
-        && clearAuthorityContextIfMatches(requestContext)) {
-        delete headers['x-landee-context-role'];
-        delete headers['x-landee-context-owner'];
-        res = await fetch(fullUrl, { headers, credentials: "include" });
+      if (requestContext && await hasInvalidAuthorityContext(res)) {
+        synchronizeAuthorityFallback(requestContext);
       }
 
       if (unauthorizedBehavior === "returnNull" && res.status === 401) {

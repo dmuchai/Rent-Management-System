@@ -58,11 +58,20 @@ const identities = [
 const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 const userIds = new Map<string, string>();
 const allUsers: Array<{ id: string; email?: string }> = [];
-for (let page = 1; ; page += 1) {
+const visitedPages = new Set<number>();
+for (let page = 1; ; ) {
+  if (visitedPages.has(page)) throw new Error(`Auth pagination repeated page ${page}`);
+  visitedPages.add(page);
   const { data: listed, error: listError } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
   if (listError) throw listError;
   allUsers.push(...listed.users);
-  if (listed.users.length < 1000) break;
+  if (listed.nextPage === null) {
+    if (listed.total > allUsers.length) {
+      throw new Error(`Auth pagination ended early: received ${allUsers.length} of ${listed.total} users`);
+    }
+    break;
+  }
+  page = listed.nextPage;
 }
 
 for (const identity of identities) {
@@ -93,6 +102,18 @@ const sql = postgres(db, { prepare: false, max: 1, ssl: 'require' });
 try {
   await sql.begin(async (tx) => {
     const id = (key: string) => userIds.get(key)!;
+    for (const identity of identities) {
+      const [conflict] = await tx`
+        SELECT id
+        FROM public.users
+        WHERE id <> ${id(identity.key)}
+          AND (LOWER(email) = LOWER(${identity.email}) OR phone_number = ${identity.phone})
+        LIMIT 1
+      `;
+      if (conflict) {
+        throw new Error(`NO-GO: ${identity.key} conflicts with an existing public user`);
+      }
+    }
     await tx`
       INSERT INTO public.users (id, email, first_name, last_name, phone_number, role, is_verified, phone_verified, status)
       VALUES
@@ -168,7 +189,7 @@ try {
         '2026-11-01', '2026-11-30', '2026-11-01', 'STEP3A-NOV26',
         'rent', 'Step 3 staging invoice A', 'pending'
       )
-      ON CONFLICT (id) DO UPDATE SET amount = 1000, amount_paid = 0, status = 'pending'
+      ON CONFLICT (id) DO NOTHING
     `;
   });
   console.log(JSON.stringify({ projectRef: expectedProjectRef, identities: Object.fromEntries(userIds), fixturePrefix: 'step3-' }));

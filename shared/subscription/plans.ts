@@ -36,6 +36,13 @@ export const FEATURE_KEYS: readonly SubscriptionFeatureKey[] = [
   'priority_support',
 ] as const;
 
+export const READ_ONLY_BLOCKED_FEATURES: readonly SubscriptionFeatureKey[] = [
+  'recurring_charges',
+  'scheduled_reminders',
+  'sms_messaging',
+  'bulk_actions',
+] as const;
+
 export const PLAN_CONFIGS = {
   inactive: {
     code: 'inactive',
@@ -117,6 +124,10 @@ export function getPlanConfig(plan: PlanCode): PlanConfig {
 
 export function hasFeature(plan: PlanCode, feature: SubscriptionFeatureKey): boolean {
   return getPlanConfig(plan).enabledFeatures.includes(feature);
+}
+
+export function featureRemainsAvailableWhenReadOnly(feature: SubscriptionFeatureKey): boolean {
+  return !READ_ONLY_BLOCKED_FEATURES.includes(feature);
 }
 
 function isUnderLimit(currentCount: number, limit: number | null): boolean {

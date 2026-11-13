@@ -16,13 +16,8 @@ BEGIN
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'storage'
       AND tablename = 'objects'
-      AND (
-        policyname LIKE 'landee_private_images_%'
-        OR COALESCE(qual, '') ILIKE '%property-images%'
-        OR COALESCE(with_check, '') ILIKE '%property-images%'
-      )
   ) THEN
-    RAISE EXCEPTION 'NO-GO: Storage policy references property-images; inspect existing state before deployment';
+    RAISE EXCEPTION 'NO-GO: storage.objects has existing policies; inspect every policy for cross-bucket access before deployment';
   END IF;
 END
 $guard$;
@@ -40,7 +35,6 @@ SELECT id, name, public, file_size_limit, allowed_mime_types
 FROM storage.buckets WHERE id = 'property-images';
 SELECT policyname, cmd, roles, qual, with_check
 FROM pg_policies
-WHERE schemaname = 'storage' AND tablename = 'objects'
-  AND policyname LIKE 'landee_private_images_%';
+WHERE schemaname = 'storage' AND tablename = 'objects';
 
 ROLLBACK;

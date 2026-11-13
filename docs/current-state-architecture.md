@@ -53,6 +53,6 @@ All cron routes accept `GET` only and fail closed when `CRON_SECRET` is missing.
 
 ## Release and data controls
 
-`.github/workflows/release-checks.yml` uses `npm ci`, Node 22, and a disposable PostgreSQL 16 service. It runs type checking, route checks, focused suites, database allocation tests, and the Vercel production build without live provider credentials.
+`.github/workflows/release-checks.yml` uses `npm ci`, a Node 22/26 matrix, and a disposable PostgreSQL 16 service. It runs type checking, route checks, focused suites, database allocation tests, and the Vercel production build without live provider credentials.
 
 The reviewed commit `3a4c0d1e...` is not present in this checkout's available object graph. Subsequent repository history visible here already added canonical rent invoices, verified KCB allocation/reversal controls, account deletion, RevenueCat/Android subscription sync, and paid-first Starter limits. The remediation reuses those changes rather than restoring the reviewed implementation.

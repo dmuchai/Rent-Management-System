@@ -6,7 +6,46 @@ const vercelCookie = process.env.STAGING_VERCEL_COOKIE ?? '';
 const siblingUnitId = process.env.STAGING_SIBLING_UNIT_ID ?? '';
 const expectedRole = process.env.STAGING_EXPECTED_ROLE ?? '';
 const createPropertyId = process.env.STAGING_CREATE_PROPERTY_ID ?? '';
+const fixtureIdentity = process.env.STAGING_FIXTURE_IDENTITY ?? '';
 const validRoles = new Set(['landlord', 'property_manager', 'caretaker', 'tenant']);
+const fixtureScopes = {
+  landlord_a: {
+    role: 'landlord', units: ['step3-unit-a1', 'step3-unit-a2'], forbiddenUnits: ['step3-unit-b1'],
+    tenants: ['step3-tenant-record-a'], forbiddenTenants: ['step3-tenant-record-b'],
+    createDenial: ['Access denied'],
+  },
+  landlord_b: {
+    role: 'landlord', units: ['step3-unit-b1'], forbiddenUnits: ['step3-unit-a1', 'step3-unit-a2'],
+    tenants: ['step3-tenant-record-b'], forbiddenTenants: ['step3-tenant-record-a'],
+    createDenial: ['Access denied'],
+  },
+  manager_a: {
+    role: 'property_manager', units: ['step3-unit-a1', 'step3-unit-a2'], forbiddenUnits: ['step3-unit-b1'],
+    tenants: ['step3-tenant-record-a'], forbiddenTenants: ['step3-tenant-record-b'],
+    createDenial: ['Access denied'],
+  },
+  property_caretaker_a: {
+    role: 'caretaker', units: ['step3-unit-a1', 'step3-unit-a2'], forbiddenUnits: ['step3-unit-b1'],
+    tenants: ['step3-tenant-record-a'], forbiddenTenants: ['step3-tenant-record-b'],
+    createDenial: ['Access denied'],
+  },
+  unit_caretaker_a: {
+    role: 'caretaker', units: ['step3-unit-a1'], forbiddenUnits: ['step3-unit-a2', 'step3-unit-b1'],
+    tenants: ['step3-tenant-record-a'], forbiddenTenants: ['step3-tenant-record-b'],
+    createDenial: ['Access denied'],
+  },
+  tenant_a: {
+    role: 'tenant', units: [], forbiddenUnits: ['step3-unit-a1', 'step3-unit-a2', 'step3-unit-b1'],
+    tenants: [], forbiddenTenants: ['step3-tenant-record-a', 'step3-tenant-record-b'],
+    createDenial: ['Only landlords, property managers, and caretakers can create units'],
+  },
+  tenant_b: {
+    role: 'tenant', units: [], forbiddenUnits: ['step3-unit-a1', 'step3-unit-a2', 'step3-unit-b1'],
+    tenants: [], forbiddenTenants: ['step3-tenant-record-a', 'step3-tenant-record-b'],
+    createDenial: ['Only landlords, property managers, and caretakers can create units'],
+  },
+} as const;
+type FixtureIdentity = keyof typeof fixtureScopes;
 
 if (!baseUrl || !/^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/.test(baseUrl)) {
   throw new Error('STAGING_BASE_URL must be an isolated https://*.vercel.app URL');
@@ -16,6 +55,13 @@ if (!accessToken) {
 }
 if (!validRoles.has(expectedRole)) {
   throw new Error('STAGING_EXPECTED_ROLE is required and must be landlord, property_manager, caretaker, or tenant');
+}
+if (!(fixtureIdentity in fixtureScopes)) {
+  throw new Error(`STAGING_FIXTURE_IDENTITY must be one of: ${Object.keys(fixtureScopes).join(', ')}`);
+}
+const fixtureScope = fixtureScopes[fixtureIdentity as FixtureIdentity];
+if (fixtureScope.role !== expectedRole) {
+  throw new Error(`STAGING_EXPECTED_ROLE must be ${fixtureScope.role} for ${fixtureIdentity}`);
 }
 
 const headers: Record<string, string> = { Accept: 'application/json' };
@@ -42,9 +88,41 @@ function expectStatus(label: string, actual: number, expected: number[]) {
   console.log(`PASS ${label}: HTTP ${actual}`);
 }
 
-function expectAuthorizationDenied(label: string, response: { status: number; body: unknown }) {
+function responseError(response: { body: unknown }): { code?: string; message?: string } {
+  if (!response.body || typeof response.body !== 'object') return {};
+  const payload = response.body as { code?: unknown; error?: unknown; message?: unknown };
+  return {
+    code: typeof payload.code === 'string' ? payload.code : undefined,
+    message: typeof payload.message === 'string' ? payload.message
+      : typeof payload.error === 'string' ? payload.error : undefined,
+  };
+}
+
+function expectAuthorizationDenied(
+  label: string,
+  response: { status: number; body: unknown },
+  expectedMessages: readonly string[],
+) {
   assert.equal(response.status, 403, `${label}: expected explicit HTTP 403 authorization denial, received ${response.status}`);
+  const error = responseError(response);
+  assert.notEqual(error.code, 'SUBSCRIPTION_REQUIRED', `${label}: subscription policy intercepted the intended authorization probe`);
+  assert.ok(error.message && expectedMessages.includes(error.message),
+    `${label}: unexpected authorization response ${error.code || error.message || 'without an error marker'}`);
   console.log(`PASS ${label}: HTTP 403 authorization denial`);
+}
+
+function assertFixtureScope(
+  label: string,
+  body: unknown,
+  requiredIds: readonly string[],
+  forbiddenIds: readonly string[],
+) {
+  assert.ok(Array.isArray(body), `${label} must return an array`);
+  const ids = new Set(body.map((row) => row && typeof row === 'object' && 'id' in row
+    ? String((row as { id: unknown }).id) : ''));
+  for (const id of requiredIds) assert.ok(ids.has(id), `${label} is missing permitted fixture ${id}`);
+  for (const id of forbiddenIds) assert.ok(!ids.has(id), `${label} exposed forbidden fixture ${id}`);
+  console.log(`PASS ${label}: fixture scope`);
 }
 
 const profile = await request('/api/auth?action=user');
@@ -56,13 +134,22 @@ assert.equal(role, expectedRole, `expected role ${expectedRole} but received ${S
 console.log(`PASS authenticated role profile: ${String(role)}`);
 
 const units = await request('/api/units');
-expectStatus('unit list', units.status, [200]);
-assert.ok(Array.isArray(units.body), 'unit list must return an array');
+const expectedUnitListStatus = expectedRole === 'tenant' ? 403 : 200;
+expectStatus('unit list', units.status, [expectedUnitListStatus]);
+if (units.status === 200) {
+  assertFixtureScope('unit list', units.body, fixtureScope.units, fixtureScope.forbiddenUnits);
+} else {
+  expectAuthorizationDenied('unit list role guard', units, ['Access denied']);
+}
 
 const tenantList = await request('/api/tenants');
 const expectedTenantListStatus = expectedRole === 'tenant' ? 403 : 200;
 expectStatus('tenant list', tenantList.status, [expectedTenantListStatus]);
-if (tenantList.status === 200) assert.ok(Array.isArray(tenantList.body), 'tenant list must return an array');
+if (tenantList.status === 200) {
+  assertFixtureScope('tenant list', tenantList.body, fixtureScope.tenants, fixtureScope.forbiddenTenants);
+} else {
+  expectAuthorizationDenied('tenant list role guard', tenantList, ['Access denied', 'Tenants cannot list all tenants']);
+}
 
 const tenantProfile = await request('/api/tenants/me');
 if (expectedRole === 'tenant') {
@@ -91,7 +178,7 @@ const tenantCreate = await request('/api/units', {
     isOccupied: false,
   }),
 });
-expectAuthorizationDenied('unit creation authorization guard', tenantCreate);
+expectAuthorizationDenied('unit creation authorization guard', tenantCreate, fixtureScope.createDenial);
 
 if (siblingUnitId) {
   // PATCH is used only as a denial probe. The route checks ownership before
@@ -100,11 +187,12 @@ if (siblingUnitId) {
   const siblingRestore = await request(`/api/units/${encodeURIComponent(siblingUnitId)}`, {
     method: 'PATCH',
   });
-  expectAuthorizationDenied('sibling unit denial', siblingRestore);
+  expectAuthorizationDenied('sibling unit denial', siblingRestore, ['Access denied']);
 }
 
 console.log(JSON.stringify({
   baseUrl,
+  fixtureIdentity,
   checks: [
     'unit list',
     'tenant list',

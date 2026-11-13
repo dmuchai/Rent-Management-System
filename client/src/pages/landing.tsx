@@ -620,27 +620,27 @@ export default function Landing() {
 
           {/* Pricing Features */}
           <div className="mt-16 text-center">
-            <p className="text-muted-foreground mb-6">All plans include:</p>
+            <p className="text-muted-foreground mb-6">Core Landee capabilities:</p>
             <div className="flex flex-wrap justify-center gap-6 text-sm">
               <div className="flex items-center gap-2">
                 <i className="fas fa-shield-alt text-primary"></i>
-                <span>Bank-level security</span>
+                <span>Role-based portfolio access</span>
               </div>
               <div className="flex items-center gap-2">
                 <i className="fas fa-mobile-alt text-primary"></i>
-                <span>Mobile app access</span>
+                <span>Responsive web access</span>
               </div>
               <div className="flex items-center gap-2">
                 <i className="fas fa-sync text-primary"></i>
-                <span>Automatic backups</span>
+                <span>Invoice and payment history</span>
               </div>
               <div className="flex items-center gap-2">
                 <i className="fas fa-calendar text-primary"></i>
-                <span>30-day Starter trial for eligible new subscribers</span>
+                <span>Property and tenant records</span>
               </div>
               <div className="flex items-center gap-2">
                 <i className="fas fa-times-circle text-primary"></i>
-                <span>Cancel anytime</span>
+                <span>Data export</span>
               </div>
             </div>
           </div>

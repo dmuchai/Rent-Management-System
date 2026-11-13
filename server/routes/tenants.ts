@@ -16,6 +16,7 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
   try {
     const userId = req.user.sub;
     const role = req.user.appRole;
+    const contextOwnerId = req.user.contextOwnerId || userId;
 
     if (role === "tenant") return res.status(403).json({ message: "Tenants cannot list all tenants" });
 
@@ -49,7 +50,7 @@ router.get("/", isAuthenticated, async (req: any, res: any) => {
       return res.json((data || []).map(mapTenantRow));
     }
 
-    const tenants = await supabaseStorage.getTenantsByOwnerId(userId) || [];
+    const tenants = await supabaseStorage.getTenantsByOwnerId(contextOwnerId) || [];
     res.json(tenants);
   } catch {
     res.status(500).json({ message: "Failed to fetch tenants" });

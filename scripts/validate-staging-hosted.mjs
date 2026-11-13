@@ -33,13 +33,13 @@ assert.ok(new URL(databaseUrl).username.includes(stagingProjectRef), 'DATABASE_U
 const tempDirectory = mkdtempSync(join(tmpdir(), 'landee-hosted-validation-'));
 
 const identities = [
-  { name: 'LANDLORD_A', email: 'step3-landlord-a@staging.landee.test', role: 'landlord', units: ['step3-unit-a1', 'step3-unit-a2'], foreignProperty: 'step3-property-b', siblingUnit: 'step3-unit-b1' },
-  { name: 'LANDLORD_B', email: 'step3-landlord-b@staging.landee.test', role: 'landlord', units: ['step3-unit-b1'], foreignProperty: 'step3-property-a', siblingUnit: 'step3-unit-a1' },
-  { name: 'MANAGER_A', email: 'step3-manager-a@staging.landee.test', role: 'property_manager', units: ['step3-unit-a1', 'step3-unit-a2'], foreignProperty: 'step3-property-b', siblingUnit: 'step3-unit-b1' },
-  { name: 'PROPERTY_CARETAKER_A', email: 'step3-caretaker-property-a@staging.landee.test', role: 'caretaker', units: ['step3-unit-a1', 'step3-unit-a2'], foreignProperty: 'step3-property-b', siblingUnit: 'step3-unit-b1' },
-  { name: 'UNIT_CARETAKER_A', email: 'step3-caretaker-unit-a@staging.landee.test', role: 'caretaker', units: ['step3-unit-a1'], foreignProperty: 'step3-property-b', siblingUnit: 'step3-unit-a2' },
-  { name: 'TENANT_A', email: 'step3-tenant-a@staging.landee.test', role: 'tenant', units: null, foreignProperty: 'step3-property-b', siblingUnit: 'step3-unit-a2' },
-  { name: 'TENANT_B', email: 'step3-tenant-b@staging.landee.test', role: 'tenant', units: null, foreignProperty: 'step3-property-a', siblingUnit: 'step3-unit-a1' },
+  { name: 'LANDLORD_A', email: 'step3-landlord-a@staging.landee.test', role: 'landlord', units: ['step3-unit-a1', 'step3-unit-a2'], tenants: ['step3-tenant-record-a'], leases: ['step3-lease-a'], foreignProperty: 'step3-property-b', siblingUnit: 'step3-unit-b1' },
+  { name: 'LANDLORD_B', email: 'step3-landlord-b@staging.landee.test', role: 'landlord', units: ['step3-unit-b1'], tenants: ['step3-tenant-record-b'], leases: ['step3-lease-b'], foreignProperty: 'step3-property-a', siblingUnit: 'step3-unit-a1' },
+  { name: 'MANAGER_A', email: 'step3-manager-a@staging.landee.test', role: 'property_manager', units: ['step3-unit-a1', 'step3-unit-a2'], tenants: ['step3-tenant-record-a'], leases: ['step3-lease-a'], foreignProperty: 'step3-property-b', siblingUnit: 'step3-unit-b1' },
+  { name: 'PROPERTY_CARETAKER_A', email: 'step3-caretaker-property-a@staging.landee.test', role: 'caretaker', units: ['step3-unit-a1', 'step3-unit-a2'], tenants: ['step3-tenant-record-a'], leases: ['step3-lease-a'], foreignProperty: 'step3-property-b', siblingUnit: 'step3-unit-b1' },
+  { name: 'UNIT_CARETAKER_A', email: 'step3-caretaker-unit-a@staging.landee.test', role: 'caretaker', units: ['step3-unit-a1'], tenants: ['step3-tenant-record-a'], leases: ['step3-lease-a'], foreignProperty: 'step3-property-b', siblingUnit: 'step3-unit-a2' },
+  { name: 'TENANT_A', email: 'step3-tenant-a@staging.landee.test', role: 'tenant', units: null, tenants: null, leases: ['step3-lease-a'], foreignProperty: 'step3-property-b', siblingUnit: 'step3-unit-a2' },
+  { name: 'TENANT_B', email: 'step3-tenant-b@staging.landee.test', role: 'tenant', units: null, tenants: null, leases: ['step3-lease-b'], foreignProperty: 'step3-property-a', siblingUnit: 'step3-unit-a1' },
 ];
 
 let requestCount = 0;
@@ -117,6 +117,16 @@ try {
       assert.equal(units.status, 200, `${identity.name} unit list`);
       assert.deepEqual(new Set(units.body.map((row) => row.id)), new Set(identity.units), `${identity.name} unit scope`);
     }
+    const tenants = request('/api/tenants', token);
+    if (identity.tenants === null) {
+      assert.equal(tenants.status, 403, `${identity.name} tenant list`);
+    } else {
+      assert.equal(tenants.status, 200, `${identity.name} tenant list`);
+      assert.deepEqual(new Set(tenants.body.map((row) => row.id)), new Set(identity.tenants), `${identity.name} tenant scope`);
+    }
+    const leases = request('/api/leases', token);
+    assert.equal(leases.status, 200, `${identity.name} lease list`);
+    assert.deepEqual(new Set(leases.body.map((row) => row.id)), new Set(identity.leases), `${identity.name} lease scope`);
     const tenantProfile = request('/api/tenants/me', token);
     assert.ok(identity.role === 'tenant' ? tenantProfile.status === 200 : [200, 404].includes(tenantProfile.status));
     const deniedCreate = request('/api/units', token, { method: 'POST', body: {

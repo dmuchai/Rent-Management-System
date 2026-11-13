@@ -108,14 +108,20 @@ npm run mobile:ios
 ```bash
 npm run check
 npm run check:route-entrypoints
-node --import tsx --test tests/financial-integrity/*.test.ts
+npm run test:financial-integrity
+npm run test:invoicing
+npm run test:subscription
+npm run test:account-deletion
+npm run test:kcb
 npm run build:vercel
 ```
+
+The authoritative workflow runs this sequence on both Node.js 22 and 26.
 
 Run allocation tests only against a disposable local PostgreSQL database:
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/landee_test \
+TEST_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/landee_test?disposable=true' \
   node --import tsx --test tests/invoicing/bank-allocation.test.ts
 ```
 

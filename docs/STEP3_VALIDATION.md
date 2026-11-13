@@ -461,16 +461,19 @@ STAGING_BASE_URL=https://landee-staging.vercel.app \
 STAGING_API_TOKEN="$STAGING_API_TOKEN" \
 STAGING_VERCEL_COOKIE="$STAGING_VERCEL_COOKIE" \
 STAGING_EXPECTED_ROLE=caretaker \
+STAGING_FIXTURE_IDENTITY=unit_caretaker_a \
 STAGING_CREATE_PROPERTY_ID=step3-property-b \
 STAGING_SIBLING_UNIT_ID=step3-unit-a2 \
 npm run staging:validate-api
 ```
 
-The values in this example are placeholders. Replace the expected role and
-fixture probe values with those for the intended identity before running it.
+The values in this example are placeholders. Replace the expected role,
+`STAGING_FIXTURE_IDENTITY`, foreign property, and sibling fixture for the
+intended identity before running it. Valid identity keys are `landlord_a`,
+`landlord_b`, `manager_a`, `property_caretaker_a`, `unit_caretaker_a`,
+`tenant_a`, and `tenant_b`.
 
-Replace only the expected role and sibling fixture for each table row. Do not
-reuse a token after switching identity. Record the sanitized PASS/INFO lines and the identity/role, not the credential
+Do not reuse a token after switching identity. Record the sanitized PASS/INFO lines and the identity/role, not the credential
 values. HTTP 400 or 404 must be investigated from the response body and must
 not be recorded as authorization passes. A complete API sign-off also
 requires an assigned-unit update assertion for Unit Caretaker A and equivalent

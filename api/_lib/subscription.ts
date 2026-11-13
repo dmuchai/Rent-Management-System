@@ -3,6 +3,7 @@ import type { Sql } from 'postgres';
 import {
   buildPlanLimitError,
   getEffectivePlanCode,
+  featureRemainsAvailableWhenReadOnly,
   getPlanConfig,
   hasFeature,
   hasRoomForResource,
@@ -159,7 +160,8 @@ export async function getEffectiveSubscriptionAccess(ownerUserId: string): Promi
 
 export async function ownerHasSubscriptionFeature(ownerUserId: string, feature: SubscriptionFeatureKey): Promise<boolean> {
   const access = await getEffectiveSubscriptionAccess(ownerUserId);
-  return hasFeature(access.planCode, feature) && (!access.readOnly || !['recurring_charges', 'scheduled_reminders', 'sms_messaging', 'bulk_actions'].includes(feature));
+  return hasFeature(access.planCode, feature)
+    && (!access.readOnly || featureRemainsAvailableWhenReadOnly(feature));
 }
 
 export async function getOwnerUsageSnapshot(sql: Sql, ownerUserId: string) {

@@ -1,5 +1,6 @@
 import { supabase } from "../supabaseAuth";
 import {
+  featureRemainsAvailableWhenReadOnly,
   getEffectivePlanCode,
   getPlanConfig,
   hasFeature,
@@ -97,5 +98,6 @@ export async function getOwnerSubscriptionAccess(ownerUserId: string): Promise<{
 
 export async function ownerHasFeature(ownerUserId: string, feature: SubscriptionFeatureKey): Promise<boolean> {
   const access = await getOwnerSubscriptionAccess(ownerUserId);
-  return hasFeature(access.planCode, feature) && (!access.readOnly || !['recurring_charges', 'scheduled_reminders', 'sms_messaging', 'bulk_actions'].includes(feature));
+  return hasFeature(access.planCode, feature)
+    && (!access.readOnly || featureRemainsAvailableWhenReadOnly(feature));
 }

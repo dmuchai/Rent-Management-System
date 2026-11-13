@@ -66,6 +66,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 
 async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: any, sql: any) {
         const isCaretaker = auth.role === 'caretaker';
+        const isPropertyManager = auth.role === 'property_manager';
 
         const leases = await sql`
     SELECT 
@@ -79,6 +80,7 @@ async function handleListLeases(req: VercelRequest, res: VercelResponse, auth: a
     INNER JOIN public.properties p ON u.property_id = p.id
         WHERE (
             p.owner_id = ${auth.userId}
+            OR (${isPropertyManager} AND p.owner_id = ${auth.contextOwnerId})
             OR t.user_id = ${auth.userId}
             OR (${isCaretaker} AND EXISTS (
                 SELECT 1

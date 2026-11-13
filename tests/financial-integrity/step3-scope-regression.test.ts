@@ -7,6 +7,7 @@ import {
   AUTHORITY_CONTEXT_INVALID_CODE,
   isAuthorityContextInvalidResponse,
 } from '../../shared/authority-context.js';
+import { featureRemainsAvailableWhenReadOnly } from '../../shared/subscription/plans.js';
 
 test('only the explicit authority-context error is eligible for context recovery', () => {
   assert.equal(isAuthorityContextInvalidResponse(401, { code: AUTHORITY_CONTEXT_INVALID_CODE }), true);
@@ -87,7 +88,75 @@ test('stale authority responses cannot clear a newer selection', async () => {
   assert.match(queryClient, /clearAuthorityContextIfMatches/);
   assert.match(queryClient, /current\?\.role !== expected\.role/);
   assert.match(queryClient, /current\.contextOwnerId !== expected\.contextOwnerId/);
+  assert.match(queryClient, /synchronizeAuthorityFallback/);
+  assert.match(queryClient, /queryClient\.clear\(\)/);
+  assert.match(queryClient, /window\.location\.reload\(\)/);
+  assert.doesNotMatch(queryClient, /delete headers\['x-landee-context-role'\]/);
   assert.doesNotMatch(queryClient, /function clearAuthorityContext\(\)/);
+});
+
+test('selected-owner managers list leases and tenants in both API entrypoints', async () => {
+  const sources = await Promise.all([
+    readFile('api/leases/index.ts', 'utf8'),
+    readFile('server/routes/leases.ts', 'utf8'),
+    readFile('api/tenants/index.ts', 'utf8'),
+    readFile('server/routes/tenants.ts', 'utf8'),
+  ]);
+  for (const source of sources) assert.match(source, /contextOwnerId/);
+  assert.match(sources[0], /isPropertyManager/);
+  assert.match(sources[2], /isPropertyManager/);
+  const hostedHarness = await readFile('scripts/validate-staging-hosted.mjs', 'utf8');
+  assert.match(hostedHarness, /MANAGER_A[^\n]*tenants: \['step3-tenant-record-a'\][^\n]*leases: \['step3-lease-a'\]/);
+  assert.match(hostedHarness, /request\('\/api\/tenants'/);
+  assert.match(hostedHarness, /request\('\/api\/leases'/);
+});
+
+test('staging validation asserts fixture scope and the intended authorization guard', async () => {
+  const harness = await readFile('scripts/validate-staging-api.ts', 'utf8');
+  assert.match(harness, /STAGING_FIXTURE_IDENTITY/);
+  assert.match(harness, /assertFixtureScope/);
+  assert.match(harness, /forbiddenUnits/);
+  assert.match(harness, /forbiddenTenants/);
+  assert.match(harness, /SUBSCRIPTION_REQUIRED/);
+});
+
+test('staging bootstrap preserves invoice payment state and storage guards inspect every policy', async () => {
+  const bootstrap = await readFile('scripts/bootstrap-staging-validation.ts', 'utf8');
+  assert.match(bootstrap, /'step3-invoice-a'[\s\S]*ON CONFLICT \(id\) DO NOTHING/);
+  assert.doesNotMatch(bootstrap, /ON CONFLICT \(id\) DO UPDATE SET amount = 1000, amount_paid = 0/);
+  for (const path of ['docs/reviews/staging-storage-apply.sql', 'docs/reviews/staging-storage-deploy.sql']) {
+    const storageSql = await readFile(path, 'utf8');
+    assert.match(storageSql, /storage\.objects has existing policies/);
+    assert.doesNotMatch(storageSql, /COALESCE\(qual, ''\) ILIKE '%property-images%'/);
+  }
+});
+
+test('read-only subscription feature rules are shared', () => {
+  assert.equal(featureRemainsAvailableWhenReadOnly('data_export'), true);
+  assert.equal(featureRemainsAvailableWhenReadOnly('payment_reconciliation'), true);
+  assert.equal(featureRemainsAvailableWhenReadOnly('recurring_charges'), false);
+  assert.equal(featureRemainsAvailableWhenReadOnly('scheduled_reminders'), false);
+});
+
+test('cron routes share authorization and diagnostics enforce a read-only session', async () => {
+  for (const path of [
+    'api/cron/generate-invoices.ts',
+    'api/cron/process-emails.ts',
+    'api/cron/process-sms.ts',
+    'api/cron/lease-lifecycle.ts',
+    'api/cron/process-payment-events.ts',
+  ]) {
+    assert.match(await readFile(path, 'utf8'), /cronAuthorizationStatus/);
+  }
+  const diagnostic = await readFile('scripts/diagnose-financial-integrity.ts', 'utf8');
+  assert.match(diagnostic, /SET default_transaction_read_only = on/);
+});
+
+test('the user profile endpoint preserves role selection for authenticated users without authority', async () => {
+  const authRoute = await readFile('api/auth.ts', 'utf8');
+  assert.match(authRoute, /role: authority\?\.role \?\? null/);
+  assert.match(authRoute, /contextOwnerId: authority\?\.contextOwnerId \?\? null/);
+  assert.doesNotMatch(authRoute, /const authority = await verifyAuth\(req\);\s+if \(!authority\) return res\.status\(401\)/);
 });
 
 test('manual payment replay claims only failed or review events', async () => {

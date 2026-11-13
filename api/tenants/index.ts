@@ -72,7 +72,11 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
 // --- Implementation Functions ---
 
 async function handleListTenants(req: VercelRequest, res: VercelResponse, auth: any, sql: any) {
+        if (auth.role === 'tenant') {
+            return res.status(403).json({ message: 'Tenants cannot list all tenants' });
+        }
         const isCaretaker = auth.role === 'caretaker';
+        const isPropertyManager = auth.role === 'property_manager';
 
         const tenants = await sql`
         SELECT DISTINCT
@@ -108,6 +112,7 @@ async function handleListTenants(req: VercelRequest, res: VercelResponse, auth: 
         WHERE (
             t.landlord_id = ${auth.userId}
             OR p.owner_id = ${auth.userId}
+            OR (${isPropertyManager} AND t.landlord_id = ${auth.contextOwnerId})
             OR (
                 ${isCaretaker} AND EXISTS (
                     SELECT 1

@@ -9,6 +9,9 @@ if (!['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)) {
 
 const sql = postgres(connectionString, { max: 1 });
 try {
+  // The host restriction prevents accidental remote access; the session
+  // setting independently prevents this diagnostic from mutating a local DB.
+  await sql.unsafe('SET default_transaction_read_only = on');
   const invoiceMismatches = await sql`
     SELECT i.id, i.amount_paid AS recorded_amount_paid,
       COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'completed'), 0) AS completed_receipts
