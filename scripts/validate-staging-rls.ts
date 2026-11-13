@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import { strict as assert } from 'node:assert';
 
 const supabaseUrl = process.env.STAGING_SUPABASE_URL ?? '';
@@ -57,15 +59,6 @@ async function preflightToken(token: string): Promise<TokenStatus> {
   return response.ok ? 'VALID' : 'INVALID';
 }
 
-const tokenStatuses = await Promise.all(
-  Object.entries(identities).map(async ([name, token]) => [name, await preflightToken(token)] as const),
-);
-for (const [name, status] of tokenStatuses) console.log(`PREFLIGHT ${name}: ${status}`);
-const invalidTokens = tokenStatuses.filter(([, status]) => status !== 'VALID');
-if (invalidTokens.length) {
-  throw new Error(`Client-context JWT preflight failed for: ${invalidTokens.map(([name, status]) => `${name} (${status})`).join(', ')}`);
-}
-
 async function request(identity: keyof typeof identities, table: string, query: string): Promise<Result> {
   const response = await fetch(`${supabaseUrl}/rest/v1/${table}?${query}`, {
     headers: {
@@ -104,47 +97,63 @@ function assertDefaultDeny(label: string, result: Result) {
   pass(`${label} (HTTP 200, 0 rows)`);
 }
 
-assertDefaultDeny(
-  'Landlord A direct business-table access is denied',
-  await request('landlordA', 'properties', 'select=id,owner_id&id=eq.step3-property-a'),
-);
-assertDefaultDeny(
-  'Landlord B direct business-table access is denied',
-  await request('landlordB', 'properties', 'select=id,owner_id&id=eq.step3-property-b'),
-);
-assertDefaultDeny(
-  'Property Manager A direct property access is denied',
-  await request('managerA', 'properties', 'select=id,owner_id'),
-);
-assertDefaultDeny(
-  'Property Caretaker A direct unit access is denied',
-  await request('propertyCaretakerA', 'units', 'select=id,property_id'),
-);
-assertDefaultDeny(
-  'Unit Caretaker A direct unit access is denied',
-  await request('unitCaretakerA', 'units', 'select=id,property_id'),
-);
-assertDefaultDeny(
-  'Tenant A direct profile access is denied',
-  await request('tenantA', 'tenants', 'select=id,user_id&id=eq.step3-tenant-record-a'),
-);
-assertDefaultDeny(
-  'Tenant B direct profile access is denied',
-  await request('tenantB', 'tenants', 'select=id,user_id&id=eq.step3-tenant-record-b'),
-);
-
-for (const identity of Object.keys(identities) as (keyof typeof identities)[]) {
-  const memberships = await request(identity, 'user_context_memberships', 'select=id,user_id,context_owner_id,role,status');
-  if (memberships.status === 401 || memberships.status === 403) {
-    pass(`${identity} membership table is not exposed to the client role`);
-    continue;
+async function main(): Promise<void> {
+  const tokenStatuses = await Promise.all(
+    Object.entries(identities).map(async ([name, token]) => [name, await preflightToken(token)] as const),
+  );
+  for (const [name, status] of tokenStatuses) console.log(`PREFLIGHT ${name}: ${status}`);
+  const invalidTokens = tokenStatuses.filter(([, status]) => status !== 'VALID');
+  if (invalidTokens.length) {
+    throw new Error(`Client-context JWT preflight failed for: ${invalidTokens.map(([name, status]) => `${name} (${status})`).join(', ')}`);
   }
-  assertDefaultDeny(`${identity} membership table is not exposed to the client role`, memberships);
+
+  assertDefaultDeny(
+    'Landlord A direct business-table access is denied',
+    await request('landlordA', 'properties', 'select=id,owner_id&id=eq.step3-property-a'),
+  );
+  assertDefaultDeny(
+    'Landlord B direct business-table access is denied',
+    await request('landlordB', 'properties', 'select=id,owner_id&id=eq.step3-property-b'),
+  );
+  assertDefaultDeny(
+    'Property Manager A direct property access is denied',
+    await request('managerA', 'properties', 'select=id,owner_id'),
+  );
+  assertDefaultDeny(
+    'Property Caretaker A direct unit access is denied',
+    await request('propertyCaretakerA', 'units', 'select=id,property_id'),
+  );
+  assertDefaultDeny(
+    'Unit Caretaker A direct unit access is denied',
+    await request('unitCaretakerA', 'units', 'select=id,property_id'),
+  );
+  assertDefaultDeny(
+    'Tenant A direct profile access is denied',
+    await request('tenantA', 'tenants', 'select=id,user_id&id=eq.step3-tenant-record-a'),
+  );
+  assertDefaultDeny(
+    'Tenant B direct profile access is denied',
+    await request('tenantB', 'tenants', 'select=id,user_id&id=eq.step3-tenant-record-b'),
+  );
+
+  for (const identity of Object.keys(identities) as (keyof typeof identities)[]) {
+    const memberships = await request(identity, 'user_context_memberships', 'select=id,user_id,context_owner_id,role,status');
+    if (memberships.status === 401 || memberships.status === 403) {
+      pass(`${identity} membership table is not exposed to the client role`);
+      continue;
+    }
+    assertDefaultDeny(`${identity} membership table is not exposed to the client role`, memberships);
+  }
+
+  console.log(JSON.stringify({
+    projectRef: expectedProjectRef,
+    checks: 'client-context default-deny checks for server-owned business tables',
+    writes: 'none',
+    note: 'Business data is served through the authenticated Express/Vercel API; direct REST access is expected to remain denied.',
+  }));
 }
 
-console.log(JSON.stringify({
-  projectRef: expectedProjectRef,
-  checks: 'client-context default-deny checks for server-owned business tables',
-  writes: 'none',
-  note: 'Business data is served through the authenticated Express/Vercel API; direct REST access is expected to remain denied.',
-}));
+void main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : 'Staging RLS validation failed');
+  process.exitCode = 1;
+});
