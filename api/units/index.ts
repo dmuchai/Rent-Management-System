@@ -170,18 +170,23 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
       if (!['landlord', 'property_manager', 'caretaker'].includes(auth.role)) {
         return res.status(403).json({ message: 'Access denied' });
       }
-      const unitUpdateSchema = z.object({
+      const caretakerUnitUpdateSchema = z.object({
         id: z.string().min(1, 'Unit ID is required'),
         propertyId: z.string().min(1, 'Property is required'),
         unitNumber: z.string().min(1, 'Unit number is required'),
         bedrooms: z.coerce.number().int().nonnegative().optional().nullable(),
         bathrooms: z.coerce.number().int().nonnegative().optional().nullable(),
         size: z.coerce.number().positive().optional().nullable(),
+      });
+      const managementUnitUpdateSchema = caretakerUnitUpdateSchema.extend({
         rentAmount: z.coerce.number().positive('Rent amount must be positive'),
         isOccupied: z.boolean().optional().default(false),
       });
 
-      const unitData = unitUpdateSchema.parse(req.body);
+      const isCaretaker = auth.role === 'caretaker';
+      const unitData = isCaretaker
+        ? caretakerUnitUpdateSchema.parse(req.body)
+        : managementUnitUpdateSchema.parse(req.body);
 
       // Verify the unit exists and belongs to the landlord's property
       const existingUnits = await sql`
@@ -210,7 +215,7 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         return res.status(403).json({ message: 'Access denied' });
       }
 
-      if (auth.role === 'caretaker') {
+      if (isCaretaker) {
         const assignments = await sql`SELECT property_id, unit_id FROM public.caretaker_assignments
           WHERE caretaker_id = ${auth.userId} AND landlord_id = ${auth.contextOwnerId} AND status = 'active'`;
         const canEditCurrentUnit = hasScopedUnitAccess(
@@ -221,6 +226,15 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
         }
       }
 
+      // Caretakers may update descriptive fields only; rent and occupancy remain
+      // under landlord/manager lease and financial authority.
+      const nextRentAmount = isCaretaker
+        ? existingUnits[0].rent_amount
+        : (unitData as z.infer<typeof managementUnitUpdateSchema>).rentAmount;
+      const nextIsOccupied = isCaretaker
+        ? existingUnits[0].is_occupied
+        : ((unitData as z.infer<typeof managementUnitUpdateSchema>).isOccupied ?? false);
+
       const [updatedUnit] = await sql`
         UPDATE public.units
         SET 
@@ -229,8 +243,8 @@ export default requireAuth(async (req: VercelRequest, res: VercelResponse, auth)
           bedrooms = ${unitData.bedrooms ?? null},
           bathrooms = ${unitData.bathrooms ?? null},
           size = ${unitData.size ?? null},
-          rent_amount = ${unitData.rentAmount},
-          is_occupied = ${unitData.isOccupied ?? false},
+          rent_amount = ${nextRentAmount},
+          is_occupied = ${nextIsOccupied},
           updated_at = NOW()
         WHERE id = ${unitData.id}
         RETURNING *

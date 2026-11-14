@@ -27,13 +27,12 @@ const CARETAKER_SECTIONS: ReadonlySet<CaretakerSection> = new Set<CaretakerSecti
 const isCaretakerSection = (value: string): value is CaretakerSection =>
   CARETAKER_SECTIONS.has(value as CaretakerSection);
 
+/** Descriptive fields only — rent and occupancy stay with lease/financial authority. */
 type UnitEditForm = {
   unitNumber: string;
-  rentAmount: string;
   bedrooms: string;
   bathrooms: string;
   size: string;
-  isOccupied: boolean;
 };
 
 export default function CaretakerDashboard() {
@@ -130,11 +129,9 @@ export default function CaretakerDashboard() {
     setEditingUnitId(unit.id);
     setEditForm({
       unitNumber: unit.unitNumber ?? "",
-      rentAmount: unit.rentAmount != null ? String(unit.rentAmount) : "",
       bedrooms: unit.bedrooms != null ? String(unit.bedrooms) : "",
       bathrooms: unit.bathrooms != null ? String(unit.bathrooms) : "",
       size: unit.size != null ? String(unit.size) : "",
-      isOccupied: Boolean(unit.isOccupied),
     });
   };
 
@@ -145,35 +142,40 @@ export default function CaretakerDashboard() {
 
   const submitEdit = async (unit: any) => {
     if (!editForm) return;
+    const trimmedUnitNumber = editForm.unitNumber.trim();
+    if (!trimmedUnitNumber) {
+      toast({
+        title: "Validation error",
+        description: "Unit number is required.",
+        variant: "destructive",
+      });
+      return;
+    }
     setEditSubmitting(true);
     try {
+      // Descriptive fields only. Server preserves rentAmount and isOccupied for caretakers.
       const body = {
         id: unit.id,
         propertyId: unit.propertyId,
-        unitNumber: editForm.unitNumber,
-        rentAmount: editForm.rentAmount,
+        unitNumber: trimmedUnitNumber,
         bedrooms: editForm.bedrooms !== "" ? Number(editForm.bedrooms) : null,
         bathrooms: editForm.bathrooms !== "" ? Number(editForm.bathrooms) : null,
         size: editForm.size !== "" ? Number(editForm.size) : null,
-        isOccupied: editForm.isOccupied,
       };
-      const response = await apiRequest("PUT", "/api/units", body);
-      if (response.ok) {
-        toast({ title: "Unit updated", description: `Unit ${editForm.unitNumber} saved.` });
-        setEditingUnitId(null);
-        setEditForm(null);
-        await queryClient.invalidateQueries({ queryKey: ["/api/units"] });
-        await queryClient.invalidateQueries({ queryKey: ["/api/caretakers/properties"] });
-      } else {
-        const err = await response.json().catch(() => ({}));
-        toast({
-          title: "Update failed",
-          description: err?.message ?? `Server returned ${response.status}`,
-          variant: "destructive",
-        });
-      }
+      await apiRequest("PUT", "/api/units", body);
+      toast({ title: "Unit updated", description: `Unit ${trimmedUnitNumber} saved.` });
+      setEditingUnitId(null);
+      setEditForm(null);
+      await queryClient.invalidateQueries({ queryKey: ["/api/units"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/caretakers/properties"] });
     } catch (e) {
-      toast({ title: "Update failed", description: String(e), variant: "destructive" });
+      // Keep the edit form open with the attempted values for correction; the
+      // read-only row still reflects last successful server state until save succeeds.
+      toast({
+        title: "Update failed",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
     } finally {
       setEditSubmitting(false);
     }
@@ -411,6 +413,9 @@ export default function CaretakerDashboard() {
                                     className="space-y-3"
                                   >
                                     <p className="text-xs font-medium">Edit Unit {unit.unitNumber}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Descriptive fields only. Rent and occupancy are managed with lease and financial authority.
+                                    </p>
                                     <div className="grid grid-cols-2 gap-2">
                                       <div>
                                         <label className="block text-xs text-muted-foreground mb-1" htmlFor={`unit-number-${unit.id}`}>Unit Number</label>
@@ -421,20 +426,7 @@ export default function CaretakerDashboard() {
                                           value={editForm.unitNumber}
                                           onChange={(e) => setEditForm((f) => f && ({ ...f, unitNumber: e.target.value }))}
                                           required
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="block text-xs text-muted-foreground mb-1" htmlFor={`rent-amount-${unit.id}`}>Rent Amount (KES)</label>
-                                        <input
-                                          id={`rent-amount-${unit.id}`}
-                                          data-testid={`input-rent-amount-${unit.id}`}
-                                          type="number"
-                                          min="1"
-                                          step="1"
-                                          className="w-full rounded border bg-background px-2 py-1 text-sm"
-                                          value={editForm.rentAmount}
-                                          onChange={(e) => setEditForm((f) => f && ({ ...f, rentAmount: e.target.value }))}
-                                          required
+                                          disabled={editSubmitting}
                                         />
                                       </div>
                                       <div>
@@ -447,6 +439,7 @@ export default function CaretakerDashboard() {
                                           className="w-full rounded border bg-background px-2 py-1 text-sm"
                                           value={editForm.bedrooms}
                                           onChange={(e) => setEditForm((f) => f && ({ ...f, bedrooms: e.target.value }))}
+                                          disabled={editSubmitting}
                                         />
                                       </div>
                                       <div>
@@ -459,6 +452,7 @@ export default function CaretakerDashboard() {
                                           className="w-full rounded border bg-background px-2 py-1 text-sm"
                                           value={editForm.bathrooms}
                                           onChange={(e) => setEditForm((f) => f && ({ ...f, bathrooms: e.target.value }))}
+                                          disabled={editSubmitting}
                                         />
                                       </div>
                                       <div>
@@ -472,17 +466,8 @@ export default function CaretakerDashboard() {
                                           className="w-full rounded border bg-background px-2 py-1 text-sm"
                                           value={editForm.size}
                                           onChange={(e) => setEditForm((f) => f && ({ ...f, size: e.target.value }))}
+                                          disabled={editSubmitting}
                                         />
-                                      </div>
-                                      <div className="flex items-center gap-2 pt-5">
-                                        <input
-                                          id={`is-occupied-${unit.id}`}
-                                          data-testid={`input-is-occupied-${unit.id}`}
-                                          type="checkbox"
-                                          checked={editForm.isOccupied}
-                                          onChange={(e) => setEditForm((f) => f && ({ ...f, isOccupied: e.target.checked }))}
-                                        />
-                                        <label className="text-xs text-muted-foreground" htmlFor={`is-occupied-${unit.id}`}>Occupied</label>
                                       </div>
                                     </div>
                                     <div className="flex gap-2 pt-1">

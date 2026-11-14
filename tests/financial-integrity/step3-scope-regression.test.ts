@@ -208,3 +208,22 @@ test('caretaker tenant tables do not request management invoices without leases'
   const tenantTable = await readFile('client/src/components/tenants/TenantTable.tsx', 'utf8');
   assert.match(tenantTable, /enabled: !readOnly && leases\.length > 0/);
 });
+
+test('caretaker unit updates are limited to descriptive fields', async () => {
+  const caretakerUi = await readFile('client/src/pages/dashboard/caretaker.tsx', 'utf8');
+  const vercelUnits = await readFile('api/units/index.ts', 'utf8');
+  const expressUnits = await readFile('server/routes/units.ts', 'utf8');
+
+  assert.match(caretakerUi, /Descriptive fields only/);
+  assert.match(caretakerUi, /btn-edit-unit-/);
+  assert.doesNotMatch(caretakerUi, /input-rent-amount-/);
+  assert.doesNotMatch(caretakerUi, /input-is-occupied-/);
+  assert.doesNotMatch(caretakerUi, /rentAmount:\s*editForm\.rentAmount/);
+  assert.doesNotMatch(caretakerUi, /isOccupied:\s*editForm\.isOccupied/);
+
+  assert.match(vercelUnits, /caretakerUnitUpdateSchema/);
+  assert.match(vercelUnits, /existingUnits\[0\]\.rent_amount/);
+  assert.match(vercelUnits, /existingUnits\[0\]\.is_occupied/);
+  assert.match(expressUnits, /delete \(unitData as \{ rentAmount\?: unknown \}\)\.rentAmount/);
+  assert.match(expressUnits, /delete \(unitData as \{ isOccupied\?: unknown \}\)\.isOccupied/);
+});

@@ -152,6 +152,9 @@ router.put("/:id", isAuthenticated, async (req: any, res: any) => {
       if (!hasScopedUnitAccess(actor, ownerId, currentUnit.id, currentUnit.property_id, assignments)) {
         return res.status(403).json({ message: 'Access denied' });
       }
+      // Descriptive fields only — strip rent/occupancy so caretakers cannot change financial authority.
+      delete (unitData as { rentAmount?: unknown }).rentAmount;
+      delete (unitData as { isOccupied?: unknown }).isOccupied;
     }
     const unit = await supabaseStorage.updateUnit(req.params.id, unitData);
     res.json(unit);

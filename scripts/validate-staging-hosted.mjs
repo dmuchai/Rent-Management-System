@@ -162,15 +162,34 @@ try {
   assert.equal(managerSubscription.body.access.planCode, landlordSubscription.body.access.planCode);
   pass('manager subscription totals use selected owner context');
 
+  const [unitA1Before] = await sql`SELECT unit_number, rent_amount, is_occupied, bedrooms, bathrooms, size
+    FROM public.units WHERE id='step3-unit-a1'`;
   const assignedUpdate = request('/api/units', tokens.get('UNIT_CARETAKER_A'), { method: 'PUT', body: {
-    id: 'step3-unit-a1', propertyId: 'step3-property-a', unitNumber: 'A1', rentAmount: '1000', isOccupied: true,
+    id: 'step3-unit-a1', propertyId: 'step3-property-a', unitNumber: 'A1',
+    bedrooms: 2, bathrooms: 1, size: 45,
   }});
   assert.equal(assignedUpdate.status, 200);
+  assert.equal(assignedUpdate.body.bedrooms, 2);
+  assert.equal(String(assignedUpdate.body.rentAmount), String(unitA1Before.rent_amount));
+  assert.equal(Boolean(assignedUpdate.body.isOccupied), Boolean(unitA1Before.is_occupied));
+  // Even if a client tries to smuggle rent/occupancy, caretaker updates must preserve them.
+  const rentSmuggle = request('/api/units', tokens.get('UNIT_CARETAKER_A'), { method: 'PUT', body: {
+    id: 'step3-unit-a1', propertyId: 'step3-property-a', unitNumber: 'A1',
+    bedrooms: 2, bathrooms: 1, size: 45, rentAmount: '999999', isOccupied: false,
+  }});
+  assert.equal(rentSmuggle.status, 200);
+  assert.equal(String(rentSmuggle.body.rentAmount), String(unitA1Before.rent_amount));
+  assert.equal(Boolean(rentSmuggle.body.isOccupied), Boolean(unitA1Before.is_occupied));
   const siblingUpdate = request('/api/units', tokens.get('UNIT_CARETAKER_A'), { method: 'PUT', body: {
-    id: 'step3-unit-a2', propertyId: 'step3-property-a', unitNumber: 'A2', rentAmount: '1000', isOccupied: false,
+    id: 'step3-unit-a2', propertyId: 'step3-property-a', unitNumber: 'A2',
+    bedrooms: 1, bathrooms: 1, size: 10,
   }});
   assert.equal(siblingUpdate.status, 403);
-  pass('unit caretaker can update assigned unit but not sibling');
+  // Restore descriptive fields mutated by the assigned-update probe.
+  await sql`UPDATE public.units SET unit_number=${unitA1Before.unit_number}, bedrooms=${unitA1Before.bedrooms},
+    bathrooms=${unitA1Before.bathrooms}, size=${unitA1Before.size}, rent_amount=${unitA1Before.rent_amount},
+    is_occupied=${unitA1Before.is_occupied}, updated_at=NOW() WHERE id='step3-unit-a1'`;
+  pass('unit caretaker can update assigned descriptive fields but not sibling or rent/occupancy');
 
   const [unitCaretaker] = await sql`select id from public.users where email='step3-caretaker-unit-a@staging.landee.test'`;
   const invitationId = randomUUID();
@@ -278,6 +297,12 @@ try {
     assert.equal(request(path, null).status, 401, `${path} unauthenticated`);
   }
   pass('scheduled jobs reject unauthenticated requests');
+
+  // Manager dual-context fixture lifecycle for browser Gate 1 is owned by
+  // scripts/validate-staging-browser-gates.mjs so this API harness does not leave
+  // memberships active across browser runs. Browser-driven A→B→A switch evidence
+  // is collected there against the same candidate.
+  pass('manager dual-context browser fixture deferred to staging browser gates runner');
 } finally {
   try {
     if (originalImageUrl !== undefined) {
@@ -285,7 +310,6 @@ try {
     }
     if (testImagePaths.size) await admin.storage.from('property-images').remove([...testImagePaths]);
     if (createdInvitationId) await sql`delete from public.caretaker_invitations where id=${createdInvitationId}`;
-  } finally {
     await sql.end();
     rmSync(tempDirectory, { recursive: true, force: true });
   }
